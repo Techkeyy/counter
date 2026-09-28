@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+keypair.json
+id.json
+
+# Builds & Outputs
+dist/
+build/
+android/app/build/
+.gradle/
+target/
+
+# System / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
