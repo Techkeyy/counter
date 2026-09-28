@@ -1,0 +1,14 @@
+{
+  "runtime": "Android React Native MWA Protocol v2",
+  "appIdentity": {
+    "name": "Counter",
+    "uri": "https://counter.app",
+    "icon": "favicon.ico"
+  },
+  "cluster": "solana:devnet",
+  "authorizedPublicKey": "3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7",
+  "authToken": "mwa_auth_token_67vlthsme4n",
+  "txSignature": "2q2yzFAr4Zn5riBf9KzUqcUrPohfUNHR7D7xdRkX7SmgAqfe17VT8Maq8cs49zdym9St5oBWwxWdghZqjgDHhvzf",
+  "timestamp": "2026-09-28T08:30:16.632Z",
+  "confirmed": true
+}

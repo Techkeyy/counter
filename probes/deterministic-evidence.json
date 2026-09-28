@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-09-28T08:17:10.947Z",
+  "cases": [
+    {
+      "terms": {
+        "category": "crypto",
+        "asset": "SOL/USD",
+        "side_a_label": "Praise (SOL >= $125)",
+        "side_b_label": "Daniel (SOL < $125)",
+        "operator": ">=",
+        "target_price": 125,
+        "source": "CoinGecko Spot Price API",
+        "cutoff_ts": 1774771200,
+        "resolution_ts": 1774774800
+      },
+      "observation": {
+        "price": 118.74,
+        "timestamp": "2026-09-28T08:00:00Z",
+        "signature": "cg_obs_88f91a"
+      },
+      "result": {
+        "outcome": "SIDE_B",
+        "winnerName": "Daniel (SOL < $125)",
+        "observedValue": 118.74,
+        "threshold": 125,
+        "operator": ">=",
+        "evidenceHash": "cg_obs_88f91a",
+        "reason": "Observed price $118.74 does not satisfy condition >= $125"
+      }
+    },
+    {
+      "terms": {
+        "category": "sports",
+        "fixture": "Liverpool vs Tottenham",
+        "side_a_label": "Liverpool (Praise)",
+        "side_b_label": "Tottenham (Daniel)",
+        "source": "TheSportsDB Official API",
+        "allow_draw": false
+      },
+      "observation": {
+        "homeTeam": "Liverpool",
+        "awayTeam": "Tottenham",
+        "homeScore": 3,
+        "awayScore": 1,
+        "status": "FT",
+        "matchDate": "2026-09-15"
+      },
+      "result": {
+        "outcome": "SIDE_A",
+        "winnerName": "Liverpool (Praise)",
+        "score": "3-1",
+        "evidenceSource": "TheSportsDB Official API",
+        "reason": "Liverpool (Praise) won with 3 vs 1"
+      }
+    },
+    {
+      "terms": {
+        "category": "weather",
+        "location": "London, UK (51.5074, -0.1278)",
+        "side_a_label": "Rain (Praise: Precip > 0mm)",
+        "side_b_label": "Dry (Daniel: Precip == 0mm)",
+        "threshold_mm": 0,
+        "source": "Open-Meteo Meteorological API"
+      },
+      "observation": {
+        "precipitation_mm": 0,
+        "temperature_c": 14.1,
+        "observationTime": "2026-09-28T08:00:00Z"
+      },
+      "result": {
+        "outcome": "SIDE_B",
+        "winnerName": "Dry (Daniel: Precip == 0mm)",
+        "observedPrecipitation": "0mm",
+        "threshold": "0mm",
+        "reason": "Observed 0mm precipitation -> Outcome: DRY"
+      }
+    }
+  ]
+}

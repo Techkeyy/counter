@@ -1,0 +1,25 @@
+{
+  "programId": "52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT",
+  "duelPda": "Hx6VAVVn81y1niLzF2xPpsgm81YqRasLkU6ZSu3C1Nqg",
+  "vaultPda": "8F7RhULAD3zySGXWrb3cQUWMkaa6hansvdW2PaATpFVG",
+  "vaultTokenAccount": "5hAuuW1itMGQfstQfjbbEsuaHZ2BkFBAdyZ2wCRvgTUf",
+  "depositTxA": "2y7Lya6UzqiBfYd3iWFqhwLvuGDKZXEsEiyn4R7Zmf2vRrXQpeSqXM7JAWbVvwD2aBScKwSHFP8MPvsbDWgYys45",
+  "depositTxB": "3j6oJLgveTVCDmwjZy6XhNs1FterPvaJ4Zrq4133VKfai7w9QmAcNmbda418MTMqP2MhiJ6Q3ykt9PA6Uzcjvun4",
+  "depositTxC": "cshfmvEVQWLzkcgqpZWuKFPdSmspDTNyfvMtNjw8pRsk9mnvPBMePouRzH4x8Xeghc9FnMrwY6Zg6wkASY3qba3",
+  "resolveTx": "Zf1usXEMN1df9nELy4iwJB7J2o26D4Sdvy4hQLRMvpmPM7Jf745TrhdPdKDT5rbJCsiSARgvHW7gxRaUbKvZwkU",
+  "claimTxA": "67bpSBL9LphvzpNVhVUvmRWB15QrmRcQYdxBZ9Fo74zhBuNisLE9McuUZHxcSxZwhqUYyaLi1aQXq7TQMJSymuLi",
+  "claimTxC": "HbrF1zWyBypGFniVczpLjZ4vNhNjRVFgKiA9gGLbMgVC7QQZBU1NVXmN3QQ4rLh8bEDwrMbmJqqYNnzAf5DKWJF",
+  "preBalances": {
+    "capA": "850000000",
+    "capB": "50000000",
+    "backerC": "25000000"
+  },
+  "postBalances": {
+    "capA": "883333333",
+    "backerC": "41666666",
+    "vaultRemainder": "1"
+  },
+  "loserRejected": true,
+  "doubleClaimRejected": true,
+  "timestamp": "2026-09-28T08:44:09.526Z"
+}

@@ -1,0 +1,15 @@
+[package]
+name = "counter-escrow"
+version = "0.1.0"
+edition = "2021"
+description = "Counter On-Chain Escrow and Parimutuel Payout Program"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "1.18.26"
+spl-token = { version = "4.0.0", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "3.0.2", features = ["no-entrypoint"] }
+borsh = "0.10.3"
+thiserror = "1.0"
