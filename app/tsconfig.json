@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext", "dom"],
+    "allowJs": true,
+    "jsx": "react-native",
+    "noEmit": true,
+    "strict": false,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["react"]
+  },
+  "include": ["App.tsx", "index.js"]
+}

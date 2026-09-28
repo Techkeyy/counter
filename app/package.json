@@ -1,0 +1,29 @@
+{
+  "name": "counter-mobile",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@solana-mobile/mobile-wallet-adapter-protocol": "^2.1.4",
+    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "^2.1.4",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.0",
+    "buffer": "^6.0.3",
+    "expo": "~52.0.0",
+    "expo-linking": "~7.0.5",
+    "expo-status-bar": "~2.0.1",
+    "react": "18.3.1",
+    "react-native": "0.76.7",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.31",
+    "typescript": "~5.3.3"
+  },
+  "private": true
+}

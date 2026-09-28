@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Counter",
+    "slug": "counter",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "counter",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.counter.mobile",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "counter",
+              "host": "duel"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "counter.app",
+              "pathPrefix": "/d"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    }
+  }
+}
