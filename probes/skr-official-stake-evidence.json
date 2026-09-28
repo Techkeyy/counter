@@ -1,0 +1,38 @@
+{
+  "zeroStakeTest": {
+    "wallet": "3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7",
+    "stakeConfigPda": "4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw",
+    "guardianPoolsCount": 1,
+    "poolPositions": [
+      {
+        "guardianPool": "DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr",
+        "userStakePda": "Cg7dgLPYVJ3Fa8VS1ynVnt3Q6662V4VeD4eUfvos7h75",
+        "bump": 247,
+        "shares": "0",
+        "stakedSkrFormatted": "0.000000"
+      }
+    ],
+    "totalShares": "0",
+    "totalActiveStakedSkr": 0,
+    "isQualified": false,
+    "timestamp": "2026-09-28T08:58:51.427Z"
+  },
+  "positiveStakeTest": {
+    "wallet": "ES6ZS6JVCgqBzTf3g9qcUrE8cJ7KProAPNbuUEGKzRQp",
+    "stakeConfigPda": "4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw",
+    "guardianPoolsCount": 1,
+    "poolPositions": [
+      {
+        "guardianPool": "DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr",
+        "userStakePda": "BWYZUSkaUUvbrqVsJDPqqHuhhAYrubXTyKVzAFJaP6Up",
+        "bump": 254,
+        "shares": "791399494113",
+        "stakedSkrFormatted": "791399.494113"
+      }
+    ],
+    "totalShares": "791399494113",
+    "totalActiveStakedSkr": 791399.494113,
+    "isQualified": true,
+    "timestamp": "2026-09-28T08:58:52.111Z"
+  }
+}
