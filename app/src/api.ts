@@ -1,6 +1,6 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
 
-export const PUBLIC_API_URL = 'https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/api';
+export const PUBLIC_API_URL = 'https://0aa4526759d73199-102-88-168-51.serveousercontent.com/api';
 export const API_BASE_URL = 'http://10.0.2.2:3001/api';
 export const LOCAL_API_URL = 'http://localhost:3001/api';
 

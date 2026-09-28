@@ -28,7 +28,7 @@
 | Gate # | Gate Name | Subsystem | Description & Key Evidence | Status |
 |---|---|---|---|---|
 | **Gate 1** | **Consumer Social Mobile App** | `app/` | Clean consumer social UX hierarchy (Person -> Take -> Argument -> Duel -> Backing -> Receipt). All CTAs wired to real backend endpoints. | **READY (Code & UI Complete)** |
-| **Gate 2** | **Live HTTPS Backend** | `server/` | Public live endpoint active at `https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com`. `/api/health` returning 200 OK. | **LIVE & VERIFIED** |
+| **Gate 2** | **Live HTTPS Backend** | `server/` | Public live endpoint active at `https://0aa4526759d73199-102-88-168-51.serveousercontent.com`. `/api/health` returning 200 OK. | **LIVE & VERIFIED** |
 | **Gate 3** | **Devnet cUSD Faucet** | `server/routes/faucet.js` | Rate-limited (250 cUSD per 24h per wallet) airdrop signed by authority keypair on Solana Devnet. | **FUNCTIONAL & VERIFIED** |
 | **Gate 4** | **SIWS Mobile Auth** | `server/auth.js` | Cryptographic Sign-In with Solana (detached ed25519 nacl signature verification against random server nonces). | **VERIFIED (100% Pass)** |
 | **Gate 5** | **Full Social Loop Engine** | `probes/full-social-loop-test.js` | 12-stage test: Take -> Comment -> Challenge -> Counteroffer -> Acceptance -> Duel Lifecycle -> Backing -> Moderation -> Receipt. | **PASSED (12/12 Stages Green)** |
@@ -40,7 +40,7 @@
 | **Gate 11** | **Safety & Moderation** | `server/routes/moderation.js` | User blocking, content reporting, and client-side mute filtering persisted to SQLite database. | **VERIFIED** |
 | **Gate 12** | **Durable Persistence** | `server/db.js` | SQLite persistence to `server/data/counter.sqlite` with write-through buffer synchronization. | **VERIFIED** |
 | **Gate 13** | **Program Adversarial Audit** | `probes/contract-adversarial-audit.js` | 16/16 Invariants tested (PDA auth, non-drainable vault, parimutuel math conservation, dust truncation, terminal lock). | **PASSED (16/16 Invariants)** |
-| **Gate 14** | **Android Native APK** | `app/android/` | Multi-ABI debug APK compiled (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) ready for physical device UAT. | **READY (Compiled Binary)** |
+| **Gate 14** | **Android Native APK** | `app/android/` | Multi-ABI debug APK compiled (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) ready for physical device UAT (SHA-256: `3A7EF2265B5E6E88F36D4449894C4EC86895C1CC88530F19514EE4F716A15A99`). | **READY (Compiled Binary)** |
 
 ---
 
@@ -79,8 +79,8 @@ node probes/full-social-loop-test.js          # 12/12 stages
 node probes/contract-adversarial-audit.js     # 16/16 invariants
 
 # 2. Verify Public Live Endpoints
-curl https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/api/health
-curl https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/.well-known/assetlinks.json
+curl https://0aa4526759d73199-102-88-168-51.serveousercontent.com/api/health
+curl https://0aa4526759d73199-102-88-168-51.serveousercontent.com/.well-known/assetlinks.json
 
 # 3. Mobile Frontend TypeScript Check & Build
 cd C:\Users\HomePC\Desktop\Counter\app
@@ -95,4 +95,4 @@ adb install -r C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk
 ## 5. Hardware & Runtime Status
 
 - **Host Virtualization:** Host CPU Intel i5-7300U has `VirtualizationFirmwareEnabled: False` in BIOS; local hardware-accelerated emulator disabled.
-- **Physical Device & Cloud Testing:** Debug APK is multi-ABI compatible and communicates via the live public HTTPS endpoint `https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com` for full physical device UAT.
+- **Physical Device & Cloud Testing:** Debug APK is multi-ABI compatible (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) and communicates via the live public HTTPS endpoint `https://0aa4526759d73199-102-88-168-51.serveousercontent.com` for full physical device UAT.
