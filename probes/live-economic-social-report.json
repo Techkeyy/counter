@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-09-28T21:13:12.383Z",
+  "status": "PASS",
+  "faucet": {
+    "freshWallet": "HCLmsJFeAdeoX49CSmP4qP7WUXk1EX8Logk9YoLP4CW2",
+    "claimTx": "devnet_faucet_mulqv3ic_6oia",
+    "rateLimitEnforced": true,
+    "rateLimitMessage": "Rate limit reached. Please wait 24 hours before claiming more Devnet test cUSD."
+  },
+  "onchainDuel": {
+    "programId": "52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT",
+    "duelPda": "BmbhSEGAPfuZASzjx2Xibp4AWM2z7gsZtkTrq3Z7tNWz",
+    "vaultPda": "8vbAvwYc7PjQHjC5PTqG6MQ7fkXLBPWa4b6NHxBgYdnq",
+    "vaultTokenAccount": "2Xpm9gdyzZSqFBCEcCuUuXknjdxE9ceWRMoTs3SY8pU1",
+    "initTx": "2wEPDVpPQ9YdfSKEqh6h4N45UHnJDFRTREQAxRppWdnQr5gjxNBkJZxvrGqEjCWBMhxEQKvsscHjeN86i2MkVfZW",
+    "captainAStakeTx": "42UU2V6mTySEsXd2dSRTk43zkiVksANDWh4aSFhkqQwUzvhiuMoN6rjoRHbkwncVsVikxc7PeYP5iHJmzCsVxNYv",
+    "captainBStakeTx": "3CCE1v9eeapwbGjaNCRoBAkpaigwiqaHFW1rWBSD7inF93eVDLpZoZVmwJYfGfyV4ddtTG7Cfv1Dianfc8E5o7Zb",
+    "backerCStakeTx": "TSSbgu9gwTtdCMx4Vn15QRYCQMonJ4hypdLTZvfRvBuqjV7yAXdH57VoANPyuBK44KZE1BB6f4waV9YsAUKATjq",
+    "resolveTx": "8Yjzcm66aQ22MRB1Mk1uyykcweKqEbNhkbkbRN8F1ReE4gFaWZF9sz1v7chMLMMgQSStbXr7cwMZgsUzUCuNPnN",
+    "claimTxCapA": "4d1qrAj44ATDDM5AwtxQB5aC39v1sic1mxmqzPY6GfjBDi3PwWADuPPdeTph4xReJeLofhXdqziAYzswJjdrHX8j",
+    "claimTxBackerC": "4wJPZ6pYqyKBsfcg3gjqJ8QPZHwc4NanHThZrTwkjZRCaifG5wiJJqVZUK8vicx14zpWWb3hbbB9bmMMqtpzW2td",
+    "winningSide": 1
+  },
+  "settlementBalances": {
+    "captainA": {
+      "pre": 883.333333,
+      "post": 916.666666,
+      "netGain": 33.333333
+    },
+    "captainB": {
+      "pre": 50,
+      "post": 0,
+      "netLoss": 50
+    },
+    "backerC": {
+      "pre": 0,
+      "post": 41.666666,
+      "netGain": 16.666666
+    },
+    "vaultDustRemainder": 0.000001
+  },
+  "adversarialRejections": {
+    "loserClaimRejected": true,
+    "loserClaimError": "107 InvalidPositionSide",
+    "doubleClaimRejected": true,
+    "doubleClaimError": "106 AlreadyClaimed"
+  },
+  "socialConsequences": {
+    "takeId": "take_1790629990822_9bc5e219",
+    "challengeId": "chal_1790629990858_0b0f3b5a",
+    "duelId": "duel_1790629990890_59d51d80",
+    "receiptId": "rcpt_duel_1790629990890_59d51d80",
+    "captainA": {
+      "wallet": "6P8VX4277eD1R3mmvTfAHVDRF3WHEiEgfKTbyeMiRsbE",
+      "winsBefore": 0,
+      "winsAfter": 1,
+      "winRate": "100.0%"
+    },
+    "captainB": {
+      "wallet": "CdhaHYMQEw2QYaYGEZGu5JSLt4is81bhufYhYbx524Gw",
+      "lossesBefore": 0,
+      "lossesAfter": 1,
+      "winRate": "0.0%"
+    },
+    "rivalryRecord": {
+      "userA": "6P8VX4277eD1R3mmvTfAHVDRF3WHEiEgfKTbyeMiRsbE",
+      "userB": "CdhaHYMQEw2QYaYGEZGu5JSLt4is81bhufYhYbx524Gw",
+      "aWins": 1,
+      "bWins": 0,
+      "volume": 125
+    }
+  }
+}

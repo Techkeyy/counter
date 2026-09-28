@@ -1,25 +1,25 @@
 {
   "programId": "52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT",
-  "duelPda": "Hx6VAVVn81y1niLzF2xPpsgm81YqRasLkU6ZSu3C1Nqg",
-  "vaultPda": "8F7RhULAD3zySGXWrb3cQUWMkaa6hansvdW2PaATpFVG",
-  "vaultTokenAccount": "5hAuuW1itMGQfstQfjbbEsuaHZ2BkFBAdyZ2wCRvgTUf",
-  "depositTxA": "2y7Lya6UzqiBfYd3iWFqhwLvuGDKZXEsEiyn4R7Zmf2vRrXQpeSqXM7JAWbVvwD2aBScKwSHFP8MPvsbDWgYys45",
-  "depositTxB": "3j6oJLgveTVCDmwjZy6XhNs1FterPvaJ4Zrq4133VKfai7w9QmAcNmbda418MTMqP2MhiJ6Q3ykt9PA6Uzcjvun4",
-  "depositTxC": "cshfmvEVQWLzkcgqpZWuKFPdSmspDTNyfvMtNjw8pRsk9mnvPBMePouRzH4x8Xeghc9FnMrwY6Zg6wkASY3qba3",
-  "resolveTx": "Zf1usXEMN1df9nELy4iwJB7J2o26D4Sdvy4hQLRMvpmPM7Jf745TrhdPdKDT5rbJCsiSARgvHW7gxRaUbKvZwkU",
-  "claimTxA": "67bpSBL9LphvzpNVhVUvmRWB15QrmRcQYdxBZ9Fo74zhBuNisLE9McuUZHxcSxZwhqUYyaLi1aQXq7TQMJSymuLi",
-  "claimTxC": "HbrF1zWyBypGFniVczpLjZ4vNhNjRVFgKiA9gGLbMgVC7QQZBU1NVXmN3QQ4rLh8bEDwrMbmJqqYNnzAf5DKWJF",
+  "duelPda": "BmbhSEGAPfuZASzjx2Xibp4AWM2z7gsZtkTrq3Z7tNWz",
+  "vaultPda": "8vbAvwYc7PjQHjC5PTqG6MQ7fkXLBPWa4b6NHxBgYdnq",
+  "vaultTokenAccount": "2Xpm9gdyzZSqFBCEcCuUuXknjdxE9ceWRMoTs3SY8pU1",
+  "depositTxA": "42UU2V6mTySEsXd2dSRTk43zkiVksANDWh4aSFhkqQwUzvhiuMoN6rjoRHbkwncVsVikxc7PeYP5iHJmzCsVxNYv",
+  "depositTxB": "3CCE1v9eeapwbGjaNCRoBAkpaigwiqaHFW1rWBSD7inF93eVDLpZoZVmwJYfGfyV4ddtTG7Cfv1Dianfc8E5o7Zb",
+  "depositTxC": "TSSbgu9gwTtdCMx4Vn15QRYCQMonJ4hypdLTZvfRvBuqjV7yAXdH57VoANPyuBK44KZE1BB6f4waV9YsAUKATjq",
+  "resolveTx": "8Yjzcm66aQ22MRB1Mk1uyykcweKqEbNhkbkbRN8F1ReE4gFaWZF9sz1v7chMLMMgQSStbXr7cwMZgsUzUCuNPnN",
+  "claimTxA": "4d1qrAj44ATDDM5AwtxQB5aC39v1sic1mxmqzPY6GfjBDi3PwWADuPPdeTph4xReJeLofhXdqziAYzswJjdrHX8j",
+  "claimTxC": "4wJPZ6pYqyKBsfcg3gjqJ8QPZHwc4NanHThZrTwkjZRCaifG5wiJJqVZUK8vicx14zpWWb3hbbB9bmMMqtpzW2td",
   "preBalances": {
-    "capA": "850000000",
+    "capA": "883333333",
     "capB": "50000000",
     "backerC": "25000000"
   },
   "postBalances": {
-    "capA": "883333333",
+    "capA": "916666666",
     "backerC": "41666666",
     "vaultRemainder": "1"
   },
   "loserRejected": true,
   "doubleClaimRejected": true,
-  "timestamp": "2026-09-28T08:44:09.526Z"
+  "timestamp": "2026-09-28T21:05:13.556Z"
 }

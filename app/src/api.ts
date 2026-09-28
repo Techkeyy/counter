@@ -1,6 +1,6 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
 
-export const PUBLIC_API_URL = 'https://75abdf04ceaf540a-102-88-168-51.serveousercontent.com/api';
+// Default to emulator host (10.0.2.2) or localhost
 export const API_BASE_URL = 'http://10.0.2.2:3001/api';
 export const LOCAL_API_URL = 'http://localhost:3001/api';
 
@@ -30,27 +30,29 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  // Try public live HTTPS endpoint first, then emulator IP, then localhost
-  const targetUrls = [PUBLIC_API_URL, API_BASE_URL, LOCAL_API_URL];
-  let lastErr: any = null;
-
-  for (const baseUrl of targetUrls) {
+  // Try emulator IP first, then fallback to localhost
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err) {
     try {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      response = await fetch(`${LOCAL_API_URL}${endpoint}`, {
         ...options,
         headers,
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error ${response.status}`);
-      }
-      return data as T;
-    } catch (err) {
-      lastErr = err;
+    } catch (fallbackErr) {
+      throw new Error(`Network request failed to backend: ${err}`);
     }
   }
 
-  throw new Error(`Network request failed to all backend endpoints: ${lastErr?.message || lastErr}`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `HTTP error ${response.status}`);
+  }
+  return data as T;
 }
 
 export const api = {
