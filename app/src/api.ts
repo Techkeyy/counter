@@ -1,6 +1,6 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
 
-// Default to emulator host (10.0.2.2) or localhost
+export const PUBLIC_API_URL = 'https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/api';
 export const API_BASE_URL = 'http://10.0.2.2:3001/api';
 export const LOCAL_API_URL = 'http://localhost:3001/api';
 
@@ -30,29 +30,27 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  // Try emulator IP first, then fallback to localhost
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
-  } catch (err) {
+  // Try public HTTPS first (physical devices/remote), then Android emulator IP, then localhost
+  const targetUrls = [PUBLIC_API_URL, API_BASE_URL, LOCAL_API_URL];
+  let lastErr: any = null;
+
+  for (const baseUrl of targetUrls) {
     try {
-      response = await fetch(`${LOCAL_API_URL}${endpoint}`, {
+      const response = await fetch(`${baseUrl}${endpoint}`, {
         ...options,
         headers,
       });
-    } catch (fallbackErr) {
-      throw new Error(`Network request failed to backend: ${err}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error ${response.status}`);
+      }
+      return data as T;
+    } catch (err) {
+      lastErr = err;
     }
   }
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || `HTTP error ${response.status}`);
-  }
-  return data as T;
+  throw new Error(`Network request failed to all endpoints (${endpoint}): ${lastErr?.message || lastErr}`);
 }
 
 export const api = {
@@ -162,6 +160,18 @@ export const api = {
   },
   resolveDuel: async (duelId: string) => {
     return request<any>(`/duels/${duelId}/resolve`, {
+      method: 'POST',
+    });
+  },
+  publishToArena: async (duelId: string) => {
+    return request<{ success: boolean; isArena: number; skrStake: number }>(`/duels/${duelId}/publish-arena`, {
+      method: 'POST',
+    });
+  },
+
+  // Faucet
+  claimFaucet: async () => {
+    return request<{ success: boolean; amount: number; txSignature: string; message: string }>(`/faucet/cusd`, {
       method: 'POST',
     });
   },

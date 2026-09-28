@@ -1,0 +1,105 @@
+{
+  "programId": "52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT",
+  "network": "Solana Devnet",
+  "auditTimestamp": "2026-09-28T20:23:21.530Z",
+  "invariantsCount": 16,
+  "passedCount": 16,
+  "results": [
+    {
+      "id": 1,
+      "name": "Vault PDA Derivation & Program Control",
+      "layer": "On-Chain Program (Rust)",
+      "status": "PASS"
+    },
+    {
+      "id": 2,
+      "name": "Unauthorized Vault Drain Rejection",
+      "layer": "On-Chain Program + SPL Token CPI",
+      "status": "PASS"
+    },
+    {
+      "id": 3,
+      "name": "Unauthorized Resolver Signature Rejection",
+      "layer": "On-Chain Program (Rust)",
+      "status": "PASS"
+    },
+    {
+      "id": 4,
+      "name": "Premature Resolution Enforcement",
+      "layer": "Server Oracle + On-Chain State",
+      "status": "PASS"
+    },
+    {
+      "id": 5,
+      "name": "Post-Cutoff / Locked Stake Rejection",
+      "layer": "On-Chain Program + DB State",
+      "status": "PASS"
+    },
+    {
+      "id": 6,
+      "name": "Token Mint Consistency Enforcement",
+      "layer": "On-Chain SPL Token Account Validation",
+      "status": "PASS"
+    },
+    {
+      "id": 7,
+      "name": "Destination ATA Derivation Verification",
+      "layer": "On-Chain SPL ATA Derivation",
+      "status": "PASS"
+    },
+    {
+      "id": 8,
+      "name": "Accepted Terms Immutability",
+      "layer": "On-Chain Duel Account State",
+      "status": "PASS"
+    },
+    {
+      "id": 9,
+      "name": "Loser Claim Zero Payout Rejection",
+      "layer": "On-Chain Program Parimutuel Math",
+      "status": "PASS"
+    },
+    {
+      "id": 10,
+      "name": "Double-Claim / Replay Prevention",
+      "layer": "On-Chain Position PDA Atomicity",
+      "status": "PASS"
+    },
+    {
+      "id": 11,
+      "name": "Position PDA Ownership Protection",
+      "layer": "On-Chain Program PDA Seeds",
+      "status": "PASS"
+    },
+    {
+      "id": 12,
+      "name": "100% Void / Refund Guarantee",
+      "layer": "On-Chain Program Refund Branch",
+      "status": "PASS"
+    },
+    {
+      "id": 13,
+      "name": "State Machine Terminal State Lock",
+      "layer": "On-Chain Duel Status Enum",
+      "status": "PASS"
+    },
+    {
+      "id": 14,
+      "name": "Parimutuel Mathematical Solvency & Conservation",
+      "layer": "On-Chain Integer Arithmetic",
+      "status": "PASS"
+    },
+    {
+      "id": 15,
+      "name": "Integer Division Dust Safety (Round Down)",
+      "layer": "On-Chain Rust u64 Truncation",
+      "status": "PASS"
+    },
+    {
+      "id": 16,
+      "name": "Division-By-Zero Safe Recovery",
+      "layer": "On-Chain Program Checked Math",
+      "status": "PASS"
+    }
+  ]
+}

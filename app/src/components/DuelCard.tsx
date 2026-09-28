@@ -20,118 +20,121 @@ export const DuelCard: React.FC<DuelCardProps> = ({
   const poolB = Number(duel.side_b_total) || 0;
   const totalPool = poolA + poolB;
 
-  // Calculate dynamic odds multipliers
-  const oddsA = poolA > 0 ? (totalPool / poolA).toFixed(2) : '2.00';
-  const oddsB = poolB > 0 ? (totalPool / poolB).toFixed(2) : '2.00';
-
-  // Ratio percentage for odds bar
-  const percentA = totalPool > 0 ? Math.round((poolA / totalPool) * 100) : 50;
-  const percentB = 100 - percentA;
-
   const isCutoff = duel.status === 'CUTOFF_REACHED' || duel.status.startsWith('RESOLVED');
   const isResolved = duel.status.startsWith('RESOLVED');
 
   const formatCountdown = (ts: number) => {
     const diff = ts - Date.now();
-    if (diff <= 0) return 'LOCK REACHED';
+    if (diff <= 0) return 'LOCKED';
     const hours = Math.floor(diff / 3600000);
     const mins = Math.floor((diff % 3600000) / 60000);
-    return `${hours}h ${mins}m left`;
+    return `${hours}h ${mins}m left to back`;
   };
 
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress(duel)} activeOpacity={0.9}>
-      {/* Top Banner */}
+      {/* 1. Category & Context Header */}
       <View style={styles.topRow}>
-        <View style={styles.categoryRow}>
+        <View style={styles.badgeRow}>
           {duel.is_arena === 1 && (
-            <View style={styles.arenaTag}>
-              <Text style={styles.arenaTagText}>ARENA</Text>
+            <View style={styles.arenaBadge}>
+              <Text style={styles.arenaBadgeText}>⭐ ARENA DUEL</Text>
             </View>
           )}
-          <Text style={styles.categoryBadge}>{duel.category}</Text>
+          <Text style={styles.categoryText}>{duel.category}</Text>
         </View>
 
-        <View style={[styles.statusBadge, isResolved && styles.statusResolved]}>
-          <Text style={styles.statusText}>
-            {isResolved ? (duel.winning_side === 1 ? 'SIDE A WON' : 'SIDE B WON') : formatCountdown(duel.cutoff_ts)}
+        <View style={[styles.statusPill, isResolved && styles.statusResolvedPill]}>
+          <Text style={[styles.statusPillText, isResolved && styles.statusResolvedText]}>
+            {isResolved
+              ? (duel.winning_side === 1 ? '🏆 SIDE A WON' : '🏆 SIDE B WON')
+              : formatCountdown(duel.cutoff_ts)}
           </Text>
         </View>
       </View>
 
-      {/* Head to Head Captains */}
-      <View style={styles.matchupContainer}>
-        {/* Side A */}
-        <View style={styles.sideColumn}>
-          <Image
-            source={{ uri: duel.captain_a_avatar || `https://avatar.vercel.sh/${duel.captain_a_wallet}` }}
-            style={[styles.captainAvatar, { borderColor: colors.sideA }]}
-          />
-          <Text style={styles.captainName} numberOfLines={1}>
-            {duel.captain_a_name || 'Captain A'}
-          </Text>
-          <Text style={styles.propositionText} numberOfLines={2}>
-            {duel.proposition_a}
-          </Text>
-          <Text style={[styles.oddsMultiplier, { color: colors.sideA }]}>
-            {oddsA}x
-          </Text>
-        </View>
-
-        {/* VS Badge */}
-        <View style={styles.vsContainer}>
-          <View style={styles.vsCircle}>
-            <Text style={styles.vsText}>VS</Text>
+      {/* 2. Human Contenders Debate Box */}
+      <View style={styles.debateContainer}>
+        {/* Contender A */}
+        <View style={[styles.contenderBox, isResolved && duel.winning_side === 1 && styles.winningBox]}>
+          <View style={styles.contenderHeader}>
+            <Image
+              source={{ uri: duel.captain_a_avatar || `https://avatar.vercel.sh/${duel.captain_a_wallet}` }}
+              style={styles.avatar}
+            />
+            <View style={styles.contenderInfo}>
+              <Text style={styles.contenderName} numberOfLines={1}>
+                {duel.captain_a_name || 'Captain A'}
+              </Text>
+              <Text style={styles.contenderHandle}>
+                @{duel.captain_a_handle || duel.captain_a_wallet.slice(0, 6)}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.totalPoolText}>${totalPool} cUSD</Text>
+          <Text style={styles.argumentText} numberOfLines={3}>
+            "{duel.proposition_a}"
+          </Text>
+          <Text style={styles.poolInfo}>${poolA} cUSD backed</Text>
         </View>
 
-        {/* Side B */}
-        <View style={styles.sideColumn}>
-          <Image
-            source={{ uri: duel.captain_b_avatar || `https://avatar.vercel.sh/${duel.captain_b_wallet}` }}
-            style={[styles.captainAvatar, { borderColor: colors.sideB }]}
-          />
-          <Text style={styles.captainName} numberOfLines={1}>
-            {duel.captain_b_name || 'Captain B'}
+        <View style={styles.vsBadge}>
+          <Text style={styles.vsText}>VS</Text>
+        </View>
+
+        {/* Contender B */}
+        <View style={[styles.contenderBox, isResolved && duel.winning_side === 2 && styles.winningBox]}>
+          <View style={styles.contenderHeader}>
+            <Image
+              source={{ uri: duel.captain_b_avatar || `https://avatar.vercel.sh/${duel.captain_b_wallet}` }}
+              style={styles.avatar}
+            />
+            <View style={styles.contenderInfo}>
+              <Text style={styles.contenderName} numberOfLines={1}>
+                {duel.captain_b_name || 'Captain B'}
+              </Text>
+              <Text style={styles.contenderHandle}>
+                @{duel.captain_b_handle || duel.captain_b_wallet.slice(0, 6)}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.argumentText} numberOfLines={3}>
+            "{duel.proposition_b}"
           </Text>
-          <Text style={styles.propositionText} numberOfLines={2}>
-            {duel.proposition_b}
-          </Text>
-          <Text style={[styles.oddsMultiplier, { color: colors.sideB }]}>
-            {oddsB}x
-          </Text>
+          <Text style={styles.poolInfo}>${poolB} cUSD backed</Text>
         </View>
       </View>
 
-      {/* Parimutuel Odds Bar */}
-      <View style={styles.oddsBarContainer}>
-        <View style={[styles.oddsBarA, { flex: percentA }]} />
-        <View style={[styles.oddsBarB, { flex: percentB }]} />
-      </View>
-      <View style={styles.oddsLabelsRow}>
-        <Text style={[styles.poolLabel, { color: colors.sideA }]}>${poolA} ({percentA}%)</Text>
-        <Text style={[styles.poolLabel, { color: colors.sideB }]}>${poolB} ({percentB}%)</Text>
-      </View>
+      {/* 3. Community Backing Action Callout */}
+      {!isCutoff ? (
+        <View style={styles.actionSection}>
+          <Text style={styles.actionPrompt}>Who are you backing?</Text>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.backBtn, styles.backBtnA]}
+              onPress={() => onBackSideA(duel)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.backBtnTextA}>
+                Back {duel.captain_a_name?.split(' ')[0] || 'Side A'}
+              </Text>
+            </TouchableOpacity>
 
-      {/* Outside Backers Action Bar */}
-      {!isCutoff && (
-        <View style={styles.actionsRow}>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: 'rgba(20, 241, 149, 0.15)', borderColor: colors.sideA }]}
-            onPress={() => onBackSideA(duel)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.backButtonText, { color: colors.sideA }]}>+ Back Side A</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: 'rgba(153, 69, 255, 0.15)', borderColor: colors.sideB }]}
-            onPress={() => onBackSideB(duel)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.backButtonText, { color: colors.sideB }]}>+ Back Side B</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.backBtn, styles.backBtnB]}
+              onPress={() => onBackSideB(duel)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.backBtnTextB}>
+                Back {duel.captain_b_name?.split(' ')[0] || 'Side B'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.resolvedFooter}>
+          <Text style={styles.totalPoolSummary}>
+            💰 Total Disputed Pool: ${totalPool} cUSD
+          </Text>
         </View>
       )}
     </TouchableOpacity>
@@ -141,7 +144,7 @@ export const DuelCard: React.FC<DuelCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: 18,
+    borderRadius: 16,
     padding: spacing.lg,
     marginBottom: spacing.md,
     borderWidth: 1,
@@ -153,144 +156,163 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  categoryRow: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
-  arenaTag: {
-    backgroundColor: colors.badgeBg,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.arenaBadge,
-  },
-  arenaTagText: {
-    color: colors.arenaBadge,
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  categoryBadge: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  statusBadge: {
-    backgroundColor: colors.surfaceLight,
+  arenaBadge: {
+    backgroundColor: colors.arenaBadgeBg,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.arenaBadge,
   },
-  statusResolved: {
-    backgroundColor: 'rgba(20, 241, 149, 0.2)',
+  arenaBadgeText: {
+    color: colors.arenaBadge,
+    fontSize: 10,
+    fontWeight: '800',
   },
-  statusText: {
-    color: colors.textPrimary,
+  categoryText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusPill: {
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusResolvedPill: {
+    backgroundColor: 'rgba(63, 185, 80, 0.15)',
+  },
+  statusPillText: {
+    color: colors.textSecondary,
     fontSize: 11,
     fontWeight: '700',
   },
-  matchupContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  statusResolvedText: {
+    color: colors.accentGreen,
+    fontWeight: '800',
+  },
+  debateContainer: {
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  sideColumn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  captainAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    marginBottom: 6,
+  contenderBox: {
     backgroundColor: colors.surfaceLight,
+    borderRadius: 12,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  captainName: {
+  winningBox: {
+    borderColor: colors.accentGreen,
+    backgroundColor: 'rgba(63, 185, 80, 0.08)',
+  },
+  contenderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+  },
+  contenderInfo: {
+    flex: 1,
+  },
+  contenderName: {
     color: colors.textPrimary,
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 2,
   },
-  propositionText: {
+  contenderHandle: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  argumentText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginBottom: 6,
+  },
+  poolInfo: {
     color: colors.textSecondary,
     fontSize: 11,
-    textAlign: 'center',
-    minHeight: 28,
+    fontWeight: '600',
   },
-  oddsMultiplier: {
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 4,
-  },
-  vsContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  vsCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
+  vsBadge: {
+    alignSelf: 'center',
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    marginBottom: 4,
   },
   vsText: {
     color: colors.textMuted,
     fontSize: 10,
-    fontWeight: '900',
-  },
-  totalPoolText: {
-    color: colors.textPrimary,
-    fontSize: 12,
     fontWeight: '800',
   },
-  oddsBarContainer: {
-    height: 6,
-    borderRadius: 3,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    backgroundColor: colors.surfaceLight,
-    marginBottom: 4,
-  },
-  oddsBarA: {
-    backgroundColor: colors.sideA,
-  },
-  oddsBarB: {
-    backgroundColor: colors.sideB,
-  },
-  oddsLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  poolLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  actionSection: {
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
     paddingTop: spacing.md,
   },
-  backButton: {
+  actionPrompt: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  backBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 12,
-    borderWidth: 1,
     alignItems: 'center',
+    borderWidth: 1,
   },
-  backButtonText: {
+  backBtnA: {
+    backgroundColor: 'rgba(63, 185, 80, 0.12)',
+    borderColor: colors.sideABorder,
+  },
+  backBtnB: {
+    backgroundColor: 'rgba(88, 166, 255, 0.12)',
+    borderColor: colors.sideBBorder,
+  },
+  backBtnTextA: {
+    color: colors.sideA,
     fontSize: 12,
     fontWeight: '800',
+  },
+  backBtnTextB: {
+    color: colors.sideB,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  resolvedFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    paddingTop: spacing.md,
+    alignItems: 'center',
+  },
+  totalPoolSummary: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

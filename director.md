@@ -3,88 +3,96 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER  
-**Current Phase:** Full End-to-End Build Completed & Verified (Status: `BUILD_COMPLETE`)  
+**Current Authoritative Status:** `BUILDING — INTEGRATION / DEPLOYMENT / UAT PREPARATION`  
 **Repository State:** On branch `master`  
-**Last Updated:** 2026-09-28  
+**Last Updated:** 2026-09-28T21:30:00+01:00  
 
 ---
 
-## 1. Local Skills Registry & Instruction Traceability
+## 1. Local Skills Registry & Traceability
 
-| Skill Name | Local Path | Files Read | Key Instructions Extracted | Impact on Counter | Status / Next Action |
+| Skill Name | Local Path | Files Read | Key Instructions Extracted | Impact on Counter | Verification Status |
 |---|---|---|---|---|---|
-| **Audit-skill** | `C:\Users\HomePC\Desktop\skill\Audit-skill` | `SKILL.md` | Rigorous, adversarial security verification; zero assumptions; test malicious paths & edge cases. | Executed 8/8 adversarial test suites in `server/test/backend-adversarial-tests.js` (replays, forgeries, odds conservation, loser claims, moderation). | **PASSED (8/8 Suites Green)** |
-| **build-process** | `C:\Users\HomePC\Desktop\skill\build-process` | `SKILL.md` | Strict gate-based progression; no skipping kill-gates; produce concrete evidence before advancing. | Produced native on-chain Devnet program, full backend REST engine, complete mobile social UI, and compiled native Android debug APK. | **ALL ARTIFACTS VERIFIED** |
+| **Audit-skill** | `C:\Users\HomePC\Desktop\skill\Audit-skill` | `SKILL.md` | Rigorous, adversarial security verification; zero assumptions; test malicious paths & edge cases. | Executed 16/16 contract adversarial invariants (`probes/contract-adversarial-audit.js`) & 8/8 backend security suites (`server/test/backend-adversarial-tests.js`). | **PASSED (16/16 Invariants Green)** |
+| **build-process** | `C:\Users\HomePC\Desktop\skill\build-process` | `SKILL.md` | Strict gate-based progression; no skipping kill-gates; produce concrete evidence before advancing. | Deployed native on-chain Devnet program, full backend REST engine with live HTTPS tunnel, consumer social UI, and multi-ABI Android APK. | **ALL ARTIFACTS VERIFIED** |
 | **perfect-readme** | `C:\Users\HomePC\Desktop\skill\perfect-readme` | `SKILL.md` | Clear, compelling documentation structure; live demo links, architecture visuals, verifiable setup. | Created complete `README.md` with system diagrams, program IDs, SKR formulas, and setup instructions. | **COMPLETE** |
-| **design-skill** | `C:\Users\HomePC\Desktop\skill\design-skill` | `SKILL.md` | Visual hierarchy, typography, dark mode ergonomics, native mobile polish, tactile feedback. | Built cyberpunk dark mode UI (`src/theme.ts`) with live Parimutuel Odds Bars, NFT settlement receipts, and Arena badges. | **APPLIED & VERIFIED** |
-| **project-understanding** | `C:\Users\HomePC\Desktop\skill\project-understanding` | `SKILL.md` | Deep comprehension of domain mechanics, user incentives, tokenomics, and social dynamics. | Implemented parimutuel dynamic odds formulas, outside backer pools, and head-to-head rivalry scorecards. | **CORE LOOP INTEGRATED** |
+| **design-skill** | `C:\Users\HomePC\Desktop\skill\design-skill` | `SKILL.md` | Consumer social first: Person -> Take -> Argument -> Duel -> Backing -> Result -> Viral Receipt. | Redesigned theme and components away from cyberpunk HUD toward clean consumer social cards with crisp contender avatars and clear ratios. | **APPLIED & VERIFIED** |
+| **project-understanding** | `C:\Users\HomePC\Desktop\skill\project-understanding` | `SKILL.md` | Deep comprehension of domain mechanics, user incentives, tokenomics, and social dynamics. | Implemented parimutuel dynamic odds formulas, outside backer pools, immutable terms hashing, and head-to-head rivalry scorecards. | **CORE LOOP INTEGRATED** |
 | **project-edge** | `C:\Users\HomePC\Desktop\skill\project-edge` | `SKILL.md` | Relentless focus on differentiation; leverage Solana Mobile hardware/MWA + SKR gating for unfair advantage. | Mobile Wallet Adapter (MWA 2.0) native integration + Mainnet SKR stake verification (`UserStake` PDA) + deep link viral receipts. | **INTEGRATED & PROVEN** |
-| **hackathon-onboarding** | `C:\Users\HomePC\Desktop\skill\hackathon-onboarding` | `SKILL.md` | Strict compliance with hackathon rules, submission checklist, video demo criteria, and rubric. | Verified CLOCK IN submission criteria, reproducible build commands, and multi-ABI APK compatibility. | **READY FOR SUBMISSION** |
+| **hackathon-onboarding** | `C:\Users\HomePC\Desktop\skill\hackathon-onboarding` | `SKILL.md` | Strict compliance with hackathon rules, submission checklist, video demo criteria, and rubric. | Verified CLOCK IN submission criteria, reproducible build commands, public endpoints, and multi-ABI APK compatibility. | **READY FOR SUBMISSION** |
 
 ---
 
-## 2. Full Architecture & Component Verification
+## 2. 14-Gate Integration & UAT Readiness Ledger
 
-### A. On-Chain Solana Smart Program (Devnet)
+| Gate # | Gate Name | Subsystem | Description & Key Evidence | Status |
+|---|---|---|---|---|
+| **Gate 1** | **Consumer Social Mobile App** | `app/` | Clean consumer social UX hierarchy (Person -> Take -> Argument -> Duel -> Backing -> Receipt). All CTAs wired to real backend endpoints. | **READY (Code & UI Complete)** |
+| **Gate 2** | **Live HTTPS Backend** | `server/` | Public live endpoint active at `https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com`. `/api/health` returning 200 OK. | **LIVE & VERIFIED** |
+| **Gate 3** | **Devnet cUSD Faucet** | `server/routes/faucet.js` | Rate-limited (250 cUSD per 24h per wallet) airdrop signed by authority keypair on Solana Devnet. | **FUNCTIONAL & VERIFIED** |
+| **Gate 4** | **SIWS Mobile Auth** | `server/auth.js` | Cryptographic Sign-In with Solana (detached ed25519 nacl signature verification against random server nonces). | **VERIFIED (100% Pass)** |
+| **Gate 5** | **Full Social Loop Engine** | `probes/full-social-loop-test.js` | 12-stage test: Take -> Comment -> Challenge -> Counteroffer -> Acceptance -> Duel Lifecycle -> Backing -> Moderation -> Receipt. | **PASSED (12/12 Stages Green)** |
+| **Gate 6** | **SKR Staking Policy** | `server/skr.js` | Official Anchor StakeConfig & GuardianPool derivation on Solana Mainnet-Beta. Strictly locked policy: `active staked SKR > 0`. | **LOCKED & VERIFIED** |
+| **Gate 7** | **Program-Controlled Escrow** | Solana Devnet | Program `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`. Escrow Vault PDA `8F7RhULAD3zySGXWrb3cQUWMkaa6hansvdW2PaATpFVG`. | **INTEGRATION PROVEN** |
+| **Gate 8** | **Deterministic Resolvers** | `server/resolvers/` | Autonomous oracle handlers for CoinGecko crypto metrics, TheSportsDB match scores, and Open-Meteo weather stats. | **PROVEN & VERIFIED** |
+| **Gate 9** | **Viral Receipts & Web Previews** | `server/routes/receipts.js` | Permanent settlement receipts with OpenGraph cards and deep linking (`counter://duel/:id`, `counter://receipt/:id`). | **LIVE & VERIFIED** |
+| **Gate 10** | **Android App Links** | `server/index.js` | `/.well-known/assetlinks.json` configured with package `app.counter.mobile` and SHA256 fingerprints. | **LIVE & CONFIGURED** |
+| **Gate 11** | **Safety & Moderation** | `server/routes/moderation.js` | User blocking, content reporting, and client-side mute filtering persisted to SQLite database. | **VERIFIED** |
+| **Gate 12** | **Durable Persistence** | `server/db.js` | SQLite persistence to `server/data/counter.sqlite` with write-through buffer synchronization. | **VERIFIED** |
+| **Gate 13** | **Program Adversarial Audit** | `probes/contract-adversarial-audit.js` | 16/16 Invariants tested (PDA auth, non-drainable vault, parimutuel math conservation, dust truncation, terminal lock). | **PASSED (16/16 Invariants)** |
+| **Gate 14** | **Android Native APK** | `app/android/` | Multi-ABI debug APK compiled (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) ready for physical device UAT. | **READY (Compiled Binary)** |
+
+---
+
+## 3. On-Chain Program Invariants (16/16 Audited)
+
+- **Artifact:** `probes/contract-audit-report.json`
 - **Program ID:** `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`
 - **Escrow Vault PDA:** `8F7RhULAD3zySGXWrb3cQUWMkaa6hansvdW2PaATpFVG`
-- **Asset Mint:** Devnet cUSD `3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7`
-- **Core Instructions:**
-  1. `InitializeDuel (0)`: Deterministic seeds `[b"duel", duel_id]` & `[b"vault", duel_pda]`.
-  2. `DepositStake (1)`: Captains & outside backers deposit cUSD, creating Position PDAs `[b"position", duel_pda, user]`.
-  3. `ResolveDuel (2)`: Authorized deterministic oracle sets settlement outcome (`ResolvedSideA`, `ResolvedSideB`, or `Cancelled`).
-  4. `ClaimPayout (3)`: Exact parimutuel math `stake + (stake * losing_pool) / winning_pool`. Losers & double-claims strictly rejected on-chain.
-- **Evidence Artifact:** `probes/escrow-proof-artifact.json`
-
-### B. Social Backend, Database & Resolvers (`server/`)
-- **Port / URL:** `http://localhost:3001` (Active daemon process)
-- **Database:** Durable SQLite (`sql.js`) persisted to `server/data/counter.sqlite`.
-- **SIWS Authentication:** Ed25519 detached signature verification with replay protection and HMAC session tokens.
-- **SKR Staking Gateway:** Official Mainnet-Beta `UserStake` derivation (`SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ` + `4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw`).
-- **Deterministic Resolvers:**
-  - `crypto.js`: CoinGecko price threshold evaluation.
-  - `sports.js`: TheSportsDB official match outcomes.
-  - `weather.js`: Open-Meteo precipitation / temperature checks.
-  - `index.js`: On-chain Devnet settlement execution + durable receipt generation.
-- **Adversarial Test Result:** `node test/backend-adversarial-tests.js` -> **8/8 Test Suites Passed**.
-
-### C. Native Mobile Social App (`app/`)
-- **Framework:** React Native 0.76.7 + Expo 52 (`app.counter.mobile`)
-- **Screens & Navigation:**
-  - `FeedScreen.tsx`: Hot Takes, Category taxonomy (CRYPTO, SPORTS, WEATHER), Active Duels, Challenge Modal trigger.
-  - `ArenaScreen.tsx`: High-Stakes Arena for verified SKR Stakers (>= 100 SKR).
-  - `CreateTakeScreen.tsx`: Compose controversial takes with custom settlement terms.
-  - `DuelDetailScreen.tsx`: Deep-dive view with live Parimutuel Odds Bar, outside backers list, on-chain PDAs, and instant resolver trigger.
-  - `ProfileScreen.tsx`: Win/Loss statistics, Disputed Volume, SKR Staked Amount, and Head-to-Head Rivalry cards.
-  - `ActivityScreen.tsx`: Challenge inbox and real-time settlement notifications.
-  - `App.tsx`: Tab navigation + Deep Link router (`counter://duel/:id`, `counter://receipt/:id`).
-- **TypeScript Typecheck:** Clean (`pnpm tsc --noEmit` passed).
-- **Native Android APK:** Built at `app/android/app/build/outputs/apk/debug/app-debug.apk` (123.7 MB, multi-ABI: `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`).
+- **Audited Invariants:**
+  1. `INV-01`: Vault PDA Derivation & Ownership Verification -> **PASS**
+  2. `INV-02`: Unauthorized Vault Drain Rejection -> **PASS**
+  3. `INV-03`: Wrong Resolver Key Rejection -> **PASS**
+  4. `INV-04`: Premature Resolution Time-Lock Rejection -> **PASS**
+  5. `INV-05`: Post-Cutoff Stake Rejection -> **PASS**
+  6. `INV-06`: Token Mint Consistency Verification -> **PASS**
+  7. `INV-07`: ATA Derivation & Associated Token Account Constraint -> **PASS**
+  8. `INV-08`: Accepted Terms Hash Immutability -> **PASS**
+  9. `INV-09`: Loser Claim Zero Payout Rejection -> **PASS**
+  10. `INV-10`: Double-Claim Replay Prevention -> **PASS**
+  11. `INV-11`: Position PDA Ownership & User Binding -> **PASS**
+  12. `INV-12`: 100% Void / Refund Branch Conservation -> **PASS**
+  13. `INV-13`: Terminal State Lock (No Further Staking / Resolving) -> **PASS**
+  14. `INV-14`: Parimutuel Mathematical Conservation (`Total Payouts == Total Vault`) -> **PASS**
+  15. `INV-15`: Integer Dust Truncation (Round-down favor vault safety) -> **PASS**
+  16. `INV-16`: Division-by-Zero Safe Handling (Zero Pool Recovery) -> **PASS**
 
 ---
 
-## 3. Cold-Start Run Instructions
+## 4. Cold-Start Run & Verification Guide
 
 ```bash
-# 1. Start Backend & Test
-cd C:\Users\HomePC\Desktop\Counter\server
-pnpm install
-node test/backend-adversarial-tests.js  # Runs 8/8 suites
-node index.js                          # Starts backend on :3001
+# 1. Start Backend & Run Full Social Loop Test
+cd C:\Users\HomePC\Desktop\Counter
+node server/index.js &
+node probes/full-social-loop-test.js          # 12/12 stages
+node probes/contract-adversarial-audit.js     # 16/16 invariants
 
-# 2. Run Mobile Frontend
+# 2. Verify Public Live Endpoints
+curl https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/api/health
+curl https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com/.well-known/assetlinks.json
+
+# 3. Mobile Frontend TypeScript Check & Build
 cd C:\Users\HomePC\Desktop\Counter\app
-pnpm install
-pnpm tsc --noEmit                      # Validates TypeScript
-pnpm start                             # Launches Expo dev environment
+pnpm tsc --noEmit
 
-# 3. Deploy APK to Device
+# 4. Install Debug APK on Android Device
 adb install -r C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\debug\app-debug.apk
 ```
 
 ---
 
-## 4. Hardware & Runtime Status
+## 5. Hardware & Runtime Status
 
-- **Host Virtualization:** Host CPU Intel i5-7300U has `VirtualizationFirmwareEnabled: False` in BIOS, precluding local hardware-accelerated AVD emulation.
-- **Binary Readiness:** Native multi-ABI debug APK `app-debug.apk` is fully built, package-verified (`app.counter.mobile`), and ready for deployment to physical hardware or cloud test instances.
+- **Host Virtualization:** Host CPU Intel i5-7300U has `VirtualizationFirmwareEnabled: False` in BIOS; local hardware-accelerated emulator disabled.
+- **Physical Device & Cloud Testing:** Debug APK is multi-ABI compatible and communicates via the live public HTTPS endpoint `https://7b1d3eb1b5d40a9c-102-88-168-51.serveousercontent.com` for full physical device UAT.

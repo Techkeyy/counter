@@ -92,8 +92,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
           <Text style={styles.skrStatus}>
             {user?.is_arena_eligible === 1
-              ? '✓ ARENA QUALIFIED CONTENDER (>= 100 SKR)'
-              : 'SPECTATOR MODE (< 100 SKR)'}
+              ? '✓ ARENA QUALIFIED CONTENDER (ACTIVE SKR STAKE > 0)'
+              : 'SPECTATOR MODE (NO ACTIVE SKR STAKE)'}
           </Text>
         </View>
       </View>
