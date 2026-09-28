@@ -22,7 +22,11 @@
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
+    "@expo/metro-config": "^57.0.12",
+    "@react-native-community/cli": "15.0.1",
     "@types/react": "~18.3.31",
+    "metro": "^0.81.0",
+    "metro-core": "^0.81.0",
     "typescript": "~5.3.3"
   },
   "private": true

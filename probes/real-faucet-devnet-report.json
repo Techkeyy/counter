@@ -1,0 +1,15 @@
+{
+  "test": "REAL_DEVNET_FAUCET_TRANSACTION",
+  "timestamp": "2026-09-28T21:54:44.395Z",
+  "status": "PASSED",
+  "walletAddress": "55nKovp8UzmRnbnaKJbt2HLHh4TWQHx9RZJKnAMrGZ1i",
+  "cusdMint": "AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC",
+  "txSignature": "Q1RnAJM5SbLYess5viZCUyTwFVziPs6kR2UcjznfcRorqrik9Szop4Lu49s6GSnZs8pLfNafqJDecgdq4uqwPFQ",
+  "explorerLink": "https://explorer.solana.com/tx/Q1RnAJM5SbLYess5viZCUyTwFVziPs6kR2UcjznfcRorqrik9Szop4Lu49s6GSnZs8pLfNafqJDecgdq4uqwPFQ?cluster=devnet",
+  "balanceBefore": 0,
+  "amountReceived": 250,
+  "balanceAfter": 250,
+  "secondCallStatus": 429,
+  "secondCallError": "Rate limit reached. Please wait 24 hours before claiming more Devnet test cUSD.",
+  "tamperProof": true
+}

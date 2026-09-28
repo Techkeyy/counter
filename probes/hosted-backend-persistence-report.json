@@ -1,0 +1,14 @@
+{
+  "test": "HOSTED_BACKEND_PERSISTENCE",
+  "timestamp": "2026-09-28T21:59:30.389Z",
+  "status": "PASSED",
+  "hostingProvider": "Dedicated VPS (Ubuntu 24.04 x86_64, Caddy Reverse Proxy, Systemd)",
+  "hostname": "https://counter.103-195-188-198.sslip.io",
+  "healthEndpoint": "https://counter.103-195-188-198.sslip.io/api/health",
+  "assetlinksEndpoint": "https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json",
+  "databasePersistence": "Write-through SQLite on persistent VPS filesystem (/opt/counter/server/data/counter.sqlite)",
+  "createdRecordId": "take_1790632763388_a0879046",
+  "verifiedBeforeRestart": true,
+  "verifiedAfterRestart": true,
+  "authorWallet": "JfaKhpWYGUoF6v1DZornD4EhZ2VLbVdZuLbfsbUUYXT"
+}

@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-09-28T22:40:47.916Z",
+  "vps_backend_base": "https://counter.103-195-188-198.sslip.io",
+  "checks": {
+    "health": {
+      "url": "https://counter.103-195-188-198.sslip.io/api/health",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "service": "Counter Social Backend",
+        "time": "2026-09-28T22:40:48.880Z",
+        "network": {
+          "wagerAsset": "Devnet cUSD (SPL Token)",
+          "skrGating": "Solana Mainnet-Beta",
+          "escrowProgram": "52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT"
+        }
+      }
+    },
+    "assetlinks": {
+      "url": "https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json",
+      "status": 200,
+      "body": [
+        {
+          "relation": [
+            "delegate_permission/common.handle_all_urls"
+          ],
+          "target": {
+            "namespace": "android_app",
+            "package_name": "com.counter.app",
+            "sha256_cert_fingerprints": [
+              "3A:7E:F2:26:5B:5E:6E:88:F3:6D:44:49:89:4C:4E:C8:68:95:C1:CC:88:53:0F:19:51:4E:E4:F7:16:A1:5A:99",
+              "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+              "18:27:0B:CA:8D:18:2A:FD:51:57:4E:59:71:BC:B6:CD:C9:46:75:FA:AE:20:FE:CF:9B:E6:E5:5A:1C:EC:BE:C9"
+            ]
+          }
+        }
+      ]
+    },
+    "duel_og": {
+      "url": "https://counter.103-195-188-198.sslip.io/d/sol125",
+      "status": 200,
+      "has_og_title": true,
+      "has_og_description": true
+    },
+    "receipt_og": {
+      "url": "https://counter.103-195-188-198.sslip.io/r/rcpt_seed_sol_won",
+      "status": 200,
+      "has_og_title": true,
+      "has_og_image": false
+    },
+    "duels_api": {
+      "url": "https://counter.103-195-188-198.sslip.io/api/duels",
+      "status": 200,
+      "count": 0
+    }
+  },
+  "apk_bundle": {
+    "path": "C:\\Users\\HomePC\\Desktop\\Counter\\app\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "size_bytes": 126558056,
+    "mtime": "2026-09-28T22:40:14.066Z",
+    "exists": true
+  }
+}
