@@ -182,15 +182,6 @@ async function getDb() {
       created_at TEXT,
       UNIQUE(blocker_wallet, blocked_wallet)
     );
-
-    CREATE TABLE IF NOT EXISTS faucet_claims (
-      id TEXT PRIMARY KEY,
-      user_wallet TEXT,
-      token_mint TEXT,
-      amount REAL,
-      tx_signature TEXT,
-      created_at TEXT
-    );
   `);
 
   saveDb();

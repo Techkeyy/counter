@@ -96,7 +96,7 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
                 isArenaEligible ? styles.eligibleText : styles.ineligibleText,
               ]}
             >
-              {isArenaEligible ? 'QUALIFIED CONTENDER' : 'SPECTATOR (ACTIVE SKR STAKE > 0 REQUIRED)'}
+              {isArenaEligible ? 'QUALIFIED CONTENDER' : 'SPECTATOR (100 SKR NEEDED)'}
             </Text>
           </View>
         </View>

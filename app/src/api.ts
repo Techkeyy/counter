@@ -1,6 +1,6 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
 
-export const PUBLIC_API_URL = 'https://0aa4526759d73199-102-88-168-51.serveousercontent.com/api';
+export const PUBLIC_API_URL = 'https://75abdf04ceaf540a-102-88-168-51.serveousercontent.com/api';
 export const API_BASE_URL = 'http://10.0.2.2:3001/api';
 export const LOCAL_API_URL = 'http://localhost:3001/api';
 
@@ -30,7 +30,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  // Try public HTTPS first (physical devices/remote), then Android emulator IP, then localhost
+  // Try public live HTTPS endpoint first, then emulator IP, then localhost
   const targetUrls = [PUBLIC_API_URL, API_BASE_URL, LOCAL_API_URL];
   let lastErr: any = null;
 
@@ -50,7 +50,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
   }
 
-  throw new Error(`Network request failed to all endpoints (${endpoint}): ${lastErr?.message || lastErr}`);
+  throw new Error(`Network request failed to all backend endpoints: ${lastErr?.message || lastErr}`);
 }
 
 export const api = {
@@ -160,18 +160,6 @@ export const api = {
   },
   resolveDuel: async (duelId: string) => {
     return request<any>(`/duels/${duelId}/resolve`, {
-      method: 'POST',
-    });
-  },
-  publishToArena: async (duelId: string) => {
-    return request<{ success: boolean; isArena: number; skrStake: number }>(`/duels/${duelId}/publish-arena`, {
-      method: 'POST',
-    });
-  },
-
-  // Faucet
-  claimFaucet: async () => {
-    return request<{ success: boolean; amount: number; txSignature: string; message: string }>(`/faucet/cusd`, {
       method: 'POST',
     });
   },

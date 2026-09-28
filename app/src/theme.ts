@@ -1,40 +1,36 @@
 export const colors = {
-  // Consumer Social Dark Theme
-  background: '#0E1117',
-  surface: '#161B22',
-  surfaceLight: '#21262D',
-  card: '#161B22',
-  cardBorder: '#30363D',
+  background: '#0B0C10',
+  surface: '#15171E',
+  surfaceLight: '#1F222D',
+  card: '#181A22',
+  cardBorder: '#272A38',
   
-  // Accents & Actions
-  primary: '#58A6FF',
-  brandPurple: '#8957E5',
-  accentGreen: '#3FB950',
-  accentRed: '#F85149',
-  warningOrange: '#D29922',
+  // Neon Accents
+  solanaPurple: '#9945FF',
+  solanaGreen: '#14F195',
+  duelCrimson: '#FF3B30',
+  duelBlue: '#007AFF',
+  warningYellow: '#FFD60A',
   
-  // Human Contender Sides (Distinct, high-readability backing tints)
-  sideA: '#3FB950',       // Back Side A (Green)
-  sideB: '#58A6FF',       // Back Side B (Blue)
-  sideABorder: '#238636',
-  sideBBorder: '#1F6FEB',
+  // Text
+  textPrimary: '#FFFFFF',
+  textSecondary: '#9EA3B0',
+  textMuted: '#636878',
   
-  // Text Hierarchy
-  textPrimary: '#F0F6FC',
-  textSecondary: '#8B949E',
-  textMuted: '#6E7681',
+  // Odds
+  sideA: '#14F195',
+  sideB: '#9945FF',
   
-  // Status & Badges
-  arenaBadge: '#F0883E',
-  arenaBadgeBg: 'rgba(240, 136, 62, 0.12)',
-  badgeNeutral: '#30363D',
+  // Badges
+  arenaBadge: '#FFD60A',
+  badgeBg: 'rgba(255, 214, 10, 0.12)',
 };
 
 export const typography = {
   fontFamily: 'System',
-  h1: { fontSize: 22, fontWeight: '700' as const, color: colors.textPrimary },
-  h2: { fontSize: 18, fontWeight: '700' as const, color: colors.textPrimary },
-  h3: { fontSize: 15, fontWeight: '600' as const, color: colors.textPrimary },
+  h1: { fontSize: 24, fontWeight: '700' as const, color: colors.textPrimary },
+  h2: { fontSize: 20, fontWeight: '700' as const, color: colors.textPrimary },
+  h3: { fontSize: 16, fontWeight: '600' as const, color: colors.textPrimary },
   body: { fontSize: 14, color: colors.textPrimary, lineHeight: 20 },
   bodyMuted: { fontSize: 13, color: colors.textSecondary },
   caption: { fontSize: 11, color: colors.textMuted },

@@ -30,7 +30,7 @@ export const TakeCard: React.FC<TakeCardProps> = ({ take, onPress, onChallenge }
           <View>
             <View style={styles.nameRow}>
               <Text style={styles.authorName}>{take.author_name || 'Contender'}</Text>
-              {(take.author_skr_staked ?? 0) > 0 && (
+              {(take.author_skr_staked ?? 0) > 100 && (
                 <Text style={styles.stakerBadge}>🛡️</Text>
               )}
             </View>
