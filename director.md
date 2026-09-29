@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — REAL ON-CHAIN PRODUCT PATH REMEDIATION`  
-**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this session: VPS received only read-only public GETs; all server changes are LOCAL and require an authorized deploy, see §34.H)  
+**Current Authoritative Status:** `DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`  
+**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this entire phase: VPS received only read-only public GETs; no restart/edit/reload of anything remote)  
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `efa3c74` + remediation session below (commit pending at time of writing)  
-**Last Updated:** 2026-09-30T00:30:00Z  
+**Authoritative Local Commit:** `d6b7fcd` + this ledger (commit pending at time of writing)  
+**Last Updated:** 2026-09-30T02:00:00Z  
 
 ---
 
@@ -564,5 +564,117 @@ Fresh random duel `8f599359274e09eb7a5f785f66b82068` → PDA `4F8aBTVH…` (all 
 - Permanent receipt: now cites REAL settlement tx (chain-proven) → **SOFT ENFORCED, device-pending.**
 - Init binding / resolver authority / claim authorization: **HARD (program) + verified (backend).**
 - Android-native / MWA / identity / social / deep-link / GitHub / backend-availability: unchanged from §33.E.
+
+---
+
+## 35. PRE-UAT PRODUCTION ALIGNMENT — 2026-09-30 (Builder, from `520dada`)
+
+> Status after this session: **`DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`** (per Director rule:
+> all local alignment gates pass, deployment not authorized). No FINAL/DONE/SUBMISSION READY/
+> RELEASE CANDIDATE/UAT PASSED declared. VPS received only read-only public GETs — zero mutations.
+
+### 35.A — GATE 1: secure session persistence (implemented + tested)
+
+- Inspected Expo ~52 / RN 0.76.7: no secure store present → installed **`expo-secure-store@14.0.1`**
+  (SDK 52 match, Android Keystore-backed) + **`expo-modules-core@2.2.3`** (required bundling peer;
+  first build failed without it — recorded, fixed, rebuilt green). No plaintext AsyncStorage used.
+- `app/src/session.ts` (new): persists ONLY `{wallet, token, displayName?, handle?}` — no private keys
+  (none exist on client). Restore = candidate only: token validated via backend profile read for the
+  stored wallet; invalid/expired/mismatched → securely cleared + DISCONNECTED. Nothing synthesized.
+- Wired in `App.tsx`: cold-start restore → same profile; first-run/disconnect → onboarding;
+  connect saves, disconnect clears.
+- **Proof:** `app/session.test.js` executes the REAL `session.ts` (transpiled): 5/5 pass —
+  no session / valid restore (arena flags) / malformed JSON + bad shape (both deleted) /
+  backend-rejected token (cleared, no wallet) / logout clears.
+
+### 35.B — GATE 2: Devnet funding UX (implemented, balance-verified)
+
+- `api.requestFaucet()` + `BackModal` “Get test cUSD (Devnet · no cash value)” button on insufficient
+  balance. Success requires BOTH: returned `tokenMint === AXMB7…` AND re-read on-chain balance > 0
+  (6 retries); HTTP 200 alone never counts. 429 → honest 24h message; wrong mint → hard error naming
+  misconfiguration; refresh failure → explorer-linked retry message. `3Ztkj…` never treated as a mint.
+- Faucet proof (local smoke): issues **AXMB7**, second claim → **429**; client agreement enforced in code.
+
+### 35.C — GATE 3: production preflight (read-only; OLD backend confirmed)
+
+- Serving stack (from repo's own recorded setup history + live headers): systemd `counter-backend`,
+  `/opt/counter/server`, `node index.js`, port 8795, Caddy → `counter.103-195-188-198.sslip.io`
+  (headers match: Express powered-by, no Server). Recorded env: `PROGRAM_ID=52Qgq…` ✓,
+  `DEVNET_CUSD_MINT=AXMB7…` ✓, `KEYPAIR_PATH=/opt/counter/server/config/authority-keypair.json`,
+  **no `JWT_SECRET` in the recorded unit → presumed default (MUST set at deploy).**
+- Version probes (non-mutating): `chain-accounts` → 404 HTML, `claim` → 404 HTML, unauthenticated
+  `resolve` → 400 ‘Duel not found’ (no auth gate) → **production predates `1632734`; UAT against it
+  would test the wrong system.** Deployed commit, disk, DB path, node version, keypair presence are
+  NOT remotely verifiable — all in the prepared plan (§35.E).
+
+### 35.D — GATE 4: migration dry-run (proven, `probes/migration-dry-run.js`, exit 0)
+
+- Timestamped backup → degraded copy to legacy shape (dropped 6 chain columns) → booted new code
+  TWICE: 50 users / 12 takes / 12 challenges / 13 duels / 34 positions / 3 receipts preserved exactly;
+  all legacy duels readable, `chain_status=UNINITIALIZED`, **zero fabricated sigs/PDAs**; second boot
+  schema- and data-identical. Legacy RESOLVED demo rows stay readable-but-unverified (honest PENDING
+  in app; documented, no backfill).
+
+### 35.E — GATE 5: STOP — prepared Counter-only deployment plan (NOT executed)
+
+No owner authorization for VPS mutation exists in this context + STRICT isolation upheld →
+**nothing on `103.195.188.198` was restarted, edited, reloaded, or cleaned.** Prepared commands:
+```
+systemctl status counter-backend --no-pager   # record
+cp /opt/counter/server/data/counter.sqlite /opt/counter/backups/counter-$(date +%Y%m%d%H%M%S).sqlite
+cd /opt/counter/server && git rev-parse HEAD  # record current commit
+git fetch origin && git checkout <APPROVED_COMMIT>   # exact commit only (or rsync server/ if not a clone)
+npm install   # only if package.json changed (no new server prod deps this phase)
+# REQUIRED env: JWT_SECRET=<strong random, NOT default> KEYPAIR_PATH=<existing authority file>
+#   DEVNET_CUSD_MINT=AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC PROGRAM_ID=52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT
+systemctl restart counter-backend && journalctl -u counter-backend -n 50 --no-pager
+curl -s localhost:8795/api/health
+sqlite3 data/counter.sqlite "SELECT COUNT(*) FROM duels;"  # compare vs backup counts
+# rollback: restore backup sqlite + checkout previous commit + restart
+```
+
+### 35.F — GATES 6+8: local smoke + adversarial matrix (`probes/local-chain-smoke.js`, 12/12, exit 0)
+
+Against local new-code server (throwaway SIWS identities, TEST-labeled state, all cleaned):
+reads ✓ · **take→challenge→accept via product path** ✓ · chain-accounts AXMB7 model ✓ · bad ID → JSON 404 ✓ ·
+fabricated init/stake/claim + wrong-duel sigs → 400 with **zero state change** ✓ · uninitialized stake/
+settlement refused, **no receipt** ✓ · **real init/stake verified & indexed once, replay idempotent** ✓ ·
+wrong-wallet + wrong-amount rejected ✓ · **real route settlement `2ymA8ZMo…`** ✓ · **real claim $3 exact,
+replay cannot double-pay** ✓ · faucet AXMB7 + 429 ✓. (One iteration used CoinGecko → 403; switched to a
+deterministic keyless weather vector. Two probe bugs of mine — POST arg order, response path — caught and
+fixed during the run; product code untouched by them.)
+
+### 35.G — GATE 7: configuration equality (public values)
+
+- Mint: APK/chain.ts `AXMB7…` = backend `chain.js` `AXMB7…` = recorded prod faucet env `AXMB7…` =
+  init-verifier enforced mint `AXMB7…` (program stores per-duel mint; product path admits only AXMB7).
+- Program: mobile = backend = deployed executable = `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`.
+- Resolver: local authority `3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7` (file-derived, secret never
+  printed); production expected same authority — **confirm post-deploy via public
+  `chain-accounts.resolver`**; live faucet-mint behavior likewise post-deploy.
+
+### 35.H — GATE 9: device precheck — `adb devices -l` → **empty (twice)**. No UAT. No release candidate.
+
+### 35.I — GATE 10: fresh release APK (from `d6b7fcd`, clean tree)
+
+- tsc 0 · vectors 11/11 · adversarial 8/8 (fixture teardown added; oracle section honest-SKIPs offline) ·
+  session 5/5 · secret scan 0 hits (154 files) · `BUILD SUCCESSFUL in 8m 55s (577 tasks)`.
+- APK `app/android/app/build/outputs/apk/release/app-release.apk`, **62,017,908 bytes**,
+  SHA-256 **`0AB0AA189FAEB68C271538446CE99CAD9E6684A309EF0BBDBFCCB177283A3344`**,
+  cert `3A:B2:8E:39:…:FF:25` ✓, package `app.counter.mobile` ✓. Bundle (2,497,644 B):
+  prod backend ✓, AXMB7 ✓, program ✓, **no mock token / fallback wallet / passwords / keys** ✓,
+  localhost = same 4 known library constants (Metro :8080, web3 cluster enum, default RPC :8899 —
+  no production dependency) ✓.
+
+### 35.J — Ledger reclassifications
+
+- User identity: was SOFT(server)/UNENFORCED(client) → **secure persistence IMPLEMENTED + 5/5 tested;
+  cross-restart restore UNENFORCED pending device.**
+- Devnet funding: was assumed-external → **in-app AXMB7 faucet flow IMPLEMENTED (mint-checked +
+  balance-verified); device + deployed-backend pending.**
+- Production backend availability: was OBSERVATIONAL(live, old) → **proven STALE (pre-`1632734`);
+  alignment BLOCKED on owner-authorized deploy.**
+- All §34.I chain-path classifications stand (chain-proven via node keypairs; MWA legs pending device).
+- VPS was NOT mutated (state this explicitly: **zero remote commands that change state**).
 
 
