@@ -9,17 +9,22 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { ActivityNotification } from '../types';
-import { colors, spacing } from '../theme';
+import { colors, typography, spacing, borderRadius } from '../theme';
 import { api } from '../api';
+import { Icon, IconName } from '../components/Icon';
+import { EmptyState } from '../components/StateViews';
 
 interface ActivityScreenProps {
   onSelectNotification: (notif: ActivityNotification) => void;
 }
 
+type FilterTab = 'ALL' | 'ACTION_REQUIRED';
+
 export const ActivityScreen: React.FC<ActivityScreenProps> = ({
   onSelectNotification,
 }) => {
   const [activities, setActivities] = useState<ActivityNotification[]>([]);
+  const [filter, setFilter] = useState<FilterTab>('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -44,63 +49,147 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
     loadActivities();
   };
 
-  const getIconForType = (type: string) => {
+  const getNotificationIcon = (type: string): { icon: IconName; color: string } => {
     switch (type) {
-      case 'CHALLENGE_RECEIVED': return '⚔️';
-      case 'COUNTEROFFER': return '🔄';
-      case 'DUEL_STARTED': return '🔥';
-      case 'DUEL_RESOLVED': return '🏆';
-      case 'BACKER_JOINED': return '💰';
-      default: return '🔔';
+      case 'CHALLENGE_RECEIVED':
+        return { icon: 'swords', color: colors.solanaGreen };
+      case 'COUNTEROFFER':
+        return { icon: 'refresh-cw', color: colors.solanaPurple };
+      case 'DUEL_STARTED':
+        return { icon: 'flame', color: colors.duelCrimson };
+      case 'DUEL_RESOLVED':
+        return { icon: 'trophy', color: colors.arenaBadge };
+      case 'BACKER_JOINED':
+        return { icon: 'users', color: colors.solanaGreen };
+      default:
+        return { icon: 'bell', color: colors.textSecondary };
     }
   };
 
+  const filteredActivities = activities.filter((item) => {
+    if (filter === 'ACTION_REQUIRED') {
+      return (
+        item.type === 'CHALLENGE_RECEIVED' ||
+        item.type === 'COUNTEROFFER' ||
+        item.type === 'DUEL_RESOLVED'
+      );
+    }
+    return true;
+  });
+
   return (
     <View style={styles.container}>
+      {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>🔔 ACTIVITY & CHALLENGE INBOX</Text>
+        <Text style={styles.title}>Activity</Text>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[styles.filterChip, filter === 'ALL' && styles.filterChipActive]}
+          onPress={() => setFilter('ALL')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.filterText, filter === 'ALL' && styles.filterTextActive]}>
+            All
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterChip, filter === 'ACTION_REQUIRED' && styles.filterChipActive]}
+          onPress={() => setFilter('ACTION_REQUIRED')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              filter === 'ACTION_REQUIRED' && styles.filterTextActive,
+            ]}
+          >
+            Action Required
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.solanaPurple} />
+          <ActivityIndicator size="large" color={colors.solanaGreen} />
         </View>
       ) : (
         <FlatList
-          data={activities}
+          data={filteredActivities}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.itemCard, item.is_read === 0 && styles.itemUnread]}
-              onPress={() => onSelectNotification(item)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.itemIcon}>{getIconForType(item.type)}</Text>
-              <View style={styles.itemContent}>
-                <Text style={styles.itemTitle}>{item.title}</Text>
-                <Text style={styles.itemMessage}>{item.message}</Text>
-                <Text style={styles.itemDate}>
-                  {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const { icon, color } = getNotificationIcon(item.type);
+            const isActionable =
+              item.type === 'CHALLENGE_RECEIVED' ||
+              item.type === 'COUNTEROFFER' ||
+              item.type === 'DUEL_RESOLVED';
+
+            return (
+              <TouchableOpacity
+                style={[styles.itemCard, item.is_read === 0 && styles.itemUnread]}
+                onPress={() => onSelectNotification(item)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.iconCircle, { backgroundColor: `${color}1A` }]}>
+                  <Icon name={icon} size={20} color={color} />
+                </View>
+
+                <View style={styles.itemContent}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.itemTitle}>{item.title}</Text>
+                    <Text style={styles.itemDate}>
+                      {new Date(item.created_at).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.itemMessage}>{item.message}</Text>
+
+                  {isActionable && (
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={() => onSelectNotification(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.actionBtnText}>
+                          {item.type === 'CHALLENGE_RECEIVED'
+                            ? 'Review Challenge'
+                            : item.type === 'COUNTEROFFER'
+                            ? 'Review Counter'
+                            : 'View Receipt'}
+                        </Text>
+                        <Icon name="arrow-right" size={12} color="#000000" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.solanaPurple}
+              tintColor={colors.solanaGreen}
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>📭</Text>
-              <Text style={styles.emptyTitle}>Inbox Zero</Text>
-              <Text style={styles.emptySubtitle}>
-                No pending challenges or duel updates.
-              </Text>
-            </View>
+            <EmptyState
+              icon="bell"
+              title="Inbox Zero"
+              subtitle={
+                filter === 'ACTION_REQUIRED'
+                  ? 'No actions required right now. You are all caught up!'
+                  : 'No activity yet. Challenges, duels, and receipts will appear here.'
+              }
+            />
           }
         />
       )}
@@ -114,16 +203,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
+    borderBottomColor: colors.surfaceLight,
   },
   title: {
+    ...typography.h2,
     color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceLight,
+  },
+  filterChipActive: {
+    backgroundColor: colors.solanaGreen,
+  },
+  filterText: {
+    ...typography.captionBold,
+    color: colors.textSecondary,
+  },
+  filterTextActive: {
+    color: '#000000',
   },
   loadingContainer: {
     flex: 1,
@@ -135,56 +244,66 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
     padding: spacing.md,
-    borderRadius: 14,
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    alignItems: 'center',
-    gap: spacing.md,
   },
   itemUnread: {
-    borderColor: colors.solanaPurple,
-    backgroundColor: 'rgba(153, 69, 255, 0.05)',
+    borderColor: 'rgba(20, 241, 149, 0.4)',
+    backgroundColor: colors.surface,
   },
-  itemIcon: {
-    fontSize: 22,
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
   },
   itemContent: {
     flex: 1,
-    gap: 2,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   itemTitle: {
+    ...typography.bodyBold,
     color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  itemMessage: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
   },
   itemDate: {
+    ...typography.caption,
     color: colors.textMuted,
-    fontSize: 10,
-    marginTop: 2,
   },
-  emptyContainer: {
+  itemMessage: {
+    ...typography.bodyMuted,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actionRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+  },
+  actionBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 60,
-    gap: 8,
+    backgroundColor: colors.solanaGreen,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: 4,
   },
-  emptyIcon: {
-    fontSize: 32,
-  },
-  emptyTitle: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  emptySubtitle: {
-    color: colors.textMuted,
-    fontSize: 12,
+  actionBtnText: {
+    ...typography.captionBold,
+    color: '#000000',
+    fontSize: 11,
   },
 });
+
+export default ActivityScreen;

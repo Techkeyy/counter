@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Take } from '../types';
-import { colors, typography, spacing } from '../theme';
+import { colors, typography, spacing, borderRadius } from '../theme';
+import { Icon } from './Icon';
 
 interface TakeCardProps {
   take: Take;
@@ -24,14 +25,14 @@ export const TakeCard: React.FC<TakeCardProps> = ({ take, onPress, onChallenge }
       <View style={styles.header}>
         <View style={styles.authorRow}>
           <Image
-            source={{ uri: take.author_avatar || `https://avatar.vercel.sh/${take.author_wallet}` }}
+            source={{ uri: take.author_avatar || `https://api.dicebear.com/7.x/identicon/png?seed=${take.author_wallet}` }}
             style={styles.avatar}
           />
           <View>
             <View style={styles.nameRow}>
               <Text style={styles.authorName}>{take.author_name || 'Contender'}</Text>
-              {(take.author_skr_staked ?? 0) > 100 && (
-                <Text style={styles.stakerBadge}>🛡️</Text>
+              {(take.author_skr_staked ?? 0) > 0 && (
+                <Icon name="shield-check" size={14} color={colors.solanaGreen} />
               )}
             </View>
             <Text style={styles.authorHandle}>@{take.author_handle || take.author_wallet.slice(0, 6)}</Text>
@@ -50,8 +51,14 @@ export const TakeCard: React.FC<TakeCardProps> = ({ take, onPress, onChallenge }
 
       <View style={styles.footer}>
         <View style={styles.statsRow}>
-          <Text style={styles.statText}>💬 {take.comments_count} comments</Text>
-          <Text style={styles.statText}>⚔️ {take.duels_count} duels</Text>
+          <View style={styles.statItem}>
+            <Icon name="message-circle" size={14} color={colors.textSecondary} />
+            <Text style={styles.statText}>{take.comments_count || 0}</Text>
+          </View>
+          <View style={styles.statItem}>
+            <Icon name="swords" size={14} color={colors.textSecondary} />
+            <Text style={styles.statText}>{take.duels_count || 0}</Text>
+          </View>
         </View>
 
         <TouchableOpacity 
@@ -59,7 +66,8 @@ export const TakeCard: React.FC<TakeCardProps> = ({ take, onPress, onChallenge }
           onPress={() => onChallenge(take)}
           activeOpacity={0.8}
         >
-          <Text style={styles.challengeButtonText}>⚔️ CHALLENGE</Text>
+          <Icon name="swords" size={14} color="#000000" />
+          <Text style={styles.challengeButtonText}>CHALLENGE</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -69,7 +77,7 @@ export const TakeCard: React.FC<TakeCardProps> = ({ take, onPress, onChallenge }
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: borderRadius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
     borderWidth: 1,
@@ -87,9 +95,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
     backgroundColor: colors.surfaceLight,
   },
   nameRow: {
@@ -98,22 +106,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   authorName: {
+    ...typography.bodyBold,
     color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  stakerBadge: {
-    fontSize: 12,
   },
   authorHandle: {
-    color: colors.textMuted,
-    fontSize: 12,
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
     borderWidth: 1,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   categoryText: {
@@ -122,45 +126,51 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   topic: {
-    color: colors.solanaGreen,
-    fontSize: 13,
-    fontWeight: '700',
+    ...typography.h3,
+    color: colors.textPrimary,
     marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   content: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 22,
+    ...typography.body,
+    color: colors.textSecondary,
     marginBottom: spacing.md,
+    lineHeight: 20,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
-    paddingTop: spacing.md,
+    borderTopColor: colors.surfaceLight,
+    paddingTop: spacing.sm,
   },
   statsRow: {
     flexDirection: 'row',
     gap: spacing.md,
   },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   statText: {
+    ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
   },
   challengeButton: {
-    backgroundColor: colors.solanaPurple,
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.solanaGreen,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: borderRadius.full,
+    gap: 4,
   },
   challengeButtonText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '800',
+    ...typography.captionBold,
+    color: '#000000',
     letterSpacing: 0.5,
   },
 });
+
+export default TakeCard;

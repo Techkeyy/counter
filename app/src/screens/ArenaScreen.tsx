@@ -6,13 +6,16 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Duel } from '../types';
-import { DuelCard } from '../components/DuelCard';
 import { BackModal } from '../components/BackModal';
-import { colors, spacing } from '../theme';
+import { colors, typography, spacing, borderRadius } from '../theme';
 import { api } from '../api';
+import { Icon } from '../components/Icon';
+import { SkeletonPostCard } from '../components/SkeletonLoader';
+import { EmptyState, ErrorState } from '../components/StateViews';
+import { formatUserDisplayName, getAvatarUri } from '../utils/identity';
 
 interface ArenaScreenProps {
   isArenaEligible: boolean;
@@ -28,6 +31,7 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
   const [arenaDuels, setArenaDuels] = useState<Duel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Backer Modal
   const [backModalVisible, setBackModalVisible] = useState(false);
@@ -36,10 +40,12 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
 
   const loadArenaDuels = async () => {
     try {
+      setError(null);
       const duels = await api.getDuels({ isArena: true });
       setArenaDuels(Array.isArray(duels) ? duels : []);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load arena duels:', err);
+      setError("Couldn't load Arena duels.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -55,71 +61,64 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
     loadArenaDuels();
   };
 
-  const handleBackSideA = (duel: Duel) => {
+  const handleBackSide = (duel: Duel, side: 1 | 2) => {
     setTargetDuel(duel);
-    setTargetSide(1);
+    setTargetSide(side);
     setBackModalVisible(true);
   };
 
-  const handleBackSideB = (duel: Duel) => {
-    setTargetDuel(duel);
-    setTargetSide(2);
-    setBackModalVisible(true);
-  };
+  // Eligibility rule: active staked SKR > 0
+  const isEligible = isArenaEligible || skrStakedAmount > 0;
 
   return (
     <View style={styles.container}>
-      {/* High-Stakes SKR Gate Banner */}
-      <View style={styles.gateBanner}>
-        <View style={styles.gateHeader}>
-          <Text style={styles.gateIcon}>⭐</Text>
-          <View style={styles.gateTitleColumn}>
-            <Text style={styles.gateTitle}>HIGH-STAKES SKR ARENA</Text>
-            <Text style={styles.gateSubtitle}>
-              Solana Mobile Staker Gated ($1,000+ Parimutuel Pools)
-            </Text>
-          </View>
+      {/* Contextual Arena Header */}
+      <View style={styles.arenaHeader}>
+        <View style={styles.headerTitleRow}>
+          <Icon name="trophy" size={20} color={colors.arenaBadge} />
+          <Text style={styles.headerTitle}>ARENA</Text>
         </View>
 
-        <View style={styles.stakeStatusCard}>
-          <View style={styles.stakeStatusRow}>
-            <Text style={styles.stakeStatusLabel}>Your Staked SKR:</Text>
-            <Text style={styles.stakeStatusValue}>
-              {skrStakedAmount.toLocaleString()} SKR
-            </Text>
+        <Text style={styles.headerSubtitle}>
+          Public Duel discovery for verified Solana Mobile stakers.
+        </Text>
+
+        {/* Contextual Eligibility Banner */}
+        <View style={styles.eligibilityCard}>
+          <View style={styles.eligibilityRow}>
+            <View style={styles.eligibilityLeft}>
+              <Icon
+                name={isEligible ? 'shield-check' : 'clock'}
+                size={16}
+                color={isEligible ? colors.brandPrimary : colors.textMuted}
+              />
+              <Text style={styles.eligibilityText}>
+                {isEligible
+                  ? 'Your staked SKR unlocks Arena publishing.'
+                  : 'Stake SKR to publish Duels publicly in Arena.'}
+              </Text>
+            </View>
+            <Text style={styles.skrAmountBadge}>{skrStakedAmount} SKR</Text>
           </View>
-          <View style={styles.stakeStatusRow}>
-            <Text style={styles.stakeStatusLabel}>Arena Status:</Text>
-            <Text
-              style={[
-                styles.stakeStatusBadge,
-                isArenaEligible ? styles.eligibleText : styles.ineligibleText,
-              ]}
-            >
-              {isArenaEligible ? 'QUALIFIED CONTENDER' : 'SPECTATOR (100 SKR NEEDED)'}
-            </Text>
-          </View>
+
+          <Text style={styles.networkNote}>
+            SKR verification runs on Solana Mainnet · Duel stakes settle in Devnet cUSD
+          </Text>
         </View>
       </View>
 
       {/* Arena Duels List */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.arenaBadge} />
-          <Text style={styles.loadingText}>Fetching Marquee Arena Matchups...</Text>
+        <View style={styles.skeletonContainer}>
+          <SkeletonPostCard />
+          <SkeletonPostCard />
         </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={loadArenaDuels} />
       ) : (
         <FlatList
           data={arenaDuels}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <DuelCard
-              duel={item}
-              onPress={onSelectDuel}
-              onBackSideA={handleBackSideA}
-              onBackSideB={handleBackSideB}
-            />
-          )}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -129,18 +128,105 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>⚔️</Text>
-              <Text style={styles.emptyTitle}>No Active Arena Duels</Text>
-              <Text style={styles.emptySubtitle}>
-                Verified SKR Stakers can create high-stakes duels from the Feed.
-              </Text>
-            </View>
+            <EmptyState
+              icon="trophy"
+              title="No Active Arena Duels"
+              subtitle="Verified SKR stakers can promote high-stakes duels into the Arena."
+            />
           }
+          renderItem={({ item }) => {
+            const poolA = Number(item.side_a_total) || 0;
+            const poolB = Number(item.side_b_total) || 0;
+            const total = poolA + poolB;
+            const percentA = total > 0 ? Math.round((poolA / total) * 100) : 50;
+            const percentB = 100 - percentA;
+
+            const nameA = formatUserDisplayName({
+              name: item.captain_a_name,
+              handle: item.captain_a_handle,
+              wallet: item.captain_a_wallet,
+            });
+            const nameB = formatUserDisplayName({
+              name: item.captain_b_name,
+              handle: item.captain_b_handle,
+              wallet: item.captain_b_wallet,
+            });
+
+            return (
+              <TouchableOpacity
+                style={styles.arenaCard}
+                onPress={() => onSelectDuel(item)}
+                activeOpacity={0.88}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={styles.arenaTag}>
+                    <Icon name="trophy" size={11} color={colors.arenaBadge} />
+                    <Text style={styles.arenaTagText}>ARENA DUEL</Text>
+                  </View>
+                  <Text style={styles.totalPoolText}>${total} cUSD Pool</Text>
+                </View>
+
+                {/* Combatants */}
+                <View style={styles.combatantsRow}>
+                  <View style={styles.combatantSide}>
+                    <Image
+                      source={{ uri: getAvatarUri(item.captain_a_avatar, item.captain_a_wallet) }}
+                      style={[styles.miniAvatar, { borderColor: colors.sideA }]}
+                    />
+                    <Text style={styles.combatantName} numberOfLines={1}>{nameA}</Text>
+                    <Text style={[styles.splitText, { color: colors.sideA }]}>{percentA}% backing</Text>
+                  </View>
+
+                  <View style={styles.vsBadge}>
+                    <Text style={styles.vsText}>VS</Text>
+                  </View>
+
+                  <View style={styles.combatantSide}>
+                    <Image
+                      source={{ uri: getAvatarUri(item.captain_b_avatar, item.captain_b_wallet) }}
+                      style={[styles.miniAvatar, { borderColor: colors.sideB }]}
+                    />
+                    <Text style={styles.combatantName} numberOfLines={1}>{nameB}</Text>
+                    <Text style={[styles.splitText, { color: colors.sideB }]}>{percentB}% backing</Text>
+                  </View>
+                </View>
+
+                {/* Claim Statement */}
+                <Text style={styles.claimText} numberOfLines={2}>"{item.proposition_a}"</Text>
+
+                {/* Backing Bar */}
+                <View style={styles.splitBar}>
+                  <View style={[styles.barA, { flex: percentA }]} />
+                  <View style={[styles.barB, { flex: percentB }]} />
+                </View>
+
+                {/* Back Actions */}
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnA]}
+                    onPress={() => handleBackSide(item, 1)}
+                    activeOpacity={0.8}
+                    accessibilityLabel={`Back ${nameA}`}
+                  >
+                    <Text style={styles.actionBtnTextA}>Back {nameA}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnB]}
+                    onPress={() => handleBackSide(item, 2)}
+                    activeOpacity={0.8}
+                    accessibilityLabel={`Back ${nameB}`}
+                  >
+                    <Text style={styles.actionBtnTextB}>Back {nameB}</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
 
-      {/* Backer Modal */}
+      {/* Back Modal */}
       <BackModal
         visible={backModalVisible}
         duel={targetDuel}
@@ -157,99 +243,199 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  gateBanner: {
+  arenaHeader: {
     backgroundColor: colors.surface,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
-  gateHeader: {
+  headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: 4,
   },
-  gateIcon: {
-    fontSize: 24,
-  },
-  gateTitleColumn: {
-    flex: 1,
-  },
-  gateTitle: {
-    color: colors.arenaBadge,
-    fontSize: 15,
+  headerTitle: {
+    fontSize: 18,
     fontWeight: '900',
+    color: colors.textPrimary,
     letterSpacing: 1,
   },
-  gateSubtitle: {
-    color: colors.textSecondary,
-    fontSize: 11,
+  headerSubtitle: {
+    ...typography.bodyMuted,
+    fontSize: 13,
+    marginBottom: spacing.md,
   },
-  stakeStatusCard: {
+  eligibilityCard: {
     backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.md,
     padding: spacing.md,
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 214, 10, 0.2)',
-    gap: 6,
+    borderColor: colors.cardBorder,
   },
-  stakeStatusRow: {
+  eligibilityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  stakeStatusLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  stakeStatusValue: {
-    color: colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  stakeStatusBadge: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  eligibleText: {
-    color: colors.solanaGreen,
-  },
-  ineligibleText: {
-    color: colors.warningYellow,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  eligibilityLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 6,
+    flex: 1,
+    marginRight: spacing.sm,
   },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 13,
+  eligibilityText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  skrAmountBadge: {
+    ...typography.captionBold,
+    color: colors.arenaBadge,
+    backgroundColor: colors.badgeBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: borderRadius.xs,
+  },
+  networkNote: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 10,
+    marginTop: 2,
   },
   listContent: {
-    padding: spacing.md,
-    paddingBottom: 40,
+    padding: spacing.lg,
+    paddingBottom: 80,
   },
-  emptyContainer: {
+  skeletonContainer: {
+    padding: spacing.lg,
+  },
+  arenaCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 8,
+    marginBottom: spacing.md,
   },
-  emptyIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+  arenaTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.badgeBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: borderRadius.xs,
+    borderWidth: 1,
+    borderColor: colors.badgeBorder,
   },
-  emptyTitle: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
+  arenaTagText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.arenaBadge,
+    letterSpacing: 0.5,
   },
-  emptySubtitle: {
-    color: colors.textMuted,
+  totalPoolText: {
     fontSize: 13,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  combatantsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  combatantSide: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  miniAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    marginBottom: 2,
+    backgroundColor: colors.surfaceLight,
+  },
+  combatantName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  splitText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  vsBadge: {
+    paddingHorizontal: spacing.sm,
+  },
+  vsText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: colors.textMuted,
+  },
+  claimText: {
+    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
-    paddingHorizontal: spacing.xl,
+    marginVertical: spacing.sm,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  splitBar: {
+    height: 5,
+    borderRadius: 2.5,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceLight,
+    marginBottom: spacing.md,
+  },
+  barA: {
+    backgroundColor: colors.sideA,
+  },
+  barB: {
+    backgroundColor: colors.sideB,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  actionBtnA: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: colors.sideA,
+  },
+  actionBtnB: {
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderColor: colors.sideB,
+  },
+  actionBtnTextA: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.sideA,
+  },
+  actionBtnTextB: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.sideB,
   },
 });

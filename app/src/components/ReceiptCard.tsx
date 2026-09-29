@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import { Receipt } from '../types';
-import { colors, typography, spacing } from '../theme';
+import { colors, typography, spacing, borderRadius } from '../theme';
+import { Icon } from './Icon';
 
 interface ReceiptCardProps {
   receipt: Receipt;
@@ -11,7 +12,7 @@ interface ReceiptCardProps {
 export const ReceiptCard: React.FC<ReceiptCardProps> = ({ receipt, onPress }) => {
   const handleShare = async () => {
     const deepLink = `counter://receipt/${receipt.id}`;
-    const shareMessage = `⚔️ Official Counter Duel Receipt\n🏆 Winner: ${receipt.winner_wallet.slice(0, 6)}...\n💰 Pool: $${receipt.total_pool} cUSD\n📜 Proof: ${receipt.resolution_summary}\n🔗 View on Counter: ${deepLink}`;
+    const shareMessage = `Official Counter Duel Receipt\nWinner: ${receipt.winner_wallet.slice(0, 6)}...\nPool: $${receipt.total_pool} cUSD\nProof: ${receipt.resolution_summary}\nView on Counter: ${deepLink}`;
     try {
       await Share.share({
         message: shareMessage,
@@ -31,18 +32,19 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({ receipt, onPress }) =>
       {/* Header Banner */}
       <View style={styles.header}>
         <View style={styles.badgeRow}>
-          <Text style={styles.trophy}>🏆</Text>
+          <Icon name="trophy" size={16} color={colors.solanaGreen} />
           <Text style={styles.headerTitle}>SETTLED RECEIPT</Text>
         </View>
         <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.8}>
-          <Text style={styles.shareText}>📤 SHARE</Text>
+          <Icon name="share-2" size={12} color="#000000" />
+          <Text style={styles.shareText}>SHARE</Text>
         </TouchableOpacity>
       </View>
 
       {/* Main Resolution Details */}
       <View style={styles.body}>
         <Text style={styles.summary}>{receipt.resolution_summary}</Text>
-        
+
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Disputed Pool:</Text>
           <Text style={styles.infoValue}>${receipt.total_pool} cUSD</Text>
@@ -50,7 +52,9 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({ receipt, onPress }) =>
 
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Winner Wallet:</Text>
-          <Text style={styles.monoValue}>{receipt.winner_wallet.slice(0, 8)}...{receipt.winner_wallet.slice(-8)}</Text>
+          <Text style={styles.monoValue}>
+            {receipt.winner_wallet.slice(0, 8)}...{receipt.winner_wallet.slice(-8)}
+          </Text>
         </View>
 
         <View style={styles.infoRow}>
@@ -61,7 +65,8 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({ receipt, onPress }) =>
 
       {/* Footer Verified Seal */}
       <View style={styles.footer}>
-        <Text style={styles.sealText}>🔒 DETERMINISTIC ORACLE PROOF RECORDED</Text>
+        <Icon name="shield-check" size={14} color={colors.solanaGreen} />
+        <Text style={styles.sealText}>DETERMINISTIC ORACLE PROOF RECORDED</Text>
       </View>
     </View>
   );
@@ -70,7 +75,7 @@ export const ReceiptCard: React.FC<ReceiptCardProps> = ({ receipt, onPress }) =>
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: borderRadius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
     borderWidth: 1,
@@ -90,9 +95,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  trophy: {
-    fontSize: 16,
-  },
   headerTitle: {
     color: colors.solanaGreen,
     fontSize: 12,
@@ -100,63 +102,67 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   shareButton: {
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.solanaGreen,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderRadius: borderRadius.sm,
+    gap: 4,
   },
   shareText: {
-    color: colors.textPrimary,
-    fontSize: 11,
-    fontWeight: '700',
+    color: '#000',
+    fontSize: 10,
+    fontWeight: '800',
   },
   body: {
-    gap: 8,
     marginBottom: spacing.md,
   },
   summary: {
-    color: colors.textPrimary,
-    fontSize: 14,
+    ...typography.body,
+    fontSize: 15,
     fontWeight: '600',
-    lineHeight: 20,
-    marginBottom: 4,
+    color: colors.textPrimary,
+    marginBottom: spacing.md,
+    lineHeight: 22,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: spacing.xs,
   },
   infoLabel: {
+    ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
   },
   infoValue: {
+    ...typography.bodyBold,
     color: colors.solanaGreen,
-    fontSize: 13,
-    fontWeight: '800',
   },
   monoValue: {
+    ...typography.mono,
     color: colors.textPrimary,
-    fontFamily: 'monospace',
-    fontSize: 11,
   },
   sigValue: {
+    ...typography.mono,
     color: colors.solanaPurple,
-    fontFamily: 'monospace',
     fontSize: 11,
   },
   footer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+    paddingVertical: 6,
+    borderRadius: borderRadius.sm,
+    gap: 6,
   },
   sealText: {
-    color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: '700',
+    ...typography.captionBold,
+    color: colors.solanaGreen,
     letterSpacing: 0.5,
   },
 });
+
+export default ReceiptCard;

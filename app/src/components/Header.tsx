@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { colors, typography, spacing } from '../theme';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { colors, typography, spacing, borderRadius } from '../theme';
+import { Icon } from './Icon';
 
 interface HeaderProps {
   wallet: string | null;
@@ -24,10 +25,12 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.brandRow}>
-        <Text style={styles.logoText}>⚔️ COUNTER</Text>
+        <Icon name="swords" size={20} color={colors.solanaGreen} />
+        <Text style={styles.logoText}>COUNTER</Text>
         {isArenaEligible && (
           <View style={styles.arenaBadge}>
-            <Text style={styles.arenaBadgeText}>⭐ SKR ARENA</Text>
+            <Icon name="sparkles" size={10} color={colors.arenaBadge} />
+            <Text style={styles.arenaBadgeText}>ARENA</Text>
           </View>
         )}
       </View>
@@ -40,13 +43,16 @@ export const Header: React.FC<HeaderProps> = ({
               <Text style={styles.walletText}>{formatWallet(wallet)}</Text>
             </View>
           ) : (
-            <Text style={styles.connectText}>Connect MWA</Text>
+            <View style={styles.connectedRow}>
+              <Icon name="wallet" size={14} color={colors.solanaGreen} />
+              <Text style={styles.connectText}>Connect</Text>
+            </View>
           )}
         </TouchableOpacity>
 
         {onOpenNotifications && (
           <TouchableOpacity style={styles.bellButton} onPress={onOpenNotifications} activeOpacity={0.8}>
-            <Text style={styles.bellIcon}>🔔</Text>
+            <Icon name="bell" size={20} color={colors.textPrimary} />
             {unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadText}>{unreadCount}</Text>
@@ -73,21 +79,24 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs + 2,
   },
   logoText: {
-    fontSize: 18,
+    ...typography.h3,
     fontWeight: '900',
     letterSpacing: 1.5,
     color: colors.textPrimary,
   },
   arenaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.badgeBg,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.arenaBadge,
+    gap: 4,
   },
   arenaBadgeText: {
     color: colors.arenaBadge,
@@ -103,7 +112,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
@@ -119,22 +128,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.solanaGreen,
   },
   walletText: {
+    ...typography.mono,
     color: colors.textPrimary,
     fontSize: 12,
-    fontWeight: '600',
-    fontFamily: 'monospace',
   },
   connectText: {
-    color: colors.solanaPurple,
+    ...typography.bodyBold,
+    color: colors.solanaGreen,
     fontSize: 12,
-    fontWeight: '700',
   },
   bellButton: {
     position: 'relative',
     padding: 6,
-  },
-  bellIcon: {
-    fontSize: 16,
   },
   unreadBadge: {
     position: 'absolute',
@@ -153,3 +158,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+
+export default Header;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,45 +6,53 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
-import { Take, Duel, Category } from '../types';
-import { TakeCard } from '../components/TakeCard';
-import { DuelCard } from '../components/DuelCard';
-import { ChallengeModal } from '../components/ChallengeModal';
-import { BackModal } from '../components/BackModal';
-import { colors, spacing } from '../theme';
+import { Take, Duel, Receipt, Category } from '../types';
+import { colors, typography, spacing, borderRadius } from '../theme';
 import { api } from '../api';
+import { SocialPostCard, FeedItem } from '../components/SocialPostCard';
+import { SkeletonPostCard } from '../components/SkeletonLoader';
+import { EmptyState, ErrorState } from '../components/StateViews';
+import { Icon } from '../components/Icon';
+
+type FeedTab = 'FOR_YOU' | 'FOLLOWING' | 'LIVE';
+
+const CATEGORY_FILTERS: (Category | 'ALL')[] = [
+  'ALL',
+  'CRYPTO',
+  'SPORTS',
+  'WEATHER',
+  'CULTURE',
+];
 
 interface FeedScreenProps {
   onSelectTake: (take: Take) => void;
   onSelectDuel: (duel: Duel) => void;
-  onCreateTakePress: () => void;
+  onSelectReceipt?: (receipt: Receipt) => void;
+  onChallengePress?: (take: Take) => void;
+  onCreateTakePress?: () => void;
+  userWallet?: string | null;
 }
-
-const CATEGORIES: ('ALL' | Category)[] = ['ALL', 'CRYPTO', 'SPORTS', 'WEATHER'];
 
 export const FeedScreen: React.FC<FeedScreenProps> = ({
   onSelectTake,
   onSelectDuel,
+  onSelectReceipt,
+  onChallengePress,
   onCreateTakePress,
+  userWallet,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | Category>('ALL');
+  const [activeTab, setActiveTab] = useState<FeedTab>('FOR_YOU');
+  const [selectedCategory, setSelectedCategory] = useState<Category | 'ALL'>('ALL');
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Modals
-  const [challengeModalVisible, setChallengeModalVisible] = useState(false);
-  const [targetTake, setTargetTake] = useState<Take | null>(null);
-
-  const [backModalVisible, setBackModalVisible] = useState(false);
-  const [targetDuel, setTargetDuel] = useState<Duel | null>(null);
-  const [targetSide, setTargetSide] = useState<1 | 2>(1);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
+      setError(null);
       const catParam = selectedCategory === 'ALL' ? undefined : selectedCategory;
       const [fetchedTakes, fetchedDuels] = await Promise.all([
         api.getTakes(catParam),
@@ -52,8 +60,9 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
       ]);
       setTakes(Array.isArray(fetchedTakes) ? fetchedTakes : []);
       setDuels(Array.isArray(fetchedDuels) ? fetchedDuels : []);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load feed data:', err);
+      setError("Couldn't load your feed.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -69,139 +78,232 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
     loadData();
   };
 
-  const handleChallenge = (take: Take) => {
-    setTargetTake(take);
-    setChallengeModalVisible(true);
-  };
+  // Build unified social feed items based on lifecycle forms (TAKE -> DUEL -> RECEIPT)
+  const feedItems = useMemo<FeedItem[]>(() => {
+    const duelByTakeId = new Map<string, Duel>();
+    const duelList = Array.isArray(duels) ? duels : [];
+    const takeList = Array.isArray(takes) ? takes : [];
 
-  const handleBackSideA = (duel: Duel) => {
-    setTargetDuel(duel);
-    setTargetSide(1);
-    setBackModalVisible(true);
-  };
+    duelList.forEach((d) => {
+      if (d.take_id) {
+        duelByTakeId.set(d.take_id, d);
+      }
+    });
 
-  const handleBackSideB = (duel: Duel) => {
-    setTargetDuel(duel);
-    setTargetSide(2);
-    setBackModalVisible(true);
-  };
+    const items: FeedItem[] = [];
+
+    // 1. Process Takes
+    takeList.forEach((t) => {
+      const associatedDuel = duelByTakeId.get(t.id);
+
+      if (associatedDuel) {
+        if (associatedDuel.status.startsWith('RESOLVED')) {
+          // Lifecycle 3: RECEIPT
+          items.push({
+            id: `receipt_${associatedDuel.id}`,
+            type: 'RECEIPT',
+            take: t,
+            duel: associatedDuel,
+            receipt: {
+              id: `receipt_${associatedDuel.id}`,
+              duel_id: associatedDuel.id,
+              take_id: t.id,
+              captain_a_wallet: associatedDuel.captain_a_wallet,
+              captain_b_wallet: associatedDuel.captain_b_wallet,
+              winner_wallet: associatedDuel.winning_side === 1 ? associatedDuel.captain_a_wallet : associatedDuel.captain_b_wallet,
+              total_pool: (Number(associatedDuel.side_a_total) || 0) + (Number(associatedDuel.side_b_total) || 0),
+              resolution_summary: associatedDuel.resolution_data || `${associatedDuel.proposition_a} settled authoritatively.`,
+              resolution_evidence: associatedDuel.resolution_tx || '',
+              onchain_signature: associatedDuel.resolution_tx || '',
+              created_at: associatedDuel.created_at,
+            },
+          });
+        } else {
+          // Lifecycle 2: LIVE DUEL
+          items.push({
+            id: `duel_${associatedDuel.id}`,
+            type: 'DUEL',
+            take: t,
+            duel: associatedDuel,
+          });
+        }
+      } else {
+        // Lifecycle 1: PURE TAKE
+        items.push({
+          id: `take_${t.id}`,
+          type: 'TAKE',
+          take: t,
+        });
+      }
+    });
+
+    // 2. Include any Duels that had no corresponding Take record
+    duelList.forEach((d) => {
+      if (!d.take_id || !takeList.some((t) => t.id === d.take_id)) {
+        const syntheticTake: Take = {
+          id: `take_from_duel_${d.id}`,
+          author_wallet: d.captain_a_wallet,
+          author_name: d.captain_a_name,
+          author_handle: d.captain_a_handle,
+          author_avatar: d.captain_a_avatar,
+          topic: d.proposition_a,
+          content: `${d.proposition_a} vs ${d.proposition_b}`,
+          category: d.category,
+          created_at: d.created_at,
+          status: 'ACTIVE',
+          likes_count: 0,
+          comments_count: 0,
+          duels_count: 1,
+        };
+
+        if (d.status.startsWith('RESOLVED')) {
+          items.push({
+            id: `receipt_${d.id}`,
+            type: 'RECEIPT',
+            take: syntheticTake,
+            duel: d,
+            receipt: {
+              id: `receipt_${d.id}`,
+              duel_id: d.id,
+              captain_a_wallet: d.captain_a_wallet,
+              captain_b_wallet: d.captain_b_wallet,
+              winner_wallet: d.winning_side === 1 ? d.captain_a_wallet : d.captain_b_wallet,
+              total_pool: (Number(d.side_a_total) || 0) + (Number(d.side_b_total) || 0),
+              resolution_summary: d.resolution_data || `${d.proposition_a} resolved.`,
+              resolution_evidence: d.resolution_tx || '',
+              onchain_signature: d.resolution_tx || '',
+              created_at: d.created_at,
+            },
+          });
+        } else {
+          items.push({
+            id: `duel_${d.id}`,
+            type: 'DUEL',
+            take: syntheticTake,
+            duel: d,
+          });
+        }
+      }
+    });
+
+    // Filter by Active Primary Tab
+    if (activeTab === 'LIVE') {
+      return items.filter((i) => i.type === 'DUEL');
+    }
+    if (activeTab === 'FOLLOWING') {
+      // Social following tab: filter takes that have replies or user interactions
+      return items.filter((i) => (i.take.comments_count || 0) > 0 || i.type === 'DUEL');
+    }
+
+    return items;
+  }, [takes, duels, activeTab]);
 
   return (
     <View style={styles.container}>
-      {/* Category Tabs */}
-      <View style={styles.categoryRow}>
+      {/* Primary Social Feed Tabs (For You | Following | Live) */}
+      <View style={styles.tabHeader}>
+        <TouchableOpacity
+          style={[styles.primaryTab, activeTab === 'FOR_YOU' && styles.primaryTabActive]}
+          onPress={() => setActiveTab('FOR_YOU')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.primaryTabText, activeTab === 'FOR_YOU' && styles.primaryTabTextActive]}>
+            For You
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.primaryTab, activeTab === 'FOLLOWING' && styles.primaryTabActive]}
+          onPress={() => setActiveTab('FOLLOWING')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.primaryTabText, activeTab === 'FOLLOWING' && styles.primaryTabTextActive]}>
+            Following
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.primaryTab, activeTab === 'LIVE' && styles.primaryTabActive]}
+          onPress={() => setActiveTab('LIVE')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.liveTabRow}>
+            <View style={styles.liveDot} />
+            <Text style={[styles.primaryTabText, activeTab === 'LIVE' && styles.primaryTabTextActive]}>
+              Live
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Secondary Category Filters */}
+      <View style={styles.categoryBar}>
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={CATEGORIES}
+          data={CATEGORY_FILTERS}
           keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.catPill,
-                selectedCategory === item && styles.catPillActive,
-              ]}
-              onPress={() => setSelectedCategory(item)}
-            >
-              <Text
-                style={[
-                  styles.catText,
-                  selectedCategory === item && styles.catTextActive,
-                ]}
+          contentContainerStyle={styles.categoryList}
+          renderItem={({ item }) => {
+            const isSelected = selectedCategory === item;
+            return (
+              <TouchableOpacity
+                style={[styles.catChip, isSelected && styles.catChipActive]}
+                onPress={() => setSelectedCategory(item)}
+                activeOpacity={0.8}
               >
-                {item}
-              </Text>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.catList}
+                <Text style={[styles.catChipText, isSelected && styles.catChipTextActive]}>
+                  {item === 'ALL' ? 'All' : item.charAt(0) + item.slice(1).toLowerCase()}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
 
+      {/* Main Content List */}
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.solanaPurple} />
-          <Text style={styles.loadingText}>Loading Live Feed & Duels...</Text>
+        <View style={styles.skeletonContainer}>
+          <SkeletonPostCard />
+          <SkeletonPostCard />
+          <SkeletonPostCard />
         </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={loadData} />
       ) : (
         <FlatList
-          data={[
-            { type: 'DUELS_HEADER' },
-            ...(Array.isArray(duels) ? duels : []).map((d) => ({ type: 'DUEL', data: d })),
-            { type: 'TAKES_HEADER' },
-            ...(Array.isArray(takes) ? takes : []).map((t) => ({ type: 'TAKE', data: t })),
-          ]}
-          keyExtractor={(item, index) => `${item.type}_${index}`}
-          renderItem={({ item }: any) => {
-            if (item.type === 'DUELS_HEADER') {
-              return (Array.isArray(duels) && duels.length > 0) ? (
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>🔥 LIVE 1V1 DUELS & BACKER POOLS</Text>
-                </View>
-              ) : null;
-            }
-            if (item.type === 'DUEL') {
-              return (
-                <DuelCard
-                  duel={item.data}
-                  onPress={onSelectDuel}
-                  onBackSideA={handleBackSideA}
-                  onBackSideB={handleBackSideB}
-                />
-              );
-            }
-            if (item.type === 'TAKES_HEADER') {
-              return (
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>💬 CONTROVERSIAL TAKES (CHALLENGEABLE)</Text>
-                </View>
-              );
-            }
-            if (item.type === 'TAKE') {
-              return (
-                <TakeCard
-                  take={item.data}
-                  onPress={onSelectTake}
-                  onChallenge={handleChallenge}
-                />
-              );
-            }
-            return null;
-          }}
+          data={feedItems}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <SocialPostCard
+              item={item}
+              onPressTake={onSelectTake}
+              onPressDuel={onSelectDuel}
+              onPressReceipt={(r) => onSelectReceipt && onSelectReceipt(r)}
+              onChallengePress={onChallengePress}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.solanaPurple}
+              tintColor={colors.brandPrimary}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon={activeTab === 'LIVE' ? 'swords' : 'message-circle'}
+              title={activeTab === 'LIVE' ? 'No live duels right now' : 'No takes yet'}
+              subtitle={
+                activeTab === 'LIVE'
+                  ? 'Challenge a take from the feed to start a 1v1 duel.'
+                  : 'Be the first to share an argument on Counter.'
+              }
             />
           }
         />
       )}
-
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={onCreateTakePress}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+ POST TAKE</Text>
-      </TouchableOpacity>
-
-      {/* Modals */}
-      <ChallengeModal
-        visible={challengeModalVisible}
-        take={targetTake}
-        onClose={() => setChallengeModalVisible(false)}
-        onChallengeCreated={loadData}
-      />
-
-      <BackModal
-        visible={backModalVisible}
-        duel={targetDuel}
-        side={targetSide}
-        onClose={() => setBackModalVisible(false)}
-        onStakeRecorded={loadData}
-      />
     </View>
   );
 };
@@ -211,78 +313,79 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  categoryRow: {
-    paddingVertical: spacing.sm,
+  tabHeader: {
+    flexDirection: 'row',
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
-  catList: {
-    paddingHorizontal: spacing.md,
+  primaryTab: {
+    flex: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  primaryTabActive: {
+    borderBottomColor: colors.brandPrimary,
+  },
+  primaryTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  primaryTabTextActive: {
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  liveTabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.brandPrimary,
+  },
+  categoryBar: {
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+    paddingVertical: 8,
+  },
+  categoryList: {
+    paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  catPill: {
+  catChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: borderRadius.full,
     backgroundColor: colors.surfaceLight,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  catPillActive: {
-    backgroundColor: 'rgba(153, 69, 255, 0.25)',
-    borderColor: colors.solanaPurple,
+  catChipActive: {
+    backgroundColor: colors.surfaceHighlight,
+    borderColor: colors.brandPrimary,
   },
-  catText: {
-    color: colors.textSecondary,
+  catChipText: {
     fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  catChipTextActive: {
+    color: colors.brandPrimary,
     fontWeight: '700',
   },
-  catTextActive: {
-    color: colors.solanaPurple,
-    fontWeight: '900',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
   listContent: {
-    padding: spacing.md,
+    padding: spacing.lg,
     paddingBottom: 80,
   },
-  sectionHeader: {
-    marginVertical: spacing.md,
-  },
-  sectionTitle: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    backgroundColor: colors.solanaGreen,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    shadowColor: colors.solanaGreen,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  fabText: {
-    color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+  skeletonContainer: {
+    padding: spacing.lg,
   },
 });
