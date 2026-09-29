@@ -98,13 +98,14 @@ async function verifyAll() {
   }
 
   // 6. Check APK metadata
-  const apkPath = path.join(__dirname, '..', 'app', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
+  const apkPath = path.join(__dirname, '..', 'app', 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
   if (fs.existsSync(apkPath)) {
     const stats = fs.statSync(apkPath);
     report.apk_bundle = {
       path: apkPath,
       size_bytes: stats.size,
       mtime: stats.mtime.toISOString(),
+      variant: 'release',
       exists: true
     };
   }

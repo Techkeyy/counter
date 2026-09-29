@@ -56,16 +56,16 @@ app.use('/api/faucet', faucetRoutes);
 
 // Digital Asset Links for Android App Links Verification
 app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   res.json([
     {
       relation: ['delegate_permission/common.handle_all_urls'],
       target: {
         namespace: 'android_app',
-        package_name: 'com.counter.app',
+        package_name: 'app.counter.mobile',
         sha256_cert_fingerprints: [
-          '3A:7E:F2:26:5B:5E:6E:88:F3:6D:44:49:89:4C:4E:C8:68:95:C1:CC:88:53:0F:19:51:4E:E4:F7:16:A1:5A:99',
-          'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C',
-          '18:27:0B:CA:8D:18:2A:FD:51:57:4E:59:71:BC:B6:CD:C9:46:75:FA:AE:20:FE:CF:9B:E6:E5:5A:1C:EC:BE:C9',
+          '3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25',
+          'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C'
         ],
       },
     },

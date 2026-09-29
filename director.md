@@ -3,49 +3,55 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER  
-**Current Authoritative Status:** `UAT READY`  
+**Current Authoritative Status:** `CANDIDATE — UAT READY`  
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations)  
 **Repository State:** On branch `master`  
-**Last Updated:** 2026-09-29T07:14:00+01:00  
+**Last Updated:** 2026-09-29T08:46:00+01:00  
 
 ---
 
-## 1. Executive Summary & Operational State
+## 1. Executive Summary & Authoritative Status
 
-Counter is **`UAT READY`** under the **Strict Isolation / No-Surprises Operations Policy**.
+Counter has completed the standalone signed release packaging and live endpoint alignment, and is submitted for Director review as **`CANDIDATE — UAT READY`**.
 
-- **VPS Workload Isolation:** The Counter backend operates entirely inside `/opt/counter/`, listening on isolated loopback port `127.0.0.1:8795`, managed by `counter-backend.service` (PID 885834, 38.1 MB RAM).
-- **Shared Infrastructure Untouched:** Caddy and shared configuration files (`/etc/caddy/Caddyfile`, systemd units, firewall, Docker, apt) are untouched. No services were reloaded or restarted.
-- **Stable Remote HTTPS API:** `https://counter.103-195-188-198.sslip.io` is 100% operational with valid Let's Encrypt TLS.
-- **Standalone Android APK:** Compiled standalone debug binary (`app-debug.apk`, 126,558,056 bytes, SHA-256: `48B4799CB2C6DF177938B45302E70BA933E5E06FDA428393B1354B3DC1EDCA01`) hardcoded with the stable VPS endpoint and autoVerify App Links.
-- **Keypair Security:** Restricted file permissions `0600` (`-rw-------`) applied to `/opt/counter/server/config/authority-keypair.json`.
+- **Standalone Signed Release APK:** Built via `./gradlew assembleRelease` (`app-release.apk`, 60,566,228 bytes, SHA-256: `500A9F9E5133670DA4E652FBF0BB5ACDFF976B5582E36B909BF82D71826FEFC4`).
+- **Release JS & Assets Bundling:** Proven via Gradle task execution `> Task :app:createBundleReleaseJsAndAssets` (zero dependence on Metro, laptop, or dev servers).
+- **Application ID / Package Alignment:** Built APK package ID is `app.counter.mobile`.
+- **Digital Asset Links Resolution:** Live endpoint `https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json` serves `app.counter.mobile` with the exact release signing certificate SHA-256 fingerprint (`3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25`).
+- **VPS Strict Isolation Maintained:** Zero changes or reloads to Caddy or unrelated workloads. Only `counter-backend.service` was restarted.
 
 ---
 
-## 2. VPS Resource & Coexistence Safety Diagnostics
+## 2. Release Android Artifact Verification Matrix
 
-Conducted via non-destructive read-only inspection:
-
-| Resource Metric | Measured Value | Coexistence Safety Assessment |
+| Verification Field | Verified Value | Evidence Method |
 |---|---|---|
-| **RAM (Available / Total)** | `859 MiB / 1.9 GiB` (Free: `303 MiB`, Buff/Cache: `749 MiB`) | **HEALTHY** (Counter backend consumes only 38.1 MiB) |
-| **Disk Storage (Root FS)** | `2.7 GiB Available / 24 GiB Total` (89% used) | **STABLE** (SQLite DB is < 1 MB; no run-away logs) |
-| **CPU Load Average** | `0.02, 0.04, 0.00` | **IDLE / HEALTHY** |
-| **Active Listening Ports** | `8782`, `8787`, `8788`, `8789`, `8790`, `8791`, `8792`, `8793`, `8794` | **UNTOUCHED** (Other user workloads completely undisturbed) |
-| **Counter Dedicated Port** | `127.0.0.1:8795` (bound by `node` PID 885834) | **ISOLATED** (No port collisions) |
-| **Counter Service Status** | `counter-backend.service` (`active (running)`) | **HEALTHY** (Up 8+ hours continuously) |
-| **Shared Caddy Status** | Running (PID 186408), `/etc/caddy/Caddyfile` unmodified | **ZERO MUTATIONS / NO RELOAD PERFORMED** |
-| **Secret Hygiene** | `/opt/counter/server/config/authority-keypair.json` (`-rw-------`, 600) | **SECURE / RESTRICTED** |
+| **APK Path** | `C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk` | Filesystem probe |
+| **Build Variant** | `release` (`assembleRelease`) | Gradle build output |
+| **Release JS Bundling Proof** | `> Task :app:createBundleReleaseJsAndAssets` executed successfully | Build log |
+| **Package / Application ID** | `app.counter.mobile` | `aapt2 dump badging` |
+| **Version Code / Name** | `versionCode='1'`, `versionName='1.0.0'` | `aapt2 dump badging` |
+| **SDK Constraints** | `minSdkVersion='24'`, `targetSdkVersion='34'` | `aapt2 dump badging` |
+| **Native Architectures** | `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64` | `aapt2 dump badging` |
+| **Launchable Activity** | `app.counter.mobile.MainActivity` | `aapt2 dump badging` |
+| **APK File Size** | `60,566,228 bytes` (~57.8 MB) | `Get-Item Length` |
+| **APK File SHA-256** | `500A9F9E5133670DA4E652FBF0BB5ACDFF976B5582E36B909BF82D71826FEFC4` | `Get-FileHash` |
+| **Signing Certificate SHA-256** | `3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25` | `apksigner verify --print-certs` |
+| **Signing Certificate Subject** | `CN=Counter Mobile, OU=Counter, O=CounterApp, L=Global, ST=Solana, C=US` | `apksigner verify --print-certs` |
+| **Built Manifest App Link Host** | `counter.103-195-188-198.sslip.io` (`autoVerify="true"` for `/d` and `/r`) | `aapt2 dump xmltree` |
+| **Embedded API Base URL** | `https://counter.103-195-188-198.sslip.io/api` | `app/src/api.ts` |
+| **Live Assetlinks Package** | `app.counter.mobile` | `GET /.well-known/assetlinks.json` (HTTP 200) |
+| **Live Assetlinks Fingerprint** | `3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25` | `GET /.well-known/assetlinks.json` (HTTP 200) |
 
 ---
 
-## 3. Truthful Hardware / UAT Classification Table
+## 3. Truthful Hardware / UAT State Classification
 
 | Subsystem | Verified Level | Status | Notes |
 |---|---|---|---|
 | **SIWS Server Verification** | Cryptographic Ed25519 nacl detached signature validation with replay-protected random nonces | **PROVEN** | 100% Pass across automated suites and bridge harness |
-| **Android MWA / SIWS Roundtrip** | Native MWA 2.0 protocol client bundled in APK, connecting to Solana Mobile wallet | **PENDING OWNER UAT** | Requires physical Saga/Seeker or Android device with Seed Vault |
-| **App Link Configuration** | `/.well-known/assetlinks.json` deployed on VPS returning 200 OK with correct fingerprints | **DEPLOYED** | Verified via public HTTPS endpoint |
+| **Android MWA / SIWS Roundtrip** | Native MWA 2.0 protocol client bundled in standalone release APK, connecting to Solana Mobile wallet | **PENDING OWNER UAT** | Requires physical Saga/Seeker or Android device with Seed Vault |
+| **App Link Configuration** | `/.well-known/assetlinks.json` deployed on VPS returning 200 OK with exact package ID & cert fingerprint | **DEPLOYED & VERIFIED** | Verified via live HTTPS probe |
 | **Deep Link App Launch** | Intent filters configured in AndroidManifest for `counter://` and `https://` schemes | **PENDING DEVICE UAT** | Requires physical Android device or external browser redirect |
 | **Remote Backend Hosting** | Isolated VPS deployment (`https://counter.103-195-188-198.sslip.io`) | **PROVEN & RUNNING** | Zero dependency on local development laptop |
 
@@ -71,9 +77,9 @@ Conducted via non-destructive read-only inspection:
 
 ## 5. Owner UAT Testing Instructions
 
-### Step 1: Install Standalone APK on Android Device
+### Step 1: Install Release APK on Connected Android Device
 ```bash
-adb install -r C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\debug\app-debug.apk
+adb install -r C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
 ```
 
 ### Step 2: Open Counter and Connect Wallet

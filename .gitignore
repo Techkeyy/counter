@@ -3,3 +3,5 @@ program/target/
 .env
 .DS_Store
 *.log
+*.keystore
+!debug.keystore
