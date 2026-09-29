@@ -3,10 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — FULL MOBILE UI/UX REBUILD`  
-**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198`)  
-**Repository State:** On branch `master`  
-**Last Updated:** 2026-09-29T17:05:00Z  
+**Current Authoritative Status:** `BUILDING — PHYSICAL ANDROID ACCEPTANCE GATE (UAT BLOCKED: NO DEVICE AVAILABLE)`  
+**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this session: VPS received only read-only public GETs)  
+**Repository State:** On branch `master`, in sync with `origin/master`  
+**Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
+**Authoritative Local Commit:** `1632734` (fix(acceptance-gate)) — see §33 Gate Session below  
+**Last Updated:** 2026-09-29T21:30:00Z  
 
 ---
 
@@ -244,3 +246,171 @@ adb logcat -d -s ReactNative:V ReactNativeJS:V AndroidRuntime:E mqt_js:V mqt_nat
 ### Item 30: Clear Declaration of Project Status
 **Authoritative Status:** `BUILDING — FULL MOBILE UI/UX REBUILD`  
 *(Strictly adhering to Director policy: UAT READY / FINAL is NOT declared by the Builder. We present this complete build for Director review and physical hardware UAT resumption.)*
+
+---
+
+## 33. ACCEPTANCE-GATE SESSION — 2026-09-29 (Builder, commit `1632734`)
+
+> This section is the authoritative record of the BUILDING — PHYSICAL ANDROID ACCEPTANCE GATE session.
+> Verdict logic followed throughout: **implementation is not success; observed normal-user outcome is success.**
+> Status after this session: **STILL BUILDING. NOT a release candidate.** (`DIRECTOR REVIEW — RELEASE CANDIDATE`
+> was NOT declared: the Core Outcome is unproven on hardware and the claim flow has no product path.)
+
+### 33.A — Phase A: Repository reconstruction (evidence)
+
+- `git status` before work: **dirty** — 7 modified (`app/App.tsx`, `Header.tsx`, `SocialPostCard.tsx`,
+  `DuelDetailScreen.tsx`, `ProfileScreen.tsx`, `TakeDetailScreen.tsx`, `identity.ts`), 1 tracked-binary
+  mutation (`server/data/counter.sqlite`), 2 untracked **empty** placeholders
+  (`probes/inspect-live-feed-records.js`, `server/migrate_data_hygiene.js`). All explained: prior-session
+  UI polish left uncommitted; sqlite churn is local runtime DB writes; placeholders were 0-byte files.
+- Branch `master`, HEAD was `420bcf7`, **10 commits ahead of `origin/master`**, remote
+  `https://github.com/Techkeyy/counter.git`.
+- Public repo **exists**: `https://github.com/Techkeyy/counter`, visibility **PUBLIC** (verified `gh repo view`).
+- Secret scan (python, 145 tracked files, patterns: private-key headers, AWS/GH/Slack/Anthropic/Google key
+  shapes, `counter123`): **0 hits**. `counter-release.keystore` exists locally, was **never tracked**
+  (`git log --all -- <keystore>` empty), still untracked. No `.env` file present.
+- Docs read: `director.md` (full), `README.md`, `docs/claim-mechanism-proof.md`,
+  `docs/{architecture,build-plan,uat-plan,security-boundaries}.md` (**all four are 0-byte stubs — recorded,
+  not trusted**), `app/package.json`, `app/app.json`, `app/src/api.ts`, `wallet.ts`, `App.tsx`,
+  `server/{index,auth,db}.js`, all `server/routes/*.js`, `server/resolvers/index.js`,
+  `program/src/lib.rs` (read-only, **not modified**).
+- Local skills confirmed at `C:\Users\HomePC\Desktop\skill\`: `audit-skill` + `build-process` read in full;
+  `project-edge`, `project-understanding`, `hackathon-onboarding` confirmed present and skimmed;
+  `perfect-readme`, `design-skill`, `demo-video`, `idea-research`, `critical-bug` listed, not loaded.
+- Live backend probe (read-only GET): `https://counter.103-195-188-198.sslip.io/api/health` → 200 `ok`;
+  `/api/takes` → 200; `/api/duels` → **13 duels (8 ACCEPTING_STAKES, rest RESOLVED_*)**. Backend is up.
+- `tsc --noEmit` on dirty tree: **0 errors**.
+
+### 33.B — Root-cause defects found (all diagnosed before any trusted-component change)
+
+1. **Mock wallet fallback in release path (CRITICAL, fixed).** `app/src/wallet.ts` `connectAndAuthenticate()`
+   caught ALL MWA errors — including user rejection — and returned `connected:true` with a hardcoded
+   non-user key (`3Ztkj...jkv7`, actually the cUSD mint), token `mock_dev_session_token`, arena `true`.
+   Any wallet-rejection test would falsely pass; all downstream identity was fabricated.
+2. **Challenge API contract mismatch (CRITICAL, fixed).** Client sent `targetWallet`; server required
+   `creatorWallet` → every normal-path challenge creation failed with 400.
+3. **`recordStake` API contract mismatch (CRITICAL, fixed).** Client sent `stakeAmount`; server required
+   `amount` → every normal-path backing/captain-stake record failed with 400.
+4. **Receipt deep link routed to wrong screen (fixed).** `counter://receipt/:id` set `selectedDuelId`,
+   never `selectedReceipt` — ReceiptScreen unreachable by deep link. Now fetches via `api.getReceipt`.
+5. **Missing party authorization (fixed).** Challenge accept/decline/counter allowed ANY authenticated wallet;
+   `init-onchain` allowed any wallet; `resolve` allowed **unauthenticated** callers. Counterparty/captain
+   checks added; `requireAuth` added to resolve (any authed caller may still trigger the deterministic engine).
+6. **Release signing passwords hardcoded in tracked `build.gradle` (fixed).** Now read from
+   `COUNTER_RELEASE_STORE_PASSWORD` / `COUNTER_RELEASE_KEY_PASSWORD` env vars; fail-fast otherwise.
+   `origin/master` never contained them (verified) — they would have leaked on push.
+7. **No claim path in the product (BLOCKER, NOT fixed — see §33.F).** No `ClaimPayout` client exists anywhere;
+   `DuelDetailScreen`/`ReceiptScreen` have no claim UI (`claiming` state is dead). The on-chain program enforces
+   claims correctly (errors 105/106/107/108, read-only verified in `program/src/lib.rs`), but the app never
+   invokes it. Additionally `wallet.ts` PDA helpers are dead code AND derive PDAs incompatibly with the program
+   (`[b"duel", u32-hash]` vs program `[b"duel", 16-byte id]`), and the server stores no PDA bumps/16-byte ids.
+   Building an untested chain client without a device would violate diagnose-before-modify discipline.
+8. **Backing/settlement are off-chain bookkeeping in the product path (recorded, not changed).**
+   `BackModal` only POSTs a DB row (no `DepositStake` SPL transfer/MWA signing); resolver falls back to
+   `Keypair.generate()` + `devnet_<ts>` pseudo-signatures and still writes RESOLVED + receipt when the real
+   keypair/tx fails. Settlement receipts may therefore cite non-chain `onchain_signature` values.
+9. **Identity does not survive restart (recorded).** No AsyncStorage/SecureStore; session is in-memory only.
+10. **Malformed/unavailable duel ID = infinite spinner** (`loadDuelData` catch never surfaces an error state).
+
+### 33.C — Phase B: Release reproduction (commit `1632734`, clean tree)
+
+- `./gradlew assembleRelease --no-daemon` → **BUILD SUCCESSFUL in 13m 31s (535 tasks)**.
+- APK: `app/android/app/build/outputs/apk/release/app-release.apk`
+- Size: **61,773,432 bytes** (prior artifact 61,772,688; Δ +744 bytes — legitimate source-fix delta).
+- SHA-256: **`E8D9A370FB050DD179FA89DACCA6AAACAA23563F88FB22F426E01DDF909CD72A`**
+  (prior `69F038A7…19158` was verified byte-identical before rebuild; hash change is expected and explained).
+- Cert (apksigner): SHA-256 `3AB28E39…FBFF25` = ledger `3A:B2:8E:39:…:FF:25` ✓; package
+  `app.counter.mobile` (aapt) ✓; backend `counter.103-195-188-198.sslip.io` present in embedded
+  `index.android.bundle` (2,215,564 bytes) ✓; `mock_dev_session_token` **absent** ✓.
+- `localhost`/`127.0.0.1` strings in bundle traced to web3.js cluster-enum + Metro/RPC default constants only —
+  **no localhost production dependency**; RPC is explicit `https://api.devnet.solana.com`.
+- Embedded-bundle secret strings (`counter-secret-key`, `counter123`, keypair path, key headers): **absent** ✓.
+- Deep-link config: manifest has generic `counter` scheme filter + `counter/duel` host filter +
+  `https://counter.app/d` App Link; `counter://receipt/:id` resolves via the generic scheme filter with
+  corrected in-app routing. `https://counter.app/r/:id` App-Link prefix is NOT declared (minor gap, recorded).
+
+### 33.D — Phase C: Physical Android UAT — **BLOCKED, NOT EXECUTED**
+
+- `adb devices -l` → **empty (no device attached)** at start and end of session. No emulator evidence substituted
+  (explicitly excluded by the gate). Fresh release APK (above) is staged for install when hardware is available:
+  `adb install -r app/android/app/build/outputs/apk/release/app-release.apk`.
+- Backend adversarial suite: **5/8 pass**; `[6/8]` crypto-resolver fails identically on the pre-fix baseline
+  (stashed-tree run) → **pre-existing external-oracle (CoinGecko) failure, not a regression** from this session.
+
+### 33.E — Claim → Mechanism → Proof ledger (authoritative classifications)
+
+| Claim | Mechanism | Authoritative boundary | Required proof | Current proof | Status |
+|---|---|---|---|---|---|
+| Android-native product | RN 0.76 + Expo 52 release APK | Fresh APK install on hardware | Cold launch, no white screen | Build ✓, **no device run** | UNENFORCED (unproven) |
+| Mobile Wallet Adapter | MWA 2.0 `transact/authorize/signMessages` | Real wallet on device | Connect + SIWS sig | Code path fixed, **no device run** | UNENFORCED (unproven) |
+| User identity | SIWS → 7-day HMAC token → profile sync | `server/auth.js` (ed25519, 1-use 5-min nonce) | Survives restart, reject handled | Mock fallback removed; **no persistence, no device run** | SOFT (server) / UNENFORCED (client) |
+| Social post persistence | POST/GET `/api/takes` + comments | VPS SQLite via REST | Normal-path create→feed→detail→reply | Backend live; **product path untested on hardware** | SOFT ENFORCED |
+| Challenge integrity | propose→counter→accept state machine + counterparty checks | `server/routes/challenges.js` | Terms unambiguous, parties only | Contract + party checks fixed; `creatorWallet` client-asserted; **untested E2E** | SOFT ENFORCED |
+| Captain stake custody | Program PDA vault (`DepositStake` SPL transfer) | `program/src/lib.rs` (untouched) | Real vault deposits via app | **App sends no chain tx**; prior probe evidence only | HARD (program) / UNENFORCED (product path) |
+| Outside backing | Same as stakes + `BackModal` | Program + `/api/duels/:id/stake` | Distinct-wallet backing, pool totals match | Contract fixed; amounts client-reported, unverified | SOFT (server) / UNENFORCED (chain) |
+| Pool accounting | `side_a/b_total` + parimutuel odds | Server DB (self-reported) | Displayed = authoritative | No on-chain reconciliation; no cutoff check server-side | OBSERVATIONAL |
+| Resolver authority | Deterministic oracle + program `resolver_authority` key | Program (err 104) + `resolvers/` | Correct winner, loser rejected | Backend may mark RESOLVED on pseudo-sig; **untested E2E** | SOFT ENFORCED |
+| Settlement correctness | `resolveDuel` → receipt row | Server DB + optional chain tx | Winner claimable, receipt permanent | Pseudo-sig fallback exists; **untested E2E** | SOFT ENFORCED |
+| Winner payout | `ClaimPayout` parimutuel transfer | Program (err 105/106/107/108) | Winner receives exact funds via app | **No claim client exists** | HARD (program) / UNENFORCED (product path) |
+| Loser rejection | Program err 107 | Program | Loser claim fails | Program-level only; no product path | HARD (program) / UNENFORCED (product path) |
+| Double-claim prevention | `claimed` flag, err 106 | Program | Second claim fails | Program-level only; no product path | HARD (program) / UNENFORCED (product path) |
+| Permanent receipt | `receipts` row + `ReceiptScreen` + share | Server DB + app UI | Renders settled state, correct explorer link | UI exists; pseudo-sig links possible; **untested E2E** | SOFT ENFORCED |
+| Deep linking | `counter://duel/:id`, `counter://receipt/:id` | Manifest + `App.tsx` router | Cold/warm open to correct screen | Routing fixed in code; **untested on hardware** | SOFT ENFORCED |
+| Public GitHub availability | Pushed authoritative branch | github.com | URL + visibility + sync | `https://github.com/Techkeyy/counter`, PUBLIC, synced `1632734` | HARD ENFORCED |
+| Production backend availability | VPS REST over HTTPS | Live endpoint | 200s on core reads | `/health`, `/takes`, `/duels` (13) 200 | OBSERVATIONAL (point-in-time) |
+
+> Rule applied: no classification was upgraded on UI implication. HARD appears only where the Solana program
+> enforces it on-chain; the product path to those guarantees does not yet exist.
+
+### 33.F — Blockers (must clear before any `DIRECTOR REVIEW — RELEASE CANDIDATE`)
+
+1. **No physical Android device this session** — entire Core Outcome journey (first-run → social → duel →
+   settlement → claim → receipt → recovery) is UNOBSERVED. Needs: device + 2 distinct funded Devnet wallets.
+2. **No claim flow in the product** — winner payout/loser rejection/double-claim cannot be exercised by a normal
+   user. Needs: MWA-signed `ClaimPayout` client with program-compatible PDA derivation + server-stored duel-id
+   bytes/bumps, then hardware verification. Deliberately NOT built untested in this session.
+3. **Stakes/backing have no on-chain leg in the product** — `DepositStake` client missing (same build-out as 2).
+4. **Identity persistence missing** — session is in-memory; restart behavior unverified by design gap.
+5. Resolver `[6/8]` backend test depends on live CoinGecko — flaky/external; needs fixture or retry policy.
+6. Failure UX gaps: unavailable-ID infinite spinner; resolution failure messaging is raw `err.message`.
+
+### 33.G — Phase E: Security release audit (trust-boundary trace, this session)
+
+- **Repo secret history:** 145 tracked files scanned, 0 hits; keystore never tracked; release passwords removed
+  before push (would-have-leaked finding closed). `server/data/counter.sqlite` untracked via `git rm --cached`
+  + `.gitignore` (runtime DB no longer committed). Debug keystore password `android` is public-by-convention.
+- **APK bundle:** no embedded secrets (checked 6 shapes) ✓; no `localhost` production dependency (strings traced
+  to library constants) ✓; default network-security (no cleartext config → HTTPS-only) ✓.
+- **MWA/SIWS:** detached ed25519 verify, exact message match, 5-min 1-use nonce with delete ✓. Client now returns
+  disconnected on cancel (no fabrication) ✓.
+- **Profile/user API authz:** `PUT /profile` binds `req.userWallet`, ignores client wallet ✓. `GET /:wallet`
+  auto-creates `user_X` placeholder handles (source of fabricated-looking feed handles — client no longer
+  fabricates; server default remains, recorded).
+- **Wallet→user binding:** token HMAC (`JWT_SECRET` defaults to hardcoded string if env missing — **VPS env
+  unverifiable under isolation; recorded risk**, recommend confirming `JWT_SECRET` is set in production).
+- **Challenge/duel authz:** fixed this session (counterparty/captain/auth checks). Residual: `creatorWallet` is
+  client-asserted (challenge integrity SOFT); stakes accept client amounts without chain verification
+  (UNENFORCED at chain boundary); no server-side cutoff enforcement on stakes.
+- **Claim authorization:** program-enforced (105/106/107/108) ✓ at chain; no backend claim endpoint exists
+  (claims are purely on-chain) — consistent, but unreachable from the app (blocker 2).
+- **Faucet:** auth + 24h in-memory rate limit (resets on restart — note); mint default `AXMB7…` vs app
+  `CUSD_MINT 3Ztkj…` mismatch flagged (VPS env may override; unverifiable under isolation — confirm before UAT
+  funding or users receive unspendable tokens).
+- **CORS:** fully open (`cors()`); acceptable for public reads, noted for write endpoints (Bearer-token gated).
+- **Rate limiting (general):** none on takes/comments/challenges/duels (spam vector, noted).
+- **Web preview XSS:** `/d/:slug` and `/r/:id` interpolate DB fields unescaped; `al:android:package` says
+  `com.counter.app` (wrong; real `app.counter.mobile`); assetlinks carries the DEBUG cert fingerprint alongside
+  release (debug builds can claim App Links — hardening note).
+- **Error leakage:** 500 middleware + faucet return raw `err.message` (low severity, noted).
+- **VPS isolation:** upheld — zero mutations; all VPS contact was read-only public GETs.
+
+### 33.H — Files changed this session (commit `1632734` + this ledger)
+
+- `app/src/wallet.ts`, `app/src/api.ts`, `app/App.tsx`, `app/src/components/ChallengeModal.tsx`
+- `server/routes/challenges.js`, `server/routes/duels.js`
+- `app/android/app/build.gradle` (env-based signing), `.gitignore` (+ sqlite), untracked `server/data/counter.sqlite`
+- Prior-session polish committed jointly: `Header.tsx`, `SocialPostCard.tsx`, `DuelDetailScreen.tsx`,
+  `ProfileScreen.tsx`, `TakeDetailScreen.tsx`, `identity.ts`
+- Deleted (0-byte placeholders): `probes/inspect-live-feed-records.js`, `server/migrate_data_hygiene.js`
+- `git status` end of session: **clean** (before this ledger edit); push `aacf234..1632734` ✓ synced.
+
