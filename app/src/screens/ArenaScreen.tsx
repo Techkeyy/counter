@@ -20,12 +20,14 @@ import { formatUserDisplayName, getAvatarUri } from '../utils/identity';
 interface ArenaScreenProps {
   isArenaEligible: boolean;
   skrStakedAmount: number;
+  userWallet: string | null;
   onSelectDuel: (duel: Duel) => void;
 }
 
 export const ArenaScreen: React.FC<ArenaScreenProps> = ({
   isArenaEligible,
   skrStakedAmount,
+  userWallet,
   onSelectDuel,
 }) => {
   const [arenaDuels, setArenaDuels] = useState<Duel[]>([]);
@@ -231,6 +233,7 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
         visible={backModalVisible}
         duel={targetDuel}
         side={targetSide}
+        userWallet={userWallet}
         onClose={() => setBackModalVisible(false)}
         onStakeRecorded={loadArenaDuels}
       />

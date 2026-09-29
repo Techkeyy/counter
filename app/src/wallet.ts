@@ -1,11 +1,12 @@
-import { Connection, PublicKey, Transaction, TransactionInstruction, Keypair } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Buffer } from 'buffer';
 import { api } from './api';
 
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const PROGRAM_ID = new PublicKey('52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT');
-export const CUSD_MINT = new PublicKey('3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7'); // Devnet cUSD mint
+// Authoritative Devnet cUSD mint (SPL Token-owned). See app/src/chain.ts.
+export const CUSD_MINT = new PublicKey('AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC'); // Devnet cUSD mint
 export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 
@@ -25,43 +26,11 @@ export function getConnection(): Connection {
   return connection;
 }
 
-// PDA derivations
-export function deriveDuelPda(duelId: string): [PublicKey, number] {
-  const seedBuffer = Buffer.alloc(8);
-  // Hash or slice duelId into 8-byte numeric seed
-  let hashVal = 0;
-  for (let i = 0; i < duelId.length; i++) {
-    hashVal = (hashVal * 31 + duelId.charCodeAt(i)) >>> 0;
-  }
-  seedBuffer.writeUInt32LE(hashVal, 0);
-
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('duel'), seedBuffer],
-    PROGRAM_ID
-  );
-}
-
-export function deriveVaultPda(duelPda: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('vault'), duelPda.toBuffer()],
-    PROGRAM_ID
-  );
-}
-
-export function derivePositionPda(duelPda: PublicKey, userPubkey: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from('position'), duelPda.toBuffer(), userPubkey.toBuffer()],
-    PROGRAM_ID
-  );
-}
-
-export function deriveAta(owner: PublicKey, mint: PublicKey): PublicKey {
-  const [ata] = PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID
-  );
-  return ata;
-}
+// NOTE (single-derivation rule): PDA derivation lives ONLY on the backend
+// (server/chain.js). The client consumes GET /api/duels/:id/chain-accounts
+// verbatim via app/src/chain.ts and never derives program addresses itself.
+// The previous local derive* helpers were removed: they used an incompatible
+// seed scheme ([b"duel", u32-hash]) and were dead code (no on-chain calls).
 
 // Connect Wallet & perform SIWS
 export async function connectAndAuthenticate(): Promise<WalletState> {

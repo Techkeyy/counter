@@ -57,7 +57,7 @@
 
 - **Program ID:** `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`
 - **Escrow Vault PDA:** `8F7RhULAD3zySGXWrb3cQUWMkaa6hansvdW2PaATpFVG`
-- **Devnet cUSD Mint:** `3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7`
+- **Devnet cUSD Mint:** `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC` (SPL Token-owned; verified live)
 - **Instructions:**
   1. `InitializeDuel (0)`: Seeds `[b"duel", duel_id]` + `[b"vault", duel_pda]`.
   2. `DepositStake (1)`: Captains & outside backers deposit cUSD into PDA vault.

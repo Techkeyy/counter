@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — PHYSICAL ANDROID ACCEPTANCE GATE (UAT BLOCKED: NO DEVICE AVAILABLE)`  
-**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this session: VPS received only read-only public GETs)  
+**Current Authoritative Status:** `BUILDING — REAL ON-CHAIN PRODUCT PATH REMEDIATION`  
+**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this session: VPS received only read-only public GETs; all server changes are LOCAL and require an authorized deploy, see §34.H)  
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `1632734` (fix(acceptance-gate)) — see §33 Gate Session below  
-**Last Updated:** 2026-09-29T21:30:00Z  
+**Authoritative Local Commit:** `efa3c74` + remediation session below (commit pending at time of writing)  
+**Last Updated:** 2026-09-30T00:30:00Z  
 
 ---
 
@@ -413,4 +413,156 @@ adb logcat -d -s ReactNative:V ReactNativeJS:V AndroidRuntime:E mqt_js:V mqt_nat
   `ProfileScreen.tsx`, `TakeDetailScreen.tsx`, `identity.ts`
 - Deleted (0-byte placeholders): `probes/inspect-live-feed-records.js`, `server/migrate_data_hygiene.js`
 - `git status` end of session: **clean** (before this ledger edit); push `aacf234..1632734` ✓ synced.
+
+### 33.H — Files changed this session (commit `1632734` + this ledger)
+
+- `app/src/wallet.ts`, `app/src/api.ts`, `app/App.tsx`, `app/src/components/ChallengeModal.tsx`
+- `server/routes/challenges.js`, `server/routes/duels.js`
+- `app/android/app/build.gradle` (env-based signing), `.gitignore` (+ sqlite), untracked `server/data/counter.sqlite`
+- Prior-session polish committed jointly: `Header.tsx`, `SocialPostCard.tsx`, `DuelDetailScreen.tsx`,
+  `ProfileScreen.tsx`, `TakeDetailScreen.tsx`, `identity.ts`
+- Deleted (0-byte placeholders): `probes/inspect-live-feed-records.js`, `server/migrate_data_hygiene.js`
+- `git status` end of session: **clean** (before this ledger edit); push `aacf234..1632734` ✓ synced.
+
+---
+
+## 34. REAL ON-CHAIN PRODUCT PATH REMEDIATION — 2026-09-30 (Builder, from `efa3c74`)
+
+> Objective per Director correction: make the causal path social → challenge → duel →
+> real Devnet cUSD deposit via MWA → authoritative on-chain settlement → MWA claim →
+> permanent receipt backed by the actual settlement tx. No UI redesign. No program change.
+> No VPS mutation. Status after this session: **STILL BUILDING. NOT a release candidate.**
+> Physical UAT + Release-Candidate Gate remain blocked (device + authorized VPS deploy).
+
+### 34.A — GATE 0 reconstruction + inspection (evidence, all read-only on trusted components)
+
+- Tree clean at `efa3c74`, `master` in sync with `origin/master`, remote
+  `https://github.com/Techkeyy/counter.git`. No untracked files of consequence.
+- Deployed program `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`: **exists on Devnet, executable,
+  BPFLoaderUpgradeable** (live `getAccountInfo`). `program/src/lib.rs` read in full (NOT modified):
+  InitializeDuel(0) / DepositStake(1) / ResolveDuel(2) / ClaimPayout(3), borsh layouts, PDA seeds
+  `[b"duel", 16B id]` / `[b"vault", duel]` / `[b"position", duel, user]`, ATA owned by vault PDA,
+  errors 101–108, resolver-authority check (104), parimutuel claim math. All inspected.
+- **Mint correction (authoritative):** `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC` is SPL Token-owned
+  (live owner check) → the real cUSD. `3Ztkj…` is the upgrade-authority **wallet** (system-owned, NOT a
+  mint) — it is the local keypair pubkey. Fixed in `wallet.ts`, new `chain.ts`, README. Faucet default
+  was already AXMB7 (consistent).
+- Live decode of the artifact duel PDA `Bmbh…` (owned by program): 196 bytes, side_a 75M ($75),
+  side_b 50M ($50), status byte 2 = ResolvedSideA — **Rust layout confirmed against chain**, matching
+  `docs/claim-mechanism-proof.md` pools.
+- Proven implementation reused: `probes/program-escrow-devnet-harness.js` serializers ported 1:1 into
+  `server/chain.js` (nothing reinvented). `probes/live-economic-social-bridge.js` is a 0-byte stub
+  (recorded, not relied upon). `mwa-proof.json` references the authority wallet, not a mint.
+- MWA deps (installed, no upgrade): `@solana-mobile/mobile-wallet-adapter-protocol(-web3js)` **2.3.0**,
+  `@solana/web3.js` 1.99.0 (app) / 1.95.4 (server), `@solana/spl-token` 0.4.14/0.4.8. Typings confirm
+  `transact` + `signAndSendTransactions({transactions})` supports legacy `Transaction`. Official Solana
+  Mobile React Native/Expo docs consulted (docs.solanamobile.com): current guidance prefers Wallet UI
+  packages, but the installed raw-protocol path is valid for this stack and already builds — **no
+  dependency added or upgraded** (only consumed: spl-token ATA helpers already present).
+- Resolver authority model: server keypair at `KEYPAIR_PATH` (default
+  `C:\Users\HomePC\.config\solana\compart-devnet-upgrade.json`) = mint authority = prior resolver.
+  Backend must expose its pubkey; missing keypair now fails fast instead of inventing authority.
+- Backend URL unchanged: `https://counter.103-195-188-198.sslip.io/api` (live: `/health`, `/takes`,
+  `/duels` = 13 duels, read-only GETs only).
+
+### 34.B — GATE 1: one canonical model (implemented + proven)
+
+- `server/chain.js` (new) is the SINGLE derivation/serialization authority: canonical 16-byte
+  `onchain_duel_id` (hex) ↔ duel/vault/position PDAs + vault/user ATAs, serializers byte-identical to
+  the proven harness, units (6 decimals), 196-byte duel decoder, position decoder, and independent
+  verifiers (`verifyInitTx` / `verifyStakeTx` / `verifyClaimTx` / `verifyResolveTx`) that read the
+  REAL confirmed tx (compiled form — `jsonParsed` crashes web3.js v1 validation, documented in code)
+  plus resulting on-chain account state. Backend never trusts client numbers.
+- Client (`app/src/chain.ts`, new) consumes `GET /api/duels/:id/chain-accounts` verbatim
+  (single-derivation rule); it only serializes ix bytes + drives MWA. Dead, incompatible
+  `deriveDuelPda` (`[b"duel", u32-hash]`) helpers removed from `wallet.ts`.
+- Backend persists per duel: `onchain_duel_bump`, `onchain_vault_bump`, `onchain_mint`, real
+  `init_tx_signature`, `chain_status` (`UNINITIALIZED`→`INITIALIZED` only after verification);
+  per position: `stake_tx_signature`. Migration = idempotent `ALTER TABLE` on boot (verified locally);
+  legacy rows read NULL as uninitialized; `ensureCanonicalDuelId` backfills valid 16-byte ids.
+- **Proof:** `server/test/chain-vectors.test.js` — **11/11 pass**, hardcoded byte vectors
+  (`010140420f…` deposit, `0201` resolve, `03…` claim, 131-byte init layout), ATA parity against
+  spl-token's own helper, decoder vs hand-built layout, exact program/mint constants.
+  (One test caught my hand-arithmetic, not a code bug — recorded.)
+
+### 34.C — GATE 2: real InitializeDuel path (implemented, chain-proven)
+
+- Captain taps “Initialize On-Chain” → chain-accounts → init ix (+ vault-ATA creation if missing,
+  payer-funded) → **MWA `signAndSendTransactions` + confirm** → `POST /:id/init-onchain {txSignature}` →
+  backend `verifyInitTx` (program, discriminator 0, canonical duel id + PDA, captains, terms hash,
+  authoritative mint, resolver) → stores REAL sig/addresses. Fabricated sigs rejected, no state change.
+- Uninitialized duels render `PENDING ON-CHAIN INITIALIZATION`; stakes/settlement/claims refuse them.
+
+### 34.D — GATE 3: real DepositStake from the app (implemented, chain-proven)
+
+- `BackModal` (and Arena): chain-accounts → real cUSD balance check (insufficient-funds message names
+  the faucet) → ATA creation if needed → **real `DepositStake` via MWA** → confirm →
+  `POST /:id/stake {side, amount, txSignature}` → `verifyStakeTx` (discriminator 1, side, exact base
+  amount, signer = funder, canonical duel + position PDAs, on-chain position/duel state) → **pools set
+  from chain-observed totals**, positions upserted from chain state + `stake_tx_signature`.
+  Client-numbers-only POSTs are now rejected (txSignature required).
+
+### 34.E — Settlement + ClaimPayout + receipt (implemented, chain-proven)
+
+- `resolveDuel`: refuses uninitialized duels; removed random-key + `simulated/devnet_` pseudo-sig paths;
+  submits REAL `ResolveDuel` with the server authority; ANY chain failure aborts with zero DB writes.
+  Receipts carry the REAL resolve signature. Adversarial suite now asserts the refusal invariant (§34.G).
+- `POST /:id/claim {txSignature}`: `verifyClaimTx` (discriminator 3, signer, canonical PDAs, position
+  `claimed=true` on-chain) + winning-side consistency → marks claimed + `claim_tx`; payout read from
+  the tx's token-balance delta (chain-observed).
+- App: winner-only claim button (MWA ClaimPayout → verify → exact payout message), loser closure state,
+  already-claimed state with claim tx, error-state for bad IDs (no more infinite spinner), explorer
+  links now point at real settlement txs.
+
+### 34.F — LIVE DEVNET LIFECYCLE PROOF (`probes/chain-lifecycle-verify.js`, exit 0)
+
+Fresh random duel `8f599359274e09eb7a5f785f66b82068` → PDA `4F8aBTVH…` (all via `server/chain.js`):
+- init `5mCMTD39…` → verified (canonical PDA, vault ATA `Eo2h3h…`, authoritative mint)
+- deposit A 1 cUSD `rFpnuEJV…` → chain-observed; pool A = 1 cUSD; **amount-mismatch negatively verified**
+- deposit B 2 cUSD `2xb2quAx…` → pool B = 2 cUSD
+- resolve side A `bHAtosKZ…` → status ResolvedSideA
+- claim A `5s3Mnmmg…` → **payout exactly 3,000,000 base = 3 cUSD = 1 + 1×2/1** (parimutuel exact)
+- fabricated-signature claim **rejected**. (Also created: one empty initialized test duel from the
+  parser-debug iteration + throwaway captain-B — harmless Devnet test state, recorded.)
+
+### 34.G — Static + suite verification
+
+- `tsc` (app files incl. new `chain.ts`, init/claim flows, Arena wiring): **0 errors**.
+- `server/test/chain-vectors.test.js`: **11/11 pass**.
+- Backend adversarial suite: **8/8 pass** — new refusal invariant executes ([5/8]); external-oracle
+  section reports honest SKIP on network failure instead of failing the suite; fixtures scoped to
+  `duel_test%` (a stale local receipt from a prior run was cleaned, dev data untouched).
+- Release APK rebuilt from clean tree: **BUILD SUCCESSFUL in 10m 25s** (bundle 862→1019 modules),
+  `app-release.apk` **61,873,100 bytes**, SHA-256
+  **`ED82270ACFB10E7204A932E756A496F4787D943187651FAE9CC37DD41815F258`**, same cert
+  `3A:B2:8E:39:…:FF:25`, prod backend + AXMB7 mint present in bundle, no mock token, no embedded
+  secrets (6 shapes checked).
+- Secret scan (145 tracked files): 0 usable-secret hits (`counter123` appears only in this ledger's
+  prose describing the closed prior finding). Keystore still untracked.
+
+### 34.H — What is deliberately NOT done (blockers for UAT / release candidate)
+
+1. **No physical Android device this session** — MWA approve/confirm UX + full journey unobserved.
+2. **VPS deploy pending (authorized action required):** server changes are LOCAL ONLY. VPS still runs
+   old code (no `chain-accounts`/verified stake/claim, old resolver fallback). Migration/change plan for
+   inspection: pull + `npm install` (no new deps) + restart (idempotent ALTERs, no data loss); confirm
+   `KEYPAIR_PATH` (+ file present), `JWT_SECRET`, `DEVNET_CUSD_MINT=AXMB7…`, `PROGRAM_ID` env on host.
+   Faucet mint env must equal AXMB7 or users receive unspendable tokens. Zero VPS mutations made.
+3. Identity persistence still missing (in-memory session) — Core Outcome gap, unchanged.
+4. Faucet funding UX for real users (in-app faucet call) not wired — UAT needs funded Devnet wallets.
+
+### 34.I — Claim→Mechanism→Proof reclassifications (product path now REAL, device-pending)
+
+- Captain stake custody: was HARD(program)/UNENFORCED(path) → **path IMPLEMENTED + chain-proven
+  (node keypairs); MWA leg UNENFORCED pending device.**
+- Outside backing / pool accounting: was SOFT/OBSERVATIONAL on self-reported numbers → **chain-observed
+  totals via verified txs (chain-proven); MWA leg pending device.**
+- Settlement correctness: was SOFT (pseudo-sig possible) → **pseudo-sig paths REMOVED; real-tx-only
+  (chain-proven); oracle-trigger UX pending device.**
+- Winner payout / loser rejection / double-claim: was HARD(program)/UNENFORCED(path) → **claim client
+  IMPLEMENTED + chain-proven end-to-end (3 cUSD exact); MWA leg pending device.**
+- Permanent receipt: now cites REAL settlement tx (chain-proven) → **SOFT ENFORCED, device-pending.**
+- Init binding / resolver authority / claim authorization: **HARD (program) + verified (backend).**
+- Android-native / MWA / identity / social / deep-link / GitHub / backend-availability: unchanged from §33.E.
+
 

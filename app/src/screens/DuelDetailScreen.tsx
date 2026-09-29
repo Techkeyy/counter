@@ -8,30 +8,42 @@ import {
   ActivityIndicator,
   Share,
 } from 'react-native';
+import { PublicKey } from '@solana/web3.js';
 import { Duel, Position } from '../types';
 import { BackModal } from '../components/BackModal';
 import { colors, spacing } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
+import { getConnection } from '../wallet';
+import {
+  ChainAccounts,
+  buildInitializeDuelIx,
+  buildVaultAtaCreateIxIfNeeded,
+  buildClaimPayoutIx,
+  mwaSignSendConfirm,
+} from '../chain';
 
 interface DuelDetailScreenProps {
   duelId: string;
+  userWallet: string | null;
   onBack: () => void;
   onViewReceipt: (receiptId: string) => void;
 }
 
 export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   duelId,
+  userWallet,
   onBack,
   onViewReceipt,
 }) => {
   const [duel, setDuel] = useState<Duel | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [myPosition, setMyPosition] = useState<Position | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
+  const [initializing, setInitializing] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showProofDetails, setShowProofDetails] = useState(false);
 
   // Backer Modal
@@ -43,11 +55,86 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const data = await api.getDuel(duelId);
       setDuel(data);
       setPositions(data.positions || []);
-      setMyPosition(data.myPosition || null);
-    } catch (err) {
+      setLoadError(null);
+    } catch (err: any) {
       console.warn('Failed to load duel:', err);
+      setLoadError(err?.message || 'Duel not found');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const myPosition: Position | null =
+    (userWallet && positions.find((p) => p.user_wallet === userWallet)) || null;
+
+  const handleInitialize = async () => {
+    if (!userWallet) {
+      setMessage('Connect a Solana wallet first (MWA) to initialize.');
+      return;
+    }
+    setInitializing(true);
+    setMessage(null);
+    try {
+      setMessage('Fetching canonical duel accounts…');
+      const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
+      if (acct.chainStatus === 'INITIALIZED') {
+        throw new Error('Duel is already initialized on-chain.');
+      }
+      const payer = new PublicKey(userWallet);
+      const conn = getConnection();
+      const vaultAtaInfo = await conn.getAccountInfo(new PublicKey(acct.vaultAta));
+
+      setMessage('Approve initialization in your wallet…');
+      const ixs = [];
+      const vaultAtaIx = buildVaultAtaCreateIxIfNeeded(
+        payer,
+        new PublicKey(acct.vaultPda),
+        vaultAtaInfo !== null
+      );
+      if (vaultAtaIx) ixs.push(vaultAtaIx);
+      ixs.push(buildInitializeDuelIx(acct, payer));
+
+      setMessage('Sending to Devnet…');
+      const signature = await mwaSignSendConfirm(ixs, payer);
+
+      setMessage('Verifying on-chain initialization…');
+      await api.initOnChainDuel(duelId, signature);
+
+      setMessage(`Initialized on-chain: ${signature.slice(0, 8)}…`);
+      await loadDuelData();
+    } catch (err: any) {
+      setMessage(`Initialization failed: ${err.message}`);
+    } finally {
+      setInitializing(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    if (!userWallet) {
+      setMessage('Connect your wallet to claim.');
+      return;
+    }
+    setClaiming(true);
+    setMessage(null);
+    try {
+      setMessage('Fetching canonical duel accounts…');
+      const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
+      const user = new PublicKey(userWallet);
+
+      setMessage('Approve the claim in your wallet…');
+      const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user);
+
+      setMessage('Verifying on-chain payout…');
+      const res = await api.claimDuel(duelId, signature);
+
+      setMessage(
+        `Claimed ${res.payoutUsd !== null ? `$${Number(res.payoutUsd).toFixed(2)}` : 'payout'} cUSD: ${signature.slice(0, 8)}…`
+      );
+      await loadDuelData();
+    } catch (err: any) {
+      setMessage(`Claim failed: ${err.message}`);
+    } finally {
+      setClaiming(false);
     }
   };
 
@@ -83,11 +170,22 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     } catch (e) {}
   };
 
-  if (loading || !duel) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.solanaPurple} />
         <Text style={styles.loadingText}>Loading Duel Escrow & State...</Text>
+      </View>
+    );
+  }
+
+  if (!duel) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Duel not found{loadError ? `: ${loadError}` : ''}.</Text>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -98,6 +196,18 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const oddsA = poolA > 0 ? (totalPool / poolA).toFixed(2) : '2.00';
   const oddsB = poolB > 0 ? (totalPool / poolB).toFixed(2) : '2.00';
   const isResolved = duel.status.startsWith('RESOLVED');
+  const chainStatus = duel.chain_status || 'UNINITIALIZED';
+  const isInitialized = chainStatus === 'INITIALIZED';
+  const isCaptain =
+    !!userWallet &&
+    (userWallet === duel.captain_a_wallet || userWallet === duel.captain_b_wallet);
+  const canClaim =
+    isResolved &&
+    !!myPosition &&
+    myPosition.side === duel.winning_side &&
+    !myPosition.claimed;
+  const isLoser =
+    isResolved && !!myPosition && myPosition.side !== duel.winning_side;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -228,6 +338,70 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         </View>
       )}
 
+      {/* Authoritative chain binding state — never implied, always shown */}
+      <View style={styles.section}>
+        <View style={[styles.chainBadge, isInitialized && styles.chainBadgeLive]}>
+          <Text style={styles.chainBadgeText}>
+            {isInitialized
+              ? `ON-CHAIN ${duel.init_tx_signature ? `· ${duel.init_tx_signature.slice(0, 8)}…` : ''}`
+              : 'PENDING ON-CHAIN INITIALIZATION'}
+          </Text>
+        </View>
+        {!isInitialized && (
+          <Text style={styles.chainHint}>
+            Stakes, settlement and claims unlock once a captain binds this duel to the Solana program.
+          </Text>
+        )}
+      </View>
+
+      {/* Captain-only on-chain initialization */}
+      {!isInitialized && isCaptain && (
+        <TouchableOpacity
+          style={styles.initBtn}
+          onPress={handleInitialize}
+          disabled={initializing}
+          activeOpacity={0.8}
+        >
+          {initializing ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.initBtnText}>Initialize On-Chain (Captain)</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* Winner claim (MWA-signed ClaimPayout, backend-verified) */}
+      {canClaim && (
+        <TouchableOpacity
+          style={styles.claimBtn}
+          onPress={handleClaim}
+          disabled={claiming}
+          activeOpacity={0.8}
+        >
+          {claiming ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.claimBtnText}>
+              Claim ${Number(myPosition!.stake_amount).toFixed(2)} + Winnings
+            </Text>
+          )}
+        </TouchableOpacity>
+      )}
+      {isResolved && myPosition && !!myPosition.claimed && (
+        <View style={styles.messageBox}>
+          <Text style={styles.messageText}>
+            Already claimed{myPosition.claim_tx ? `: ${myPosition.claim_tx.slice(0, 8)}…` : ''}.
+          </Text>
+        </View>
+      )}
+      {isLoser && (
+        <View style={styles.messageBox}>
+          <Text style={styles.messageText}>
+            Your side lost this duel. Stakes settled to the winners — no claim available.
+          </Text>
+        </View>
+      )}
+
       {/* Settlement Trigger */}
       {!isResolved && (
         <TouchableOpacity
@@ -275,6 +449,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         visible={backModalVisible}
         duel={duel}
         side={backSide}
+        userWallet={userWallet}
         onClose={() => setBackModalVisible(false)}
         onStakeRecorded={loadDuelData}
       />
@@ -506,6 +681,53 @@ const styles = StyleSheet.create({
     color: colors.solanaGreen,
     fontSize: 13,
     fontWeight: '700',
+  },
+  chainBadge: {
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  chainBadgeLive: {
+    backgroundColor: 'rgba(20, 241, 149, 0.2)',
+  },
+  chainBadgeText: {
+    color: colors.textPrimary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  chainHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: spacing.xs,
+  },
+  initBtn: {
+    backgroundColor: colors.warningYellow || '#FFA502',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  initBtnText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  claimBtn: {
+    backgroundColor: colors.solanaGreen,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  claimBtnText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   resolveBtn: {
     backgroundColor: colors.solanaPurple,

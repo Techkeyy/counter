@@ -165,19 +165,32 @@ export const api = {
     }
     return res;
   },
-  initOnChainDuel: async (duelId: string, onchainDuelPda: string, onchainVaultPda: string, termsHash: string) => {
-    return request<{ success: boolean; duel: Duel }>(`/duels/${duelId}/init-onchain`, {
+  initOnChainDuel: async (duelId: string, txSignature: string) => {
+    // Binds the duel to the deployed program. The backend independently
+    // verifies the confirmed InitializeDuel transaction before storing
+    // anything; fabricated signatures are rejected with no state change.
+    return request<{ success: boolean; duelId: string; chainStatus: string }>(`/duels/${duelId}/init-onchain`, {
       method: 'POST',
-      body: JSON.stringify({ onchainDuelPda, onchainVaultPda, termsHash }),
+      body: JSON.stringify({ txSignature }),
     });
   },
-  recordStake: async (duelId: string, side: 1 | 2, stakeAmount: number, positionPda?: string) => {
-    // Server contract uses `amount`. Send both keys so stakes are never
-    // silently dropped by a field-name mismatch.
-    return request<{ success: boolean; duel: Duel; position: any }>(`/duels/${duelId}/stake`, {
+  recordStake: async (duelId: string, side: 1 | 2, stakeAmount: number, txSignature: string, positionPda?: string) => {
+    // Pool totals are set from chain-observed state, never client numbers.
+    // txSignature is REQUIRED: unstaked claims are rejected.
+    return request<{ success: boolean; duel: Duel }>(`/duels/${duelId}/stake`, {
       method: 'POST',
-      body: JSON.stringify({ side, amount: stakeAmount, stakeAmount, positionPda }),
+      body: JSON.stringify({ side, amount: stakeAmount, stakeAmount, txSignature, positionPda }),
     });
+  },
+  claimDuel: async (duelId: string, txSignature: string) => {
+    return request<{ success: boolean; payoutUsd: number | null; receipt: Receipt }>(`/duels/${duelId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ txSignature }),
+    });
+  },
+  getChainAccounts: async (duelId: string, wallet?: string) => {
+    const query = wallet ? `?wallet=${wallet}` : '';
+    return request<any>(`/duels/${duelId}/chain-accounts${query}`);
   },
   resolveDuel: async (duelId: string) => {
     return request<any>(`/duels/${duelId}/resolve`, {

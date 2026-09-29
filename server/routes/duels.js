@@ -5,6 +5,35 @@ const { queryAll, queryOne, execute } = require('../db');
 const { requireAuth } = require('../auth');
 const { resolveDuel } = require('../resolvers');
 const { querySkrStakedAmount } = require('../skr');
+const chain = require('../chain');
+const { PublicKey, Keypair } = require('@solana/web3.js');
+const fs = require('fs');
+
+/** Server resolver authority pubkey (fail-fast: never invent one). */
+function getResolverPublicKey() {
+  if (process.env.RESOLVER_PUBKEY) return process.env.RESOLVER_PUBKEY;
+  const keypairPath = process.env.KEYPAIR_PATH || 'C:\\Users\\HomePC\\.config\\solana\\compart-devnet-upgrade.json';
+  if (fs.existsSync(keypairPath)) {
+    return Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, 'utf-8')))
+    ).publicKey.toBase58();
+  }
+  throw new Error('Server resolver authority not configured (KEYPAIR_PATH)');
+}
+
+/** Ensure the duel row carries a valid canonical 16-byte on-chain id. */
+function ensureCanonicalDuelId(duel) {
+  let id = duel.onchain_duel_id;
+  try {
+    chain.duelIdBytesFromHex(id);
+    return id;
+  } catch {
+    id = crypto.randomBytes(16).toString('hex');
+    execute(`UPDATE duels SET onchain_duel_id = ? WHERE id = ?`, [id, duel.id]);
+    duel.onchain_duel_id = id;
+    return id;
+  }
+}
 
 // GET /api/duels (Feed / Arena list)
 router.get('/', (req, res) => {
@@ -99,10 +128,48 @@ router.get('/:id', (req, res) => {
   });
 });
 
-// POST /api/duels/:id/init-onchain (Record on-chain PDA addresses)
-router.post('/:id/init-onchain', requireAuth, (req, res) => {
+// GET /api/duels/:id/chain-accounts?wallet=...
+// Canonical on-chain parameters for the product path. The mobile client uses
+// these verbatim and never derives independently (single-derivation rule).
+router.get('/:id/chain-accounts', requireAuth, (req, res) => {
+  const duel = queryOne(`SELECT * FROM duels WHERE id = ? OR share_slug = ?`, [req.params.id, req.params.id]);
+  if (!duel) {
+    return res.status(404).json({ error: 'Duel not found' });
+  }
+  try {
+    const duelIdHex = ensureCanonicalDuelId(duel);
+    const wallet = req.query.wallet || req.userWallet;
+    const accounts = chain.deriveChainAccounts(duelIdHex, wallet);
+    res.json({
+      duelId: duel.id,
+      chainStatus: duel.chain_status || 'UNINITIALIZED',
+      initTxSignature: duel.init_tx_signature || null,
+      captainA: duel.captain_a_wallet,
+      captainB: duel.captain_b_wallet,
+      termsHash: duel.terms_hash,
+      cutoffTs: duel.cutoff_ts,
+      resolutionTs: duel.resolution_ts,
+      status: duel.status,
+      winningSide: duel.winning_side,
+      resolver: getResolverPublicKey(),
+      ...accounts,
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Chain parameters unavailable: ${err.message}` });
+  }
+});
+
+// POST /api/duels/:id/init-onchain (Bind duel to the deployed program)
+// Body: { txSignature } — the REAL confirmed InitializeDuel transaction.
+// The backend independently verifies the tx + on-chain account before storing
+// anything. Fabricated signatures are rejected with no state change.
+router.post('/:id/init-onchain', requireAuth, async (req, res) => {
   const duelId = req.params.id;
-  const { onchainDuelPda, onchainVaultPda, vaultTokenAccount } = req.body;
+  const { txSignature } = req.body;
+
+  if (!txSignature) {
+    return res.status(400).json({ error: 'txSignature of the confirmed InitializeDuel transaction is required' });
+  }
 
   const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
   if (!duel) {
@@ -114,73 +181,157 @@ router.post('/:id/init-onchain', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Only duel captains can anchor on-chain addresses' });
   }
 
-  execute(
-    `UPDATE duels SET onchain_duel_pda = ?, onchain_vault_pda = ?, vault_token_account = ? WHERE id = ?`,
-    [onchainDuelPda, onchainVaultPda, vaultTokenAccount, duelId]
-  );
+  if ((duel.chain_status || 'UNINITIALIZED') === 'INITIALIZED') {
+    return res.status(400).json({ error: 'Duel is already initialized on-chain' });
+  }
 
-  res.json({ success: true, duelId, onchainDuelPda });
+  const duelIdHex = ensureCanonicalDuelId(duel);
+  try {
+    const verified = await chain.verifyInitTx({
+      signature: txSignature,
+      duelIdHex,
+      captainA: duel.captain_a_wallet,
+      captainB: duel.captain_b_wallet,
+      termsHashHex: duel.terms_hash,
+      resolver: getResolverPublicKey(),
+    });
+    execute(
+      `UPDATE duels SET onchain_duel_pda = ?, onchain_duel_bump = ?, onchain_vault_pda = ?,
+        onchain_vault_bump = ?, vault_token_account = ?, onchain_mint = ?,
+        init_tx_signature = ?, chain_status = 'INITIALIZED' WHERE id = ?`,
+      [
+        verified.duelPda, verified.duelBump, verified.vaultPda, verified.vaultBump,
+        verified.vaultAta, verified.mint, txSignature, duelId,
+      ]
+    );
+    res.json({ success: true, duelId, chainStatus: 'INITIALIZED', ...verified });
+  } catch (err) {
+    res.status(400).json({ error: `On-chain initialization not verified: ${err.message}` });
+  }
 });
 
-// POST /api/duels/:id/stake (Record confirmed on-chain stake deposit)
-router.post('/:id/stake', requireAuth, (req, res) => {
+// POST /api/duels/:id/stake (Record a VERIFIED on-chain stake deposit)
+// Body: { side, amount (USD), txSignature, positionPda? }
+// Pool totals are set from chain-observed state, never from client numbers.
+router.post('/:id/stake', requireAuth, async (req, res) => {
   const duelId = req.params.id;
   const userWallet = req.userWallet;
   // Accept both `amount` (canonical) and `stakeAmount` (client alias).
-  // NOTE: amounts are client-reported; on-chain deposit verification is
-  // UNENFORCED at this boundary (see claim-mechanism-proof ledger).
   const { side, amount: amountRaw, stakeAmount: stakeAmountRaw, positionPda, txSignature } = req.body;
   const amount = amountRaw !== undefined ? amountRaw : stakeAmountRaw;
 
   if (!side || amount === undefined || amount === null) {
     return res.status(400).json({ error: 'side and amount are required' });
   }
+  if (!txSignature) {
+    return res.status(400).json({ error: 'txSignature of the confirmed DepositStake transaction is required' });
+  }
 
   const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
   if (!duel) {
     return res.status(404).json({ error: 'Duel not found' });
   }
+  if ((duel.chain_status || 'UNINITIALIZED') !== 'INITIALIZED') {
+    return res.status(400).json({ error: 'Duel is not initialized on-chain yet' });
+  }
 
   const sideNum = Number(side);
-  const amountNum = Number(amount);
-
-  if ((sideNum !== 1 && sideNum !== 2) || !Number.isFinite(amountNum) || amountNum <= 0) {
-    return res.status(400).json({ error: 'side must be 1 or 2 and amount must be a positive number' });
+  let amountBase;
+  try {
+    amountBase = chain.usdToBaseUnits(amount);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (sideNum !== 1 && sideNum !== 2) {
+    return res.status(400).json({ error: 'side must be 1 or 2' });
   }
 
-  // Check existing position
-  const posId = `pos_${duelId}_${userWallet}`;
-  const existingPos = queryOne(`SELECT * FROM positions WHERE id = ?`, [posId]);
+  try {
+    const verified = await chain.verifyStakeTx({
+      signature: txSignature,
+      duelIdHex: duel.onchain_duel_id,
+      userWallet,
+      expectedSide: sideNum,
+      expectedAmountBase: String(amountBase),
+    });
 
-  if (existingPos) {
+    const sideAUsd = chain.baseUnitsToUsd(verified.sideABase);
+    const sideBUsd = chain.baseUnitsToUsd(verified.sideBBase);
+    execute(`UPDATE duels SET side_a_total = ?, side_b_total = ? WHERE id = ?`, [sideAUsd, sideBUsd, duelId]);
+
+    const posId = `pos_${duelId}_${userWallet}`;
+    const existingPos = queryOne(`SELECT * FROM positions WHERE id = ?`, [posId]);
+    if (existingPos) {
+      execute(
+        `UPDATE positions SET stake_amount = ?, position_pda = ?, stake_tx_signature = ? WHERE id = ?`,
+        [chain.baseUnitsToUsd(verified.positionStakeBase), verified.positionPda, txSignature, posId]
+      );
+    } else {
+      execute(
+        `INSERT INTO positions (id, duel_id, user_wallet, side, stake_amount, position_pda, claimed, stake_tx_signature, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [posId, duelId, userWallet, verified.side, chain.baseUnitsToUsd(verified.positionStakeBase),
+         verified.positionPda, txSignature, new Date().toISOString()]
+      );
+    }
+
     execute(
-      `UPDATE positions SET stake_amount = stake_amount + ? WHERE id = ?`,
-      [amountNum, posId]
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'STAKE_DEPOSITED', ?, ?, 'DUEL', 'Stake Deposited', ?, 0, ?)`,
+      [`act_${Date.now()}`, userWallet, userWallet, duelId, `Staked $${amount} cUSD on Side ${sideNum === 1 ? 'A' : 'B'} (verified on-chain)`, new Date().toISOString()]
     );
-  } else {
+
+    const updatedDuel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+    res.json({ success: true, duel: updatedDuel, verified });
+  } catch (err) {
+    res.status(400).json({ error: `On-chain stake not verified: ${err.message}` });
+  }
+});
+
+// POST /api/duels/:id/claim (Record a VERIFIED on-chain payout claim)
+// Body: { txSignature } — the REAL confirmed ClaimPayout transaction.
+router.post('/:id/claim', requireAuth, async (req, res) => {
+  const duelId = req.params.id;
+  const userWallet = req.userWallet;
+  const { txSignature } = req.body;
+
+  if (!txSignature) {
+    return res.status(400).json({ error: 'txSignature of the confirmed ClaimPayout transaction is required' });
+  }
+  const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+  if (!duel) {
+    return res.status(404).json({ error: 'Duel not found' });
+  }
+  if (!String(duel.status || '').startsWith('RESOLVED')) {
+    return res.status(400).json({ error: 'Duel is not settled yet' });
+  }
+
+  try {
+    const verified = await chain.verifyClaimTx({
+      signature: txSignature,
+      duelIdHex: duel.onchain_duel_id,
+      userWallet,
+    });
+    // Consistency: claim side must be the recorded winning side.
+    if (Number(duel.winning_side) !== 0 && verified.side !== Number(duel.winning_side)) {
+      return res.status(400).json({ error: 'Claim side does not match the settled winning side' });
+    }
+    const posId = `pos_${duelId}_${userWallet}`;
     execute(
-      `INSERT INTO positions (id, duel_id, user_wallet, side, stake_amount, position_pda, claimed, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-      [posId, duelId, userWallet, sideNum, amountNum, positionPda || '', new Date().toISOString()]
+      `UPDATE positions SET claimed = 1, claim_tx = ? WHERE id = ?`,
+      [txSignature, posId]
     );
+    const receipt = queryOne(`SELECT * FROM receipts WHERE duel_id = ?`, [duelId]);
+    res.json({
+      success: true,
+      positionPda: verified.positionPda,
+      payoutBase: verified.payoutBase,
+      payoutUsd: verified.payoutBase !== null ? chain.baseUnitsToUsd(verified.payoutBase) : null,
+      receipt,
+    });
+  } catch (err) {
+    res.status(400).json({ error: `On-chain claim not verified: ${err.message}` });
   }
-
-  // Update total pool amounts in duel
-  if (sideNum === 1) {
-    execute(`UPDATE duels SET side_a_total = side_a_total + ? WHERE id = ?`, [amountNum, duelId]);
-  } else if (sideNum === 2) {
-    execute(`UPDATE duels SET side_b_total = side_b_total + ? WHERE id = ?`, [amountNum, duelId]);
-  }
-
-  // Activity feed
-  execute(
-    `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
-     VALUES (?, ?, 'STAKE_DEPOSITED', ?, ?, 'DUEL', 'Stake Deposited', ?, 0, ?)`,
-    [`act_${Date.now()}`, userWallet, userWallet, duelId, `Staked $${amountNum} cUSD on Side ${sideNum === 1 ? 'A' : 'B'}`, new Date().toISOString()]
-  );
-
-  const updatedDuel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
-  res.json({ success: true, duel: updatedDuel });
 });
 
 // POST /api/duels/:id/resolve (Trigger resolution engine)

@@ -122,6 +122,7 @@ export default function App() {
         {selectedDuelId ? (
           <DuelDetailScreen
             duelId={selectedDuelId}
+            userWallet={walletState.publicKey}
             onBack={() => setSelectedDuelId(null)}
             onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
           />
@@ -162,6 +163,7 @@ export default function App() {
               <ArenaScreen
                 isArenaEligible={walletState.isArenaEligible}
                 skrStakedAmount={walletState.skrStakedAmount}
+                userWallet={walletState.publicKey}
                 onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
               />
             )}

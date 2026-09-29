@@ -21,8 +21,9 @@ function getResolverKeypair() {
   if (fs.existsSync(keypairPath)) {
     return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, 'utf-8'))));
   }
-  // Fallback for isolated testing
-  return Keypair.generate();
+  // Fail fast: resolving with an invented key would produce a rejected chain
+  // tx while the backend recorded settlement. Never resolve without authority.
+  throw new Error('Server resolver authority keypair not configured on host (KEYPAIR_PATH)');
 }
 
 function serializeResolveDuel(winningSide) {
@@ -40,6 +41,12 @@ async function resolveDuel(duelId) {
 
   if (duel.status.startsWith('RESOLVED') || duel.status === 'CANCELLED') {
     return { success: false, error: 'Duel already resolved' };
+  }
+
+  // Settlement is only authoritative for duels bound to the deployed program.
+  // Backend-only "resolution" of uninitialized duels would fabricate receipts.
+  if ((duel.chain_status || 'UNINITIALIZED') !== 'INITIALIZED' || !duel.onchain_duel_pda) {
+    return { success: false, error: 'Duel is not initialized on-chain; settlement refused' };
   }
 
   const category = duel.category?.toLowerCase();
@@ -68,31 +75,32 @@ async function resolveDuel(duelId) {
   }
 
   const winningSide = resolutionResult.winningSide;
-  let onchainTxSignature = 'simulated_resolution_tx';
+  // The resolver keypair below is the program's resolver authority; the
+  // program rejects any other signer (error 104). Any chain failure aborts
+  // settlement with NO database writes — receipts are only ever backed by a
+  // real confirmed transaction.
+  let onchainTxSignature;
+  {
+    const connection = new Connection(DEVNET_RPC, 'confirmed');
+    const resolverKeypair = getResolverKeypair();
+    const duelPdaPubkey = new PublicKey(duel.onchain_duel_pda);
 
-  // Execute on-chain transaction if onchain_duel_pda exists
-  if (duel.onchain_duel_pda) {
+    const resolveIx = new TransactionInstruction({
+      programId: PROGRAM_ID,
+      keys: [
+        { pubkey: resolverKeypair.publicKey, isSigner: true, isWritable: false },
+        { pubkey: duelPdaPubkey, isSigner: false, isWritable: true },
+      ],
+      data: serializeResolveDuel(winningSide),
+    });
+
+    const tx = new Transaction().add(resolveIx);
     try {
-      const connection = new Connection(DEVNET_RPC, 'confirmed');
-      const resolverKeypair = getResolverKeypair();
-      const duelPdaPubkey = new PublicKey(duel.onchain_duel_pda);
-
-      const resolveIx = new TransactionInstruction({
-        programId: PROGRAM_ID,
-        keys: [
-          { pubkey: resolverKeypair.publicKey, isSigner: true, isWritable: false },
-          { pubkey: duelPdaPubkey, isSigner: false, isWritable: true },
-        ],
-        data: serializeResolveDuel(winningSide),
-      });
-
-      const tx = new Transaction().add(resolveIx);
       onchainTxSignature = await sendAndConfirmTransaction(connection, tx, [resolverKeypair]);
-      console.log(`[PASS] On-chain duel resolution confirmed! Tx: ${onchainTxSignature}`);
     } catch (err) {
-      console.warn(`[WARN] On-chain resolution submission note: ${err.message}`);
-      onchainTxSignature = `devnet_${Date.now().toString(36)}`;
+      return { success: false, error: `On-chain settlement failed; duel left unresolved: ${err.message}` };
     }
+    console.log(`[PASS] On-chain duel resolution confirmed! Tx: ${onchainTxSignature}`);
   }
 
   const newStatus = winningSide === 1 ? 'RESOLVED_SIDE_A' : winningSide === 2 ? 'RESOLVED_SIDE_B' : 'CANCELLED';

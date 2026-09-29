@@ -108,6 +108,12 @@ export interface Duel {
   winning_side: number;
   resolution_data?: string;
   resolution_tx?: string;
+  // Canonical chain binding (see server/chain.js + app/src/chain.ts).
+  onchain_duel_bump?: number;
+  onchain_vault_bump?: number;
+  onchain_mint?: string;
+  init_tx_signature?: string;
+  chain_status?: 'UNINITIALIZED' | 'INITIALIZED';
   is_arena: number;
   share_slug?: string;
   created_at: string;
@@ -122,6 +128,7 @@ export interface Position {
   position_pda?: string;
   claimed: number;
   claim_tx?: string;
+  stake_tx_signature?: string;
   created_at: string;
 }
 

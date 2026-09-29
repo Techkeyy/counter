@@ -8,14 +8,25 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { PublicKey } from '@solana/web3.js';
 import { Duel } from '../types';
 import { colors, spacing } from '../theme';
 import { api } from '../api';
+import { getConnection } from '../wallet';
+import {
+  ChainAccounts,
+  buildDepositStakeIx,
+  buildUserAtaCreateIxIfNeeded,
+  mwaSignSendConfirm,
+  usdToBaseUnits,
+  CUSD_DECIMALS,
+} from '../chain';
 
 interface BackModalProps {
   visible: boolean;
   duel: Duel | null;
   side: 1 | 2; // 1 = Side A, 2 = Side B
+  userWallet: string | null;
   onClose: () => void;
   onStakeRecorded: () => void;
 }
@@ -24,11 +35,13 @@ export const BackModal: React.FC<BackModalProps> = ({
   visible,
   duel,
   side,
+  userWallet,
   onClose,
   onStakeRecorded,
 }) => {
   const [amount, setAmount] = useState('50');
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!duel) return null;
@@ -48,21 +61,74 @@ export const BackModal: React.FC<BackModalProps> = ({
   const potentialPayout = (stakeNum * parseFloat(simOdds)).toFixed(2);
 
   const handleDeposit = async () => {
-    if (stakeNum <= 0) {
+    if (!userWallet) {
+      setError('Connect a Solana wallet first (MWA) to back a side.');
+      return;
+    }
+    let stakeUsd: number;
+    let amountBase: number;
+    try {
+      stakeUsd = parseFloat(amount);
+      amountBase = usdToBaseUnits(amount);
+    } catch {
       setError('Please enter a valid cUSD stake amount');
       return;
     }
 
     setLoading(true);
     setError(null);
+    setStatus('Fetching canonical duel accounts…');
 
     try {
-      await api.recordStake(duel.id, side, stakeNum);
+      // 1. Canonical accounts from the backend (single-derivation rule).
+      const acct = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
+      if (acct.chainStatus !== 'INITIALIZED') {
+        throw new Error('Duel is not initialized on-chain yet. Ask a captain to initialize it first.');
+      }
+      const user = new PublicKey(userWallet);
+
+      // 2. Balance check against the real cUSD token account.
+      const conn = getConnection();
+      let userAtaExists = false;
+      let balanceBase = 0;
+      try {
+        const bal = await conn.getTokenAccountBalance(new PublicKey(acct.userAta!));
+        userAtaExists = true;
+        balanceBase = Number(bal.value.amount);
+      } catch {
+        userAtaExists = false;
+      }
+      if (balanceBase < amountBase) {
+        const have = (balanceBase / 10 ** CUSD_DECIMALS).toFixed(2);
+        throw new Error(
+          userAtaExists
+            ? `Insufficient cUSD balance (have $${have}, need $${stakeUsd}). Fund via the Devnet faucet first.`
+            : `No cUSD token account yet and balance is $0. Fund via the Devnet faucet first (need $${stakeUsd}).`
+        );
+      }
+
+      // 3. Build the REAL DepositStake instruction (+ ATA creation if needed).
+      setStatus('Approve the stake in your wallet…');
+      const ixs = [];
+      const ataIx = buildUserAtaCreateIxIfNeeded(user, userAtaExists);
+      if (ataIx) ixs.push(ataIx);
+      ixs.push(buildDepositStakeIx(acct, user, side, amountBase));
+
+      // 4. MWA sign + send + confirm on Devnet.
+      setStatus('Sending to Devnet…');
+      const signature = await mwaSignSendConfirm(ixs, user);
+
+      // 5. Backend independently verifies the tx before indexing.
+      setStatus('Verifying on-chain deposit…');
+      await api.recordStake(duel.id, side, stakeUsd, signature, acct.positionPda);
+
       setLoading(false);
+      setStatus(null);
       onStakeRecorded();
       onClose();
     } catch (err: any) {
       setLoading(false);
+      setStatus(null);
       setError(err.message || 'Failed to deposit stake');
     }
   };
@@ -126,6 +192,7 @@ export const BackModal: React.FC<BackModalProps> = ({
           </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
+          {status && !error && <Text style={styles.statusText}>{status}</Text>}
 
           <TouchableOpacity
             style={[styles.submitBtn, { backgroundColor: sideColor }]}
@@ -254,6 +321,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.duelCrimson,
+    fontSize: 12,
+    marginBottom: spacing.sm,
+  },
+  statusText: {
+    color: colors.textSecondary,
     fontSize: 12,
     marginBottom: spacing.sm,
   },

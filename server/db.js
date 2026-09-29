@@ -185,6 +185,14 @@ async function getDb() {
   `);
 
   saveDb();
+  // Chain-path columns (added after initial schema; ALTER is idempotent via PRAGMA check).
+  ensureColumn('duels', 'onchain_duel_bump', 'INTEGER');
+  ensureColumn('duels', 'onchain_vault_bump', 'INTEGER');
+  ensureColumn('duels', 'onchain_mint', 'TEXT');
+  ensureColumn('duels', 'init_tx_signature', 'TEXT');
+  ensureColumn('duels', 'chain_status', "TEXT DEFAULT 'UNINITIALIZED'");
+  ensureColumn('positions', 'stake_tx_signature', 'TEXT');
+  saveDb();
   return db;
 }
 
@@ -196,6 +204,17 @@ function saveDb() {
 }
 
 // Helpers for SQL execution with sql.js
+function columnExists(table, column) {
+  const rows = queryAll(`PRAGMA table_info(${table})`, []);
+  return rows.some((r) => r.name === column);
+}
+
+function ensureColumn(table, column, type) {
+  if (!columnExists(table, column)) {
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
 function queryAll(sql, params = []) {
   const stmt = db.prepare(sql);
   stmt.bind(params);
