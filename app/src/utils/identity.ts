@@ -18,17 +18,17 @@ interface UserIdentityInput {
 
 export function formatUserDisplayName(user?: UserIdentityInput | null): string {
   if (!user) return 'Contender';
-  if (user.display_name && user.display_name.trim().length > 0) {
-    return user.display_name.trim();
+  const displayName = user.display_name?.trim();
+  if (displayName && displayName.length > 0 && !displayName.startsWith('user_')) {
+    return displayName;
   }
-  if (user.name && user.name.trim().length > 0) {
-    return user.name.trim();
+  const name = user.name?.trim();
+  if (name && name.length > 0 && !name.startsWith('user_')) {
+    return name;
   }
-  if (user.handle && user.handle.trim().length > 0) {
-    const cleanHandle = user.handle.replace(/^@/, '').trim();
-    if (cleanHandle.length > 0) {
-      return cleanHandle;
-    }
+  const handle = user.handle?.replace(/^@/, '').trim();
+  if (handle && handle.length > 0 && !handle.startsWith('user_')) {
+    return handle;
   }
   if (user.wallet) {
     return formatWalletShort(user.wallet);
@@ -36,16 +36,16 @@ export function formatUserDisplayName(user?: UserIdentityInput | null): string {
   return 'Contender';
 }
 
-export function formatUserHandle(user?: UserIdentityInput | null): string {
-  if (!user) return '@contender';
+export function formatUserHandle(user?: UserIdentityInput | null): string | null {
+  if (!user) return null;
   if (user.handle && user.handle.trim().length > 0) {
     const clean = user.handle.replace(/^@/, '').trim();
-    return `@${clean}`;
+    if (clean.length > 0 && !clean.startsWith('user_')) {
+      return `@${clean}`;
+    }
   }
-  if (user.wallet) {
-    return `@${user.wallet.slice(0, 4).toLowerCase()}${user.wallet.slice(-4).toLowerCase()}`;
-  }
-  return '@contender';
+  // Never fabricate handles (e.g. @6p8vrsbe) from wallet address
+  return null;
 }
 
 export function getAvatarUri(avatarUrl?: string | null, seed?: string | null): string {

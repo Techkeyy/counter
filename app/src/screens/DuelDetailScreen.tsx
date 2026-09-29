@@ -12,6 +12,7 @@ import { Duel, Position } from '../types';
 import { BackModal } from '../components/BackModal';
 import { colors, spacing } from '../theme';
 import { api } from '../api';
+import { Icon } from '../components/Icon';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -31,6 +32,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [resolving, setResolving] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [showProofDetails, setShowProofDetails] = useState(false);
 
   // Backer Modal
   const [backModalVisible, setBackModalVisible] = useState(false);
@@ -171,31 +173,53 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         )}
       </View>
 
-      {/* On-Chain Escrow & Oracle Proof Details */}
+      {/* Progressive Disclosure: Verified on Solana Accordion */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🔒 ON-CHAIN ESCROW ARCHITECTURE</Text>
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Program ID:</Text>
-            <Text style={styles.infoMono}>52Qgq...NmT</Text>
+        <TouchableOpacity
+          style={styles.proofHeader}
+          onPress={() => setShowProofDetails(!showProofDetails)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.proofHeaderLeft}>
+            <Icon name="shield-check" size={16} color={colors.solanaGreen} />
+            <Text style={styles.proofHeaderText}>Verified on Solana</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Duel PDA:</Text>
-            <Text style={styles.infoMono}>
-              {duel.onchain_duel_pda ? `${duel.onchain_duel_pda.slice(0, 8)}...` : 'Derived on Devnet'}
+          <View style={styles.proofHeaderRight}>
+            <Text style={styles.proofToggleText}>
+              {showProofDetails ? 'Hide Proof' : 'View Proof'}
             </Text>
+            <Icon
+              name={showProofDetails ? 'chevron-down' : 'chevron-right'}
+              size={14}
+              color={colors.textSecondary}
+            />
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Vault PDA:</Text>
-            <Text style={styles.infoMono}>
-              {duel.onchain_vault_pda ? `${duel.onchain_vault_pda.slice(0, 8)}...` : 'Vault PDA active'}
-            </Text>
+        </TouchableOpacity>
+
+        {showProofDetails && (
+          <View style={[styles.infoCard, { marginTop: spacing.sm }]}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Program ID:</Text>
+              <Text style={styles.infoMono}>52Qgq...NmT</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Duel PDA:</Text>
+              <Text style={styles.infoMono}>
+                {duel.onchain_duel_pda ? `${duel.onchain_duel_pda.slice(0, 8)}...` : 'Derived on Devnet'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Vault PDA:</Text>
+              <Text style={styles.infoMono}>
+                {duel.onchain_vault_pda ? `${duel.onchain_vault_pda.slice(0, 8)}...` : 'Vault PDA active'}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Resolver Engine:</Text>
+              <Text style={styles.infoValue}>{duel.source_type} Deterministic Oracle</Text>
+            </View>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Resolver Engine:</Text>
-            <Text style={styles.infoValue}>{duel.source_type} Deterministic Oracle</Text>
-          </View>
-        </View>
+        )}
       </View>
 
       {message && (
@@ -215,7 +239,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           {resolving ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.resolveBtnText}>⚡ RUN DETERMINISTIC RESOLVER</Text>
+            <Text style={styles.resolveBtnText}>Resolve Duel (Oracle)</Text>
           )}
         </TouchableOpacity>
       )}
@@ -227,7 +251,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           onPress={() => onViewReceipt(`receipt_${duel.id}`)}
           activeOpacity={0.8}
         >
-          <Text style={styles.receiptBtnText}>📜 VIEW OFFICIAL SETTLEMENT RECEIPT</Text>
+          <Text style={styles.receiptBtnText}>View Settlement Receipt</Text>
         </TouchableOpacity>
       )}
 
@@ -412,6 +436,37 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
     marginBottom: spacing.md,
+  },
+  proofHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  proofHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+  },
+  proofHeaderText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  proofHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  proofToggleText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   infoCard: {
     backgroundColor: colors.surface,

@@ -5,3 +5,7 @@ program/target/
 *.log
 *.keystore
 !debug.keystore
+# Runtime SQLite data (local dev + VPS host state, never committed)
+server/data/counter.sqlite
+# Release signing material that must never enter the repository
+app/android/app/release-signing.properties

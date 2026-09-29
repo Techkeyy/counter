@@ -106,15 +106,17 @@ export async function connectAndAuthenticate(): Promise<WalletState> {
       };
     });
   } catch (err: any) {
-    console.warn('[MWA Note]: Running fallback dev connection:', err?.message);
-    // Dev fallback for quick preview/testing without physical MWA wallet app
-    const fallbackKey = '3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7';
+    // No mock fallback in any build: a failed/cancelled wallet authorization
+    // must surface as disconnected so the product never fabricates identity,
+    // session tokens, or arena eligibility. Wallet rejection is a normal
+    // outcome the UI handles explicitly.
+    console.warn('[MWA] authorization failed or cancelled:', err?.message);
     return {
-      connected: true,
-      publicKey: fallbackKey,
-      authToken: 'mock_dev_session_token',
-      isArenaEligible: true,
-      skrStakedAmount: 791399.49,
+      connected: false,
+      publicKey: null,
+      authToken: null,
+      isArenaEligible: false,
+      skrStakedAmount: 0,
     };
   }
 }

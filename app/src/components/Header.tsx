@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
         <Text style={styles.logoText}>COUNTER</Text>
         {isArenaEligible && (
           <View style={styles.arenaBadge}>
-            <Icon name="sparkles" size={10} color={colors.arenaBadge} />
+            <Icon name="trophy" size={10} color={colors.arenaBadge} />
             <Text style={styles.arenaBadgeText}>ARENA</Text>
           </View>
         )}

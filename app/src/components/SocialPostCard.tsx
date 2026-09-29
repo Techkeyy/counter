@@ -57,6 +57,7 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
 
   const handleShare = async () => {
     try {
+      const effectiveAuthor = authorHandle || authorDisplayName;
       if (type === 'RECEIPT' && receipt) {
         await Share.share({
           message: `Counter Permanent Receipt: ${authorDisplayName} won the duel on Counter! ${take.content}`,
@@ -67,7 +68,7 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
         });
       } else {
         await Share.share({
-          message: `"${take.content}" - Take by ${authorHandle} on Counter. Think they're wrong? Challenge them!`,
+          message: `"${take.content}" - Take by ${effectiveAuthor} on Counter. Think they're wrong? Challenge them!`,
         });
       }
     } catch {
@@ -92,9 +93,11 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
             <Text style={styles.displayName} numberOfLines={1}>
               {authorDisplayName}
             </Text>
-            <Text style={styles.handle} numberOfLines={1}>
-              {authorHandle}
-            </Text>
+            {authorHandle ? (
+              <Text style={styles.handle} numberOfLines={1}>
+                {authorHandle}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -141,8 +144,8 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
                 onPress={() => onChallengePress(take)}
                 activeOpacity={0.8}
               >
-                <Icon name="swords" size={14} color="#000000" />
-                <Text style={styles.challengeButtonText}>Challenge Take</Text>
+                <Icon name="swords" size={13} color={colors.textSecondary} />
+                <Text style={styles.challengeButtonText}>Challenge</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -347,15 +350,18 @@ const styles = StyleSheet.create({
   challengeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.brandPrimary,
+    backgroundColor: colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    paddingVertical: spacing.xs + 1,
     borderRadius: borderRadius.full,
     gap: spacing.xs,
   },
   challengeButtonText: {
     ...typography.captionBold,
-    color: '#000000',
+    color: colors.textSecondary,
+    fontSize: 12,
   },
   conflictBox: {
     backgroundColor: colors.surface,

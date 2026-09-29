@@ -109,6 +109,11 @@ router.post('/:id/init-onchain', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'Duel not found' });
   }
 
+  // Only duel captains may anchor on-chain addresses for their duel.
+  if (req.userWallet !== duel.captain_a_wallet && req.userWallet !== duel.captain_b_wallet) {
+    return res.status(403).json({ error: 'Only duel captains can anchor on-chain addresses' });
+  }
+
   execute(
     `UPDATE duels SET onchain_duel_pda = ?, onchain_vault_pda = ?, vault_token_account = ? WHERE id = ?`,
     [onchainDuelPda, onchainVaultPda, vaultTokenAccount, duelId]
@@ -121,9 +126,13 @@ router.post('/:id/init-onchain', requireAuth, (req, res) => {
 router.post('/:id/stake', requireAuth, (req, res) => {
   const duelId = req.params.id;
   const userWallet = req.userWallet;
-  const { side, amount, positionPda, txSignature } = req.body;
+  // Accept both `amount` (canonical) and `stakeAmount` (client alias).
+  // NOTE: amounts are client-reported; on-chain deposit verification is
+  // UNENFORCED at this boundary (see claim-mechanism-proof ledger).
+  const { side, amount: amountRaw, stakeAmount: stakeAmountRaw, positionPda, txSignature } = req.body;
+  const amount = amountRaw !== undefined ? amountRaw : stakeAmountRaw;
 
-  if (!side || !amount) {
+  if (!side || amount === undefined || amount === null) {
     return res.status(400).json({ error: 'side and amount are required' });
   }
 
@@ -134,6 +143,10 @@ router.post('/:id/stake', requireAuth, (req, res) => {
 
   const sideNum = Number(side);
   const amountNum = Number(amount);
+
+  if ((sideNum !== 1 && sideNum !== 2) || !Number.isFinite(amountNum) || amountNum <= 0) {
+    return res.status(400).json({ error: 'side must be 1 or 2 and amount must be a positive number' });
+  }
 
   // Check existing position
   const posId = `pos_${duelId}_${userWallet}`;
@@ -171,7 +184,10 @@ router.post('/:id/stake', requireAuth, (req, res) => {
 });
 
 // POST /api/duels/:id/resolve (Trigger resolution engine)
-router.post('/:id/resolve', async (req, res) => {
+// Requires authentication; the engine itself is deterministic per duel terms.
+// Any authenticated caller can trigger it — resolver authority on-chain
+// remains with the program's resolver key, and re-resolution is rejected.
+router.post('/:id/resolve', requireAuth, async (req, res) => {
   const duelId = req.params.id;
   const result = await resolveDuel(duelId);
   if (!result.success) {

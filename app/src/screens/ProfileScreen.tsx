@@ -129,7 +129,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
           )}
         </View>
-        <Text style={styles.handle}>{handle}</Text>
+        {handle ? <Text style={styles.handle}>{handle}</Text> : null}
         <Text style={styles.bio}>
           {user?.bio || 'Contender on Counter. Disputing claims on Solana.'}
         </Text>

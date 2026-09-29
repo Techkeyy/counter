@@ -103,10 +103,14 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file("${projectDir}/counter-release.keystore")
-            storePassword 'counter123'
-            keyAlias 'counter'
-            keyPassword 'counter123'
+            // Release signing secrets are NEVER hardcoded: they come from the
+            // build environment so the public repository carries no credentials.
+            // Set COUNTER_RELEASE_STORE_FILE (optional), COUNTER_RELEASE_STORE_PASSWORD,
+            // COUNTER_RELEASE_KEY_ALIAS (optional), COUNTER_RELEASE_KEY_PASSWORD.
+            storeFile file(System.getenv("COUNTER_RELEASE_STORE_FILE") ?: "${projectDir}/counter-release.keystore")
+            storePassword System.getenv("COUNTER_RELEASE_STORE_PASSWORD") ?: { throw new GradleException("Missing COUNTER_RELEASE_STORE_PASSWORD env var for release signing") }()
+            keyAlias System.getenv("COUNTER_RELEASE_KEY_ALIAS") ?: "counter"
+            keyPassword System.getenv("COUNTER_RELEASE_KEY_PASSWORD") ?: { throw new GradleException("Missing COUNTER_RELEASE_KEY_PASSWORD env var for release signing") }()
         }
     }
     buildTypes {

@@ -82,8 +82,9 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
 
   const handleShare = async () => {
     try {
+      const effectiveAuthor = authorHandle || authorDisplayName;
       await Share.share({
-        message: `"${take.content}" by ${take.author_name || take.author_handle || 'Contender'} on Counter. Check it out or challenge them!`,
+        message: `"${take.content}" by ${effectiveAuthor} on Counter. Check it out or challenge them!`,
       });
     } catch {
       // user cancelled
@@ -123,7 +124,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
           <Image source={{ uri: avatarUri }} style={styles.avatar} />
           <View style={styles.mainAuthorInfo}>
             <Text style={styles.displayName}>{authorDisplayName}</Text>
-            <Text style={styles.handle}>{authorHandle}</Text>
+            {authorHandle ? <Text style={styles.handle}>{authorHandle}</Text> : null}
           </View>
           <View style={styles.categoryPill}>
             <Text style={styles.categoryText}>{take.category}</Text>

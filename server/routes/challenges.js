@@ -8,7 +8,8 @@ const { requireAuth } = require('../auth');
 router.post('/', requireAuth, (req, res) => {
   const {
     takeId,
-    creatorWallet, // Captain A
+    creatorWallet: creatorWalletRaw,
+    targetWallet: targetWalletRaw, // client alias for creatorWallet (Captain A)
     propositionA,
     propositionB,
     category,
@@ -18,6 +19,11 @@ router.post('/', requireAuth, (req, res) => {
     cutoffTs,
     resolutionTs,
   } = req.body;
+
+  // Accept both field names so the counterparty is never silently dropped.
+  // NOTE: creatorWallet is still client-asserted; challenge integrity against
+  // take authorship is SOFT (see claim-mechanism-proof ledger).
+  const creatorWallet = creatorWalletRaw || targetWalletRaw;
 
   const challengerWallet = req.userWallet; // Captain B
 
@@ -69,6 +75,11 @@ router.post('/:id/counter', requireAuth, (req, res) => {
   const challenge = queryOne(`SELECT * FROM challenges WHERE id = ?`, [challengeId]);
   if (!challenge) {
     return res.status(404).json({ error: 'Challenge not found' });
+  }
+
+  // Only the two counterparties may negotiate terms.
+  if (proposerWallet !== challenge.creator_wallet && proposerWallet !== challenge.challenger_wallet) {
+    return res.status(403).json({ error: 'Only challenge counterparties can counteroffer' });
   }
 
   if (challenge.status !== 'PROPOSED' && challenge.status !== 'COUNTERED') {
@@ -139,6 +150,11 @@ router.post('/:id/accept', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'Challenge not found' });
   }
 
+  // Only the two counterparties may accept and spawn the duel.
+  if (userWallet !== challenge.creator_wallet && userWallet !== challenge.challenger_wallet) {
+    return res.status(403).json({ error: 'Only challenge counterparties can accept' });
+  }
+
   if (challenge.status !== 'PROPOSED' && challenge.status !== 'COUNTERED') {
     return res.status(400).json({ error: `Cannot accept challenge in state: ${challenge.status}` });
   }
@@ -195,6 +211,11 @@ router.post('/:id/decline', requireAuth, (req, res) => {
   const challenge = queryOne(`SELECT * FROM challenges WHERE id = ?`, [challengeId]);
   if (!challenge) {
     return res.status(404).json({ error: 'Challenge not found' });
+  }
+
+  // Only the two counterparties may decline.
+  if (userWallet !== challenge.creator_wallet && userWallet !== challenge.challenger_wallet) {
+    return res.status(403).json({ error: 'Only challenge counterparties can decline' });
   }
 
   execute(`UPDATE challenges SET status = 'DECLINED' WHERE id = ?`, [challengeId]);

@@ -111,9 +111,12 @@ export const api = {
     sourceType: string;
     sourceConfig: any;
   }) => {
+    // Server contract uses `creatorWallet` (Captain A / take author).
+    // Send both keys so the challenge counterparty is never silently dropped
+    // by a field-name mismatch.
     return request<Challenge>(`/challenges`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, creatorWallet: data.targetWallet }),
     });
   },
   createCounteroffer: async (challengeId: string, data: {
@@ -169,9 +172,11 @@ export const api = {
     });
   },
   recordStake: async (duelId: string, side: 1 | 2, stakeAmount: number, positionPda?: string) => {
+    // Server contract uses `amount`. Send both keys so stakes are never
+    // silently dropped by a field-name mismatch.
     return request<{ success: boolean; duel: Duel; position: any }>(`/duels/${duelId}/stake`, {
       method: 'POST',
-      body: JSON.stringify({ side, stakeAmount, positionPda }),
+      body: JSON.stringify({ side, amount: stakeAmount, stakeAmount, positionPda }),
     });
   },
   resolveDuel: async (duelId: string) => {

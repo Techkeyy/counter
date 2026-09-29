@@ -22,6 +22,7 @@ import { OnboardingModal } from './src/components/OnboardingModal';
 import { Icon } from './src/components/Icon';
 import { colors, spacing, borderRadius } from './src/theme';
 import { connectAndAuthenticate, WalletState } from './src/wallet';
+import { api } from './src/api';
 import { Take, Duel, Receipt } from './src/types';
 
 type Tab = 'FEED' | 'ARENA' | 'CREATE' | 'ACTIVITY' | 'PROFILE';
@@ -56,10 +57,15 @@ export default function App() {
         setSelectedTake(null);
         setSelectedReceipt(null);
       } else if (parsed.path?.startsWith('receipt/')) {
+        // counter://receipt/:id must render the permanent receipt, not the duel.
         const receiptId = parsed.path.replace('receipt/', '');
-        setSelectedDuelId(receiptId.replace('receipt_', ''));
+        setSelectedDuelId(null);
         setSelectedTake(null);
         setSelectedReceipt(null);
+        api
+          .getReceipt(receiptId)
+          .then((receipt) => setSelectedReceipt(receipt))
+          .catch((err) => console.warn('[DEEP LINK] receipt fetch failed:', err?.message));
       }
     };
 
@@ -238,7 +244,7 @@ export default function App() {
           activeOpacity={0.8}
         >
           <Icon
-            name="sparkles"
+            name="trophy"
             size={20}
             color={currentTab === 'ARENA' ? colors.arenaBadge : colors.textSecondary}
           />

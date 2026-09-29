@@ -60,8 +60,9 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
         propositionB: sideBTerms,
         category,
         stakeAmountUsd: stake,
-        cutoffTs: Date.now() + 24 * 3600 * 1000, // 24 hours lock
-        resolutionTs: Date.now() + 48 * 3600 * 1000,
+        // Server stores cutoff_ts / resolution_ts as UNIX seconds.
+        cutoffTs: Math.floor(Date.now() / 1000) + 24 * 3600, // 24 hours lock
+        resolutionTs: Math.floor(Date.now() / 1000) + 48 * 3600,
         sourceType: category,
         sourceConfig: {
           category,
