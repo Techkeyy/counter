@@ -221,9 +221,9 @@ app/
 - **Build Tool:** `./gradlew assembleRelease --no-daemon`
 - **Build Outcome:** `BUILD SUCCESSFUL in 18m 38s (535 actionable tasks)`
 - **APK Path:** `app/android/app/build/outputs/apk/release/app-release.apk`
-- **APK File Size:** `61,768,652 bytes` (~61.8 MB)
-- **APK SHA-256 Digest:** `A94116A708F646C7BE7768920C3603223608D46F90E0D3B71FF77EF5E797F818`
-- **JS Bundle Size:** `2,206,148 bytes` (2.21 MB Hermes bytecode)
+- **APK File Size:** `61,772,688 bytes` (~61.8 MB)
+- **APK SHA-256 Digest:** `69F038A7D85A15C0EA8C6A52DB0E4FE1112AA28039793DD111B66C2428F19158`
+- **JS Bundle Size:** `2,214,624 bytes` (2.21 MB Hermes bytecode)
 - **Bundler:** Canonical Expo CLI (`@expo/cli export:embed`)
 - **Signing Certificate SHA-256:** `3a:b2:8e:39:97:b7:e3:c0:f0:95:aa:ec:cb:c9:b8:86:69:4a:dc:74:f4:ab:7c:3a:37:44:63:e4:bc:fb:ff:25`
 - **Digital Asset Links Package:** `app.counter.mobile` (matches certificate and live hosted `/.well-known/assetlinks.json`)
