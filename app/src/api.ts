@@ -238,6 +238,19 @@ export const api = {
     return res?.user || res;
   },
 
+  // Faucet (Devnet test cUSD — no monetary value)
+  requestFaucet: async () => {
+    return request<{
+      success: boolean;
+      amount: number;
+      tokenMint: string;
+      txSignature: string;
+      balanceBefore: number;
+      balanceAfter: number;
+      retryAfterHours?: number;
+    }>(`/faucet/cusd`, { method: 'POST' });
+  },
+
   // Moderation
   reportContent: async (targetType: 'TAKE' | 'DUEL' | 'USER', targetId: string, reason: string) => {
     return request<{ success: boolean }>(`/moderation/report`, {

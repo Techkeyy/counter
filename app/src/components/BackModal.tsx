@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Duel } from '../types';
 import { colors, spacing } from '../theme';
 import { api } from '../api';
@@ -20,6 +21,7 @@ import {
   mwaSignSendConfirm,
   usdToBaseUnits,
   CUSD_DECIMALS,
+  CUSD_MINT,
 } from '../chain';
 
 interface BackModalProps {
@@ -43,6 +45,8 @@ export const BackModal: React.FC<BackModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [needsFunding, setNeedsFunding] = useState(false);
+  const [funding, setFunding] = useState(false);
 
   if (!duel) return null;
 
@@ -59,6 +63,57 @@ export const BackModal: React.FC<BackModalProps> = ({
     : (simPoolB > 0 ? (simTotal / simPoolB).toFixed(2) : '2.00');
 
   const potentialPayout = (stakeNum * parseFloat(simOdds)).toFixed(2);
+
+  // Devnet test-cUSD faucet. Success is ONLY marked after the wallet's ACTUAL
+  // token balance is re-read on-chain — never on HTTP 200 alone. The returned
+  // mint must equal the authoritative AXMB7 mint.
+  const handleFaucet = async () => {
+    if (!userWallet) {
+      setError('Connect a Solana wallet first (MWA).');
+      return;
+    }
+    setFunding(true);
+    setError(null);
+    setStatus('Requesting Devnet test cUSD…');
+    try {
+      const res = await api.requestFaucet();
+      if (res.tokenMint !== CUSD_MINT.toBase58()) {
+        throw new Error(
+          `Faucet misconfigured: issued ${res.tokenMint.slice(0, 8)}…, expected the Counter test mint. Funding NOT counted.`
+        );
+      }
+      // Re-read the ACTUAL on-chain balance (retry: mint visibility lags).
+      const conn = getConnection();
+      const user = new PublicKey(userWallet);
+      const ata: PublicKey = getAssociatedTokenAddressSync(CUSD_MINT, user, false);
+      let refreshed: number | null = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const bal = await conn.getTokenAccountBalance(ata);
+          refreshed = Number(bal.value.amount) / 10 ** CUSD_DECIMALS;
+          if (refreshed > 0) break;
+        } catch {}
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      if (refreshed === null || refreshed <= 0) {
+        throw new Error(
+          `Faucet tx ${res.txSignature.slice(0, 8)}… confirmed but the balance refresh failed. Check the explorer link, then retry.`
+        );
+      }
+      setStatus(`Funded $${refreshed.toFixed(2)} Devnet test cUSD (no monetary value). You can deposit now.`);
+      setNeedsFunding(false);
+    } catch (err: any) {
+      const msg: string = err?.message || 'Faucet request failed';
+      if (/24 hours|Rate limit|429/i.test(msg)) {
+        setError('Faucet rate limit: one Devnet claim per 24 hours per wallet. Try again later.');
+      } else {
+        setError(msg);
+      }
+      setStatus(null);
+    } finally {
+      setFunding(false);
+    }
+  };
 
   const handleDeposit = async () => {
     if (!userWallet) {
@@ -100,12 +155,14 @@ export const BackModal: React.FC<BackModalProps> = ({
       }
       if (balanceBase < amountBase) {
         const have = (balanceBase / 10 ** CUSD_DECIMALS).toFixed(2);
+        setNeedsFunding(true);
         throw new Error(
           userAtaExists
-            ? `Insufficient cUSD balance (have $${have}, need $${stakeUsd}). Fund via the Devnet faucet first.`
-            : `No cUSD token account yet and balance is $0. Fund via the Devnet faucet first (need $${stakeUsd}).`
+            ? `Insufficient test cUSD (have $${have}, need $${stakeUsd}). Use “Get test cUSD” below, then retry.`
+            : `No test cUSD yet (need $${stakeUsd}). Use “Get test cUSD” below, then retry.`
         );
       }
+      setNeedsFunding(false);
 
       // 3. Build the REAL DepositStake instruction (+ ATA creation if needed).
       setStatus('Approve the stake in your wallet…');
@@ -193,6 +250,21 @@ export const BackModal: React.FC<BackModalProps> = ({
 
           {error && <Text style={styles.errorText}>{error}</Text>}
           {status && !error && <Text style={styles.statusText}>{status}</Text>}
+
+          {needsFunding && (
+            <TouchableOpacity
+              style={styles.faucetBtn}
+              onPress={handleFaucet}
+              disabled={funding || loading}
+              activeOpacity={0.8}
+            >
+              {funding ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <Text style={styles.faucetBtnText}>Get test cUSD (Devnet · no cash value)</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.submitBtn, { backgroundColor: sideColor }]}
@@ -340,5 +412,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  faucetBtn: {
+    backgroundColor: colors.warningYellow,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  faucetBtnText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: '900',
   },
 });

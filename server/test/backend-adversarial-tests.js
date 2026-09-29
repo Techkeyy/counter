@@ -251,6 +251,24 @@ async function runTests() {
   assert(repRows.length === 1, 'Report must be recorded');
   console.log('✓ Moderation, Reporting & Blocking passed\n');
 
+  // Fixture teardown: remove this suite's fixed-id rows so repeated runs do
+  // not accumulate dev-DB clutter (random test wallets are left untouched).
+  for (const sql of [
+    `DELETE FROM activity WHERE target_id IN ('take_test_001','chal_test_001','chal_002','duel_test_001','duel_test_002')`,
+    `DELETE FROM positions WHERE duel_id LIKE 'duel_test%'`,
+    `DELETE FROM receipts WHERE duel_id LIKE 'duel_test%'`,
+    `DELETE FROM counteroffers WHERE challenge_id IN ('chal_test_001','chal_002')`,
+    `DELETE FROM challenges WHERE id IN ('chal_test_001','chal_002')`,
+    `DELETE FROM comments WHERE id = 'comm_001'`,
+    `DELETE FROM duels WHERE id LIKE 'duel_test%'`,
+    `DELETE FROM takes WHERE id = 'take_test_001'`,
+    `DELETE FROM blocks WHERE id = 'block_001'`,
+    `DELETE FROM reports WHERE id = 'rep_001'`,
+  ]) {
+    try { execute(sql, []); } catch {}
+  }
+  console.log('✓ Test fixtures cleaned\n');
+
   console.log('====================================================');
   console.log('  ALL 8/8 BACKEND ADVERSARIAL TEST SUITES PASSED!   ');
   console.log('====================================================');

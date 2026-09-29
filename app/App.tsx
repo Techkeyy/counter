@@ -22,6 +22,13 @@ import { OnboardingModal } from './src/components/OnboardingModal';
 import { Icon } from './src/components/Icon';
 import { colors, spacing, borderRadius } from './src/theme';
 import { connectAndAuthenticate, WalletState } from './src/wallet';
+import {
+  SecureSessionStorage,
+  restoreSession,
+  saveSession,
+  clearSession,
+  DISCONNECTED,
+} from './src/session';
 import { api } from './src/api';
 import { Take, Duel, Receipt } from './src/types';
 
@@ -29,13 +36,8 @@ type Tab = 'FEED' | 'ARENA' | 'CREATE' | 'ACTIVITY' | 'PROFILE';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<Tab>('FEED');
-  const [walletState, setWalletState] = useState<WalletState>({
-    connected: false,
-    publicKey: null,
-    authToken: null,
-    isArenaEligible: false,
-    skrStakedAmount: 0,
-  });
+  const [walletState, setWalletState] = useState<WalletState>(DISCONNECTED);
+  const [restoring, setRestoring] = useState(true);
 
   // Selected Detail Views
   const [selectedDuelId, setSelectedDuelId] = useState<string | null>(null);
@@ -45,6 +47,31 @@ export default function App() {
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Restore the securely stored session on cold start. The stored token is
+  // validated against the backend; invalid/expired sessions are cleared and
+  // yield the disconnected state (never synthesized identity).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const restored = await restoreSession();
+        if (cancelled) return;
+        setWalletState(restored);
+        setShowOnboarding(!restored.connected);
+      } catch {
+        if (!cancelled) {
+          setWalletState(DISCONNECTED);
+          setShowOnboarding(true);
+        }
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Handle Deep Linking
   useEffect(() => {
@@ -79,20 +106,29 @@ export default function App() {
 
   const handleConnectWallet = async () => {
     const state = await connectAndAuthenticate();
-    setWalletState(state);
-    if (!state.connected) {
+    if (state.connected && state.publicKey && state.authToken) {
+      // Persist the authenticated session in OS-backed secure storage.
+      try {
+        await saveSession(SecureSessionStorage, {
+          wallet: state.publicKey,
+          token: state.authToken,
+        });
+      } catch (err) {
+        console.warn('[SESSION] persist failed:', (err as Error)?.message);
+      }
+      setWalletState(state);
+      setShowOnboarding(false);
+    } else {
+      await clearSession(SecureSessionStorage);
+      setWalletState(DISCONNECTED);
       setShowOnboarding(true);
     }
   };
 
-  const handleDisconnectWallet = () => {
-    setWalletState({
-      connected: false,
-      publicKey: null,
-      authToken: null,
-      isArenaEligible: false,
-      skrStakedAmount: 0,
-    });
+  const handleDisconnectWallet = async () => {
+    await clearSession(SecureSessionStorage);
+    setWalletState(DISCONNECTED);
+    setShowOnboarding(true);
   };
 
   const clearDetailViews = () => {
