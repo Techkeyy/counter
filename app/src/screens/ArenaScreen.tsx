@@ -37,7 +37,7 @@ export const ArenaScreen: React.FC<ArenaScreenProps> = ({
   const loadArenaDuels = async () => {
     try {
       const duels = await api.getDuels({ isArena: true });
-      setArenaDuels(duels);
+      setArenaDuels(Array.isArray(duels) ? duels : []);
     } catch (err) {
       console.warn('Failed to load arena duels:', err);
     } finally {

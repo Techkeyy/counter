@@ -34,7 +34,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       setUser(profile);
       setStats(profile.stats);
       const userReceipts = await api.getUserReceipts(wallet);
-      setReceipts(userReceipts);
+      setReceipts(Array.isArray(userReceipts) ? userReceipts : []);
     } catch (err) {
       console.warn('Failed to load profile:', err);
     } finally {

@@ -59,29 +59,45 @@ export const api = {
   },
 
   // Takes
-  getTakes: async (category?: string) => {
+  getTakes: async (category?: string): Promise<Take[]> => {
     const query = category ? `?category=${category}` : '';
-    return request<Take[]>(`/takes${query}`);
+    const res = await request<any>(`/takes${query}`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.takes)) return res.takes;
+    return [];
   },
-  getTake: async (id: string) => {
-    return request<Take & { comments: Comment[]; duels: Duel[] }>(`/takes/${id}`);
+  getTake: async (id: string): Promise<Take & { comments: Comment[]; duels: Duel[] }> => {
+    const res = await request<any>(`/takes/${id}`);
+    if (res && res.take) {
+      return {
+        ...res.take,
+        comments: Array.isArray(res.comments) ? res.comments : [],
+        duels: Array.isArray(res.duels) ? res.duels : [],
+      };
+    }
+    return res;
   },
-  createTake: async (topic: string, content: string, category: string) => {
-    return request<Take>(`/takes`, {
+  createTake: async (topic: string, content: string, category: string): Promise<Take> => {
+    const res = await request<any>(`/takes`, {
       method: 'POST',
       body: JSON.stringify({ topic, content, category }),
     });
+    return res?.take || res;
   },
-  addComment: async (takeId: string, content: string) => {
-    return request<Comment>(`/takes/${takeId}/comments`, {
+  addComment: async (takeId: string, content: string): Promise<Comment> => {
+    const res = await request<any>(`/takes/${takeId}/comments`, {
       method: 'POST',
       body: JSON.stringify({ content }),
     });
+    return res?.comment || res;
   },
 
   // Challenges & Negotiation
-  getChallenges: async () => {
-    return request<Challenge[]>(`/challenges`);
+  getChallenges: async (): Promise<Challenge[]> => {
+    const res = await request<any>(`/challenges`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.challenges)) return res.challenges;
+    return [];
   },
   proposeChallenge: async (data: {
     takeId?: string;
@@ -125,15 +141,26 @@ export const api = {
   },
 
   // Duels & Arena
-  getDuels: async (options: { isArena?: boolean; category?: string; status?: string } = {}) => {
+  getDuels: async (options: { isArena?: boolean; category?: string; status?: string } = {}): Promise<Duel[]> => {
     const params = new URLSearchParams();
     if (options.isArena) params.append('isArena', '1');
     if (options.category) params.append('category', options.category);
     if (options.status) params.append('status', options.status);
-    return request<Duel[]>(`/duels?${params.toString()}`);
+    const res = await request<any>(`/duels?${params.toString()}`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.duels)) return res.duels;
+    return [];
   },
-  getDuel: async (id: string) => {
-    return request<Duel & { positions: any[]; myPosition?: any }>(`/duels/${id}`);
+  getDuel: async (id: string): Promise<Duel & { positions: any[]; myPosition?: any }> => {
+    const res = await request<any>(`/duels/${id}`);
+    if (res && res.duel) {
+      return {
+        ...res.duel,
+        positions: Array.isArray(res.positions) ? res.positions : [],
+        myPosition: res.myPosition || null,
+      };
+    }
+    return res;
   },
   initOnChainDuel: async (duelId: string, onchainDuelPda: string, onchainVaultPda: string, termsHash: string) => {
     return request<{ success: boolean; duel: Duel }>(`/duels/${duelId}/init-onchain`, {
@@ -154,25 +181,43 @@ export const api = {
   },
 
   // Receipts
-  getReceipt: async (id: string) => {
-    return request<Receipt>(`/receipts/${id}`);
+  getReceipt: async (id: string): Promise<Receipt> => {
+    const res = await request<any>(`/receipts/${id}`);
+    if (res && res.receipt) {
+      return {
+        ...res.receipt,
+        positions: Array.isArray(res.positions) ? res.positions : [],
+      };
+    }
+    return res;
   },
-  getUserReceipts: async (wallet: string) => {
-    return request<Receipt[]>(`/receipts/user/${wallet}`);
+  getUserReceipts: async (wallet: string): Promise<Receipt[]> => {
+    const res = await request<any>(`/receipts/user/${wallet}`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.receipts)) return res.receipts;
+    return [];
   },
 
   // Users & Profiles
-  getUserProfile: async (wallet: string) => {
-    return request<User & { stats: any }>(`/users/${wallet}`);
+  getUserProfile: async (wallet: string): Promise<User & { stats: any }> => {
+    const res = await request<any>(`/users/${wallet}`);
+    if (res && res.user) {
+      return {
+        ...res.user,
+        stats: res.stats || {},
+      };
+    }
+    return res;
   },
   getRivalry: async (wallet: string, opponentWallet: string) => {
     return request<Rivalry>(`/users/${wallet}/rivalry/${opponentWallet}`);
   },
   updateProfile: async (data: Partial<User>) => {
-    return request<User>(`/users/profile`, {
+    const res = await request<any>(`/users/profile`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+    return res?.user || res;
   },
 
   // Moderation
@@ -190,7 +235,10 @@ export const api = {
   },
 
   // Activity
-  getActivity: async () => {
-    return request<ActivityNotification[]>(`/activity`);
+  getActivity: async (): Promise<ActivityNotification[]> => {
+    const res = await request<any>(`/activity`);
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.activity)) return res.activity;
+    return [];
   },
 };

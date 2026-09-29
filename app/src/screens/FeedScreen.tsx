@@ -50,8 +50,8 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
         api.getTakes(catParam),
         api.getDuels({ category: catParam }),
       ]);
-      setTakes(fetchedTakes);
-      setDuels(fetchedDuels);
+      setTakes(Array.isArray(fetchedTakes) ? fetchedTakes : []);
+      setDuels(Array.isArray(fetchedDuels) ? fetchedDuels : []);
     } catch (err) {
       console.warn('Failed to load feed data:', err);
     } finally {
@@ -126,14 +126,14 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
         <FlatList
           data={[
             { type: 'DUELS_HEADER' },
-            ...duels.map((d) => ({ type: 'DUEL', data: d })),
+            ...(Array.isArray(duels) ? duels : []).map((d) => ({ type: 'DUEL', data: d })),
             { type: 'TAKES_HEADER' },
-            ...takes.map((t) => ({ type: 'TAKE', data: t })),
+            ...(Array.isArray(takes) ? takes : []).map((t) => ({ type: 'TAKE', data: t })),
           ]}
           keyExtractor={(item, index) => `${item.type}_${index}`}
           renderItem={({ item }: any) => {
             if (item.type === 'DUELS_HEADER') {
-              return duels.length > 0 ? (
+              return (Array.isArray(duels) && duels.length > 0) ? (
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>🔥 LIVE 1V1 DUELS & BACKER POOLS</Text>
                 </View>

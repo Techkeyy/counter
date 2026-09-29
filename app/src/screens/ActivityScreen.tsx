@@ -26,7 +26,7 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
   const loadActivities = async () => {
     try {
       const data = await api.getActivity();
-      setActivities(data);
+      setActivities(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn('Failed to load activity:', err);
     } finally {
