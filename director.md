@@ -4,7 +4,7 @@
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
 **Current Authoritative Status:** `DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`  
-**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld this entire phase: VPS received only read-only public GETs; no restart/edit/reload of anything remote)  
+**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld across all sessions including this close-out: only read-only public GETs; no restart/edit/reload of anything remote)  
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
 **Authoritative Local Commit:** `d6b7fcd` + this ledger (commit pending at time of writing)  
@@ -676,5 +676,76 @@ fixed during the run; product code untouched by them.)
   alignment BLOCKED on owner-authorized deploy.**
 - All §34.I chain-path classifications stand (chain-proven via node keypairs; MWA legs pending device).
 - VPS was NOT mutated (state this explicitly: **zero remote commands that change state**).
+
+---
+
+## 36. PRE-UAT GATE CLOSURE — 2026-09-30 (Builder, from `cdfdf88`)
+
+> Close-out verification only: no features, no VPS mutation, no Devnet lifecycle rerun.
+> Status set exactly: **`DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`**.
+
+### 36.A — Final state reconstruction
+
+- `git status`: clean (no dirty/untracked entries). Branch `master`. HEAD **`cdfdf88`**
+  (note: NOT `d6b7fcd` — `d6b7fcd` is the code commit; `cdfdf88` adds only `director.md` on top,
+  committed and pushed by the prior session; nothing to discard, nothing missing).
+- `git log -5`: `cdfdf88`, `d6b7fcd`, `8c32a8f`, `520dada`, `efa3c74`. `git diff` / `git diff --cached`:
+  empty. `origin/master` = `cdfdf88`, in sync.
+- Artifacts present: `app/src/session.ts`, `app/session.test.js`, `BackModal` faucet flow,
+  `probes/migration-dry-run.js`, `probes/local-chain-smoke.js`,
+  `server/test/chain-vectors.test.js`, fresh release APK.
+
+### 36.B — Deterministic re-verification at HEAD (no architecture change)
+
+- TypeScript check (all touched app files incl. session/chain/faucet flows): **0 errors**.
+- Session tests (real `session.ts`): **5/5 pass**.
+- Chain vectors: **11/11 pass**.
+- Backend adversarial suite: **8/8 pass** (external-oracle section honest-SKIPs offline — recorded
+  as SKIP, not deterministic proof). Fixture teardown verified: **zero smoke/test leftovers**.
+- Migration dry-run and 12-check local smoke NOT rerun (prior exits 0 recorded in §35; no code they
+  cover has changed since — `cdfdf88`/`d6b7fcd` touch only director + dep manifest).
+
+### 36.C — Release APK re-verification (artifact from `d6b7fcd` code = HEAD code)
+
+- Path `app/android/app/build/outputs/apk/release/app-release.apk`: **62,017,908 bytes**,
+  SHA-256 **`0AB0AA189FAEB68C271538446CE99CAD9E6684A309EF0BBDBFCCB177283A3344`** (recomputed,
+  matches), package `app.counter.mobile`, cert SHA-256
+  `3ab28e3997b7e3c0f095aaeccbc9b886694adc74f4ab7c3a374463e4bcfbff25` (matches).
+- Embedded bundle (fresh extraction): production backend ✓, AXMB7 mint ✓, program ID ✓ present;
+  mock token / fallback wallet / `counter123` / key headers / JWT default **absent** ✓.
+  `localhost`×3 + `127.0.0.1`×1 re-traced to the same library constants (Metro :8080 fallback,
+  web3.js cluster enum + default RPC :8899, DNS name table) — **no application-owned localhost
+  production API dependency**. No signing credentials echoed.
+
+### 36.D — Secret scan + production/device findings
+
+- Tracked-source scan (154 files, key shapes; lockfiles + this ledger excluded): **0 hits** → push allowed.
+- Production re-probed read-only: `chain-accounts` → 404, `claim` → 404 → **still OLD backend**;
+  physical UAT against production remains BLOCKED until Counter deployment.
+- `adb devices -l` → **empty**. No UAT. No release-candidate claim.
+
+### 36.E — Ledger close-out (hardware-dependent claims stay unproven)
+
+- Session persistence: IMPLEMENTED + deterministic tests → hardware observation pending.
+- Faucet (AXMB7, balance-reread): IMPLEMENTED + local/backend/chain proof → production deploy + phone UX pending.
+- Economic path: REAL Devnet/backend proof → MWA hardware leg pending.
+- Production backend: OLD VERSION OBSERVED → new backend NOT DEPLOYED.
+- Android-native: fresh APK built + verified → physical execution pending.
+
+### 36.F — Prepared Counter-only VPS deployment (NOT executed; STRICT ISOLATION ACTIVE)
+
+1. `systemctl status counter-backend --no-pager` (record state; service owns only Counter).
+2. Confirm working dir `/opt/counter/server` + `counter-backend.service` unit before touching anything.
+3. `git rev-parse HEAD` in `/opt/counter/server` (record deployed commit).
+4. Verify env WITHOUT revealing values: `JWT_SECRET` set and ≠ default; `KEYPAIR_PATH` file exists;
+   `DEVNET_CUSD_MINT` = AXMB7…; `PROGRAM_ID` = 52Qgq…NmT. Print ONLY the resolver **public** key.
+5. Timestamped backup: `cp data/counter.sqlite backups/counter-$(date +%Y%m%d%H%M%S).sqlite`.
+6. Update Counter code only (exact approved commit; no unrelated packages/services).
+7. Boot → idempotent migration (proven §35.D).
+8. `systemctl restart counter-backend` (only this service).
+9. `journalctl -u counter-backend -n 50` inspect.
+10. Row counts vs backup; `/health` 200; `chain-accounts` now serves AXMB7 model.
+11. Negative probes: fabricated init/stake/claim → 400, no state change; resolver has no pseudo path.
+12. Rollback on any failure: restore backup sqlite + prior commit + restart `counter-backend` only.
 
 
