@@ -3,30 +3,53 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER  
-**Current Authoritative Status:** `BUILDING — RELEASE ARTIFACT VERIFIED`  
+**Current Authoritative Status:** `BUILDING — NATIVE EXPO RUNTIME RESTORED (UAT HARDWARE PENDING)`  
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations)  
 **Repository State:** On branch `master`  
-**Last Updated:** 2026-09-29T10:55:00Z  
+**Last Updated:** 2026-09-29T13:48:00Z  
 
 ---
 
-## 1. Executive Summary & Operational State
+## 1. Native Expo Runtime Failure Diagnosis & Resolution
 
-The release bootstrap crash (`Could not get BatchedBridge`) has been diagnosed and resolved.
+### A. Exact Symbolicated Frame
+- **Error:** `TypeError: Cannot read property 'EventEmitter' of undefined, js engine: hermes` at `anonymous@1:731028`
+- **Package:** `expo-modules-core@2.2.3`
+- **File:** `node_modules/expo-modules-core/src/EventEmitter.ts`
+- **Line & Column:** Line 9, Column 30
+- **Code:** `export default globalThis.expo.EventEmitter as typeof EventEmitter;`
+- **Underlying Cause:** `globalThis.expo` is `undefined`. At line 6, `ensureNativeModulesAreInstalled()` calls `NativeModules.ExpoModulesCore?.installModules()`. Because `NativeModules.ExpoModulesCore` was `undefined`, JSI interop (`kotlinInterop.installJSIInterop()`) was never executed.
 
-- **Root Cause Diagnosed:**
-  1. `app/index.js` was empty (0 bytes), causing Metro to produce a 12.7 KB stub bundle containing only global polyfills and no application components.
-  2. Metro config had `unstable_enablePackageExports: false`, which failed on modern ESM exports in `@solana-mobile/mobile-wallet-adapter-protocol`.
-  3. `app/android/app/build.gradle` react config used `@expo/cli export:embed` which was unable to resolve the project structure under pnpm.
+### B. Root Cause Identified
+In `app/react-native.config.js`, a manual override was present:
+```javascript
+expo: {
+  platforms: {
+    android: null, // explicitly excluded Expo from React Native autolinking
+    ios: null,
+  }
+}
+```
+This configuration caused React Native's autolinking to skip `expo`, so `PackageList.java` did NOT import or instantiate `ExpoModulesPackage`. Consequently, `ExpoModulesPackage.createNativeModules()` was never called, `ExpoBridgeModule` (`ExpoModulesCore`) was never registered in the React Native runtime, and `globalThis.expo` was never populated.
 
-- **Resolution Implemented:**
-  1. Root entry point `app/index.js` created with runtime polyfills (`react-native-get-random-values`, `react-native-url-polyfill/auto`, `Buffer`) and `registerRootComponent(App)`.
-  2. Dependencies `@solana/kit` and `bs58` installed into `app/`.
-  3. `app/metro.config.js` updated with `unstable_enablePackageExports: true` and explicit `resolveRequest` fallback.
-  4. `app/android/app/build.gradle` updated with standard React Native CLI bundler and explicit `entryFile = file("../../index.js")`.
-  5. Successful release build (`assembleRelease`) completed in Gradle.
-  6. Verified `assets/index.android.bundle` inside `app-release.apk` is **2,098,192 bytes (2.10 MB)** of valid standalone application code and Hermes bytecode.
-  7. Verified APK signing certificate SHA-256 (`3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25`) matches live `.well-known/assetlinks.json`.
+### C. Resolution Implemented
+1. **Autolinking Configuration (`app/react-native.config.js`):**
+   Explicitly configured `expo` to autolink with `import expo.modules.ExpoModulesPackage;` and `new ExpoModulesPackage()`.
+2. **MainApplication Safeguard (`MainApplication.kt`):**
+   Updated `getPackages()` to ensure `ExpoModulesPackage()` is registered:
+   ```kotlin
+   val packages = PackageList(this).packages.toMutableList()
+   if (!packages.any { it is ExpoModulesPackage }) {
+       packages.add(ExpoModulesPackage())
+   }
+   return packages
+   ```
+3. **Restored Canonical Expo CLI Bundler (`app/android/app/build.gradle`):**
+   Restored `cliFile` to `@expo/cli` and `bundleCommand` to `export:embed`. Verified that `@expo/cli export:embed` bundles all 745 modules (~2.04 MB) cleanly without error.
+4. **Verified Generated `PackageList.java`:**
+   Confirmed lines 16 & 65 now contain `import expo.modules.ExpoModulesPackage;` and `new ExpoModulesPackage()`.
+5. **Recompiled Signed Release APK:**
+   Ran `assembleRelease` producing signed release APK `app-release.apk` (61,568,048 bytes).
 
 ---
 
@@ -34,14 +57,15 @@ The release bootstrap crash (`Could not get BatchedBridge`) has been diagnosed a
 
 | Verification Check | Target / Expected | Observed / Actual | Status |
 |---|---|---|---|
-| **APK Path** | `app/android/app/build/outputs/apk/release/app-release.apk` | Present (`61,582,676 bytes`) | **PASS** |
+| **APK Path** | `app/android/app/build/outputs/apk/release/app-release.apk` | Present (`61,568,048 bytes`) | **PASS** |
 | **Package Name** | `app.counter.mobile` | `app.counter.mobile` | **PASS** |
-| **JS Bundle Size** | > 1.5 MB bundled Hermes/JS | `2,098,192 bytes (2.10 MB)` | **PASS** |
+| **APK SHA-256** | Distinct new hash | `5CCEBBA65D31608E04F21AC241DD9724C918C18E0B7F23FF5350D727F87B25BE` | **PASS** |
+| **JS Bundle Size** | > 1.5 MB bundled Hermes bytecode | `2,037,904 bytes (2.04 MB, 745 modules)` | **PASS** |
+| **Bundling Tool** | Canonical Expo CLI (`export:embed`) | `@expo/cli export:embed` | **PASS** |
+| **Native Module Registration** | `ExpoModulesPackage` in `PackageList.java` | Present (lines 16 & 65) | **PASS** |
 | **Signing Cert SHA-256** | `3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25` | `3a:b2:8e:39:97:b7:e3:c0:f0:95:aa:ec:cb:c9:b8:86:69:4a:dc:74:f4:ab:7c:3a:37:44:63:e4:bc:fb:ff:25` | **PASS** |
 | **VPS Backend API** | `https://counter.103-195-188-198.sslip.io/api/health` | HTTP 200 OK | **PASS** |
 | **Digital Asset Links** | `https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json` | HTTP 200 OK (matching cert & package) | **PASS** |
-| **Shared Duel OG** | `https://counter.103-195-188-198.sslip.io/d/sol125` | HTTP 200 OK (OpenGraph tags present) | **PASS** |
-| **Shared Receipt OG** | `https://counter.103-195-188-198.sslip.io/r/rcpt_seed_sol_won` | HTTP 200 OK (OpenGraph tags present) | **PASS** |
 
 ---
 
@@ -88,9 +112,9 @@ When device `R38M10L6J9V` or any physical Android device is connected via USB / 
 # 1. Install signed release APK
 adb install -r C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
 
-# 2. Launch Counter
+# 2. Cold launch MainActivity
 adb shell am start -n app.counter.mobile/.MainActivity
 
 # 3. Monitor runtime logs
-adb logcat -d -s ReactNative:V ReactNativeJS:V AndroidRuntime:E mqt_js:V
+adb logcat -d -s ReactNative:V ReactNativeJS:V AndroidRuntime:E mqt_js:V mqt_native_modules:V
 ```
