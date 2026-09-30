@@ -95,3 +95,31 @@ file is replaced by `DuelsScreen`; SKR-gating copy moves to duel detail/profile.
 
 Program, AXMB7 mint, backend trust boundaries, SIWS/MWA architecture, production
 backend + data (no row wipes), signing identity, App Links. VPS untouched.
+
+## 9. Final verification (post-implementation)
+
+- Emoji sweep (unicode-range over all `app/src` + `App.tsx`, comments excluded):
+  **0 hits**. Prior "0 emojis" ledger claim was false; the 11 real spots are gone.
+- Em/en dash sweep over UI text: **0 hits**.
+- `tsc --noEmit`: **0 errors**. Session tests **5/5**. Chain vectors **11/11**.
+  Backend adversarial **8/8** (live oracle, fixtures cleaned).
+- Dead components deleted: `TakeCard`, `DuelCard`, `ReceiptCard` (0 usages each).
+- `expo-clipboard@~7.0.1` added (real copy action; autolinked at build).
+- Additional dispositions closed during implementation:
+  - H15 (new): profile copy button was icon-only theater → real
+    `Clipboard.setStringAsync` with confirmation state.
+  - H16 (new): MWA identity `uri` + wallet/chain authorize URIs used unowned
+    `counter.app` → production host (same host-alignment as App Links).
+  - H17 (new): `ActivityScreen` action filter missed server type
+    `COUNTEROFFER_RECEIVED` → filter now covers both spellings.
+  - H18 (new): `TakeDetailScreen` reply/load failures were silent → inline error
+    with retry; challenge CTA labeled and 48dp.
+- Accepted non-findings (documented, not changed): `console.warn` logs aid field
+  diagnosis via logcat and are invisible in UI; dicebear identicons are
+  wallet-derived (no fake faces); `toFixed(2)` formats real backend values;
+  input placeholders are examples, not data; win-rate/streak derive from real
+  records; per-app battery-setting recovery path is UNVERIFIED on hardware and
+  the help copy says only what is proven.
+- a11y: every interactive element carries `accessibilityLabel` (+ role/state
+  where meaningful); icon-only buttons meet 48dp; text meets 12px floor
+  (body 14-15px); mono reserved for wallets/signatures/IDs.
