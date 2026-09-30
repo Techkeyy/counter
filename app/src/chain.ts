@@ -234,7 +234,7 @@ export async function mwaSignSendConfirm(
       cluster: 'devnet',
       identity: {
         name: 'Counter Mobile',
-        uri: 'https://counter.app',
+        uri: 'https://counter.103-195-188-198.sslip.io',
         icon: 'favicon.ico',
       },
     });

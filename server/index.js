@@ -103,7 +103,7 @@ app.get('/d/:slug', async (req, res) => {
   <meta property="og:type" content="website"/>
   <meta property="og:site_name" content="Counter Solana"/>
   <meta property="al:android:url" content="${deepLink}"/>
-  <meta property="al:android:package" content="com.counter.app"/>
+  <meta property="al:android:package" content="app.counter.mobile"/>
   <meta property="al:android:app_name" content="Counter"/>
   <style>
     body { background: #0b0c10; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -157,7 +157,7 @@ app.get('/r/:id', async (req, res) => {
   <meta property="og:type" content="article"/>
   <meta property="og:site_name" content="Counter Solana"/>
   <meta property="al:android:url" content="${deepLink}"/>
-  <meta property="al:android:package" content="com.counter.app"/>
+  <meta property="al:android:package" content="app.counter.mobile"/>
   <meta property="al:android:app_name" content="Counter"/>
   <style>
     body { background: #0b0c10; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
