@@ -1,97 +1,41 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { colors, typography, spacing, touchMin } from '../theme';
 import { Icon } from './Icon';
-import { WalletConnectionStatus } from '../wallet';
+import { getAvatarUri } from '../utils/identity';
 
 interface HeaderProps {
   wallet: string | null;
-  connectionStatus: WalletConnectionStatus;
-  onConnectWallet: () => void;
-  onOpenActivity?: () => void;
-  onComposeTake?: () => void;
+  onAvatarPress: () => void;
 }
 
-function shortWallet(w: string): string {
-  return `${w.slice(0, 4)}...${w.slice(-4)}`;
-}
-
-export const Header: React.FC<HeaderProps> = ({
-  wallet,
-  connectionStatus,
-  onConnectWallet,
-  onOpenActivity,
-  onComposeTake,
-}) => {
-  const busy = connectionStatus === 'CONNECTING' || connectionStatus === 'WAITING_FOR_WALLET' || connectionStatus === 'VERIFYING';
-  const walletLabel =
-    connectionStatus === 'CONNECTED' && wallet
-      ? shortWallet(wallet)
-      : connectionStatus === 'CONNECTING'
-        ? 'Connecting'
-        : connectionStatus === 'WAITING_FOR_WALLET'
-          ? 'Opening wallet'
-          : connectionStatus === 'VERIFYING'
-            ? 'Verifying'
-            : 'Connect';
+// Restrained authenticated header: wordmark plus identity avatar. Wallet,
+// compose, and notifications live where they belong (Profile, FAB, Activity).
+export const Header: React.FC<HeaderProps> = ({ wallet, onAvatarPress }) => {
+  const avatarUri = getAvatarUri(null, wallet);
 
   return (
     <View style={styles.container}>
-      <View style={styles.brandRow}>
-        <Icon name="swords" size={22} color={colors.brandPrimary} accessibilityLabel="Counter home" />
-        <Text style={styles.logoText}>COUNTER</Text>
-        <View style={styles.devnetBadge} accessibilityLabel="Test build on Solana Devnet">
-          <Text style={styles.devnetText}>Test build · Solana Devnet</Text>
-        </View>
+      <View style={styles.brandCol}>
+        <Text style={styles.logoText}>Counter</Text>
+        <Text style={styles.netText}>Devnet test build</Text>
       </View>
 
-      <View style={styles.actionsRow}>
-        {onComposeTake && (
-          <TouchableOpacity
-            style={styles.composeButton}
-            onPress={onComposeTake}
-            activeOpacity={0.8}
-            accessibilityLabel="Post a take"
-            accessibilityRole="button"
-          >
-            <Icon name="plus" size={20} color="#000000" />
-          </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.avatarButton}
+        onPress={onAvatarPress}
+        activeOpacity={0.8}
+        accessibilityLabel={wallet ? 'Open your profile' : 'Connect wallet in profile'}
+        accessibilityRole="button"
+      >
+        {wallet ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Icon name="user" size={20} color={colors.textSecondary} />
+          </View>
         )}
-        <TouchableOpacity
-          style={styles.walletButton}
-          onPress={onConnectWallet}
-          activeOpacity={0.8}
-          disabled={busy}
-          accessibilityLabel={wallet ? `Wallet ${shortWallet(wallet)}` : 'Connect Solana wallet'}
-          accessibilityRole="button"
-        >
-          {busy ? (
-            <ActivityIndicator size="small" color={colors.brandPrimary} />
-          ) : wallet ? (
-            <View style={styles.connectedRow}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.walletText}>{walletLabel}</Text>
-            </View>
-          ) : (
-            <View style={styles.connectedRow}>
-              <Icon name="wallet" size={16} color={colors.brandPrimary} />
-              <Text style={styles.connectText}>{walletLabel}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        {onOpenActivity && (
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={onOpenActivity}
-            activeOpacity={0.8}
-            accessibilityLabel="Open activity"
-            accessibilityRole="button"
-          >
-            <Icon name="bell" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        )}
-      </View>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -103,84 +47,46 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flex: 1,
+  brandCol: {
+    justifyContent: 'center',
   },
   logoText: {
-    ...typography.h3,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    ...typography.h2,
+    fontWeight: '800',
+    letterSpacing: 0.5,
     color: colors.textPrimary,
   },
-  devnetBadge: {
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  devnetText: {
+  netText: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontSize: 11,
+    marginTop: 1,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  composeButton: {
+  avatarButton: {
     width: touchMin,
     height: touchMin,
-    borderRadius: touchMin / 2,
-    backgroundColor: colors.brandPrimary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  walletButton: {
-    minHeight: touchMin,
-    justifyContent: 'center',
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surfaceLight,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.full,
+  },
+  avatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceLight,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-  },
-  connectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.brandPrimary,
-  },
-  walletText: {
-    ...typography.mono,
-    color: colors.textPrimary,
-    fontSize: 13,
-  },
-  connectText: {
-    ...typography.bodyBold,
-    color: colors.brandPrimary,
-    fontSize: 13,
-  },
-  iconButton: {
-    width: touchMin,
-    height: touchMin,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: touchMin / 2,
   },
 });
 

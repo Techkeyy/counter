@@ -16,6 +16,7 @@ import { Take, Comment, Duel } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
+import { DuelAttachment } from '../components/DuelAttachment';
 import {
   formatUserDisplayName,
   formatUserHandle,
@@ -120,73 +121,52 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* Main Take Author Header */}
+        {/* Conversation head: the opinion first */}
         <View style={styles.mainAuthorRow}>
           <Image source={{ uri: avatarUri }} style={styles.avatar} />
           <View style={styles.mainAuthorInfo}>
             <Text style={styles.displayName}>{authorDisplayName}</Text>
             {authorHandle ? <Text style={styles.handle}>{authorHandle}</Text> : null}
           </View>
-          <View style={styles.categoryPill}>
-            <Text style={styles.categoryText}>{take.category}</Text>
-          </View>
         </View>
 
-        {/* Take Topic & Content */}
         <Text style={styles.topicText}>{take.topic}</Text>
         <Text style={styles.contentText}>{take.content}</Text>
 
-        {/* Timestamp & Metadata */}
         <View style={styles.metaRow}>
           <Text style={styles.timestamp}>
             {new Date(take.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ·{' '}
             {new Date(take.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
           </Text>
-        </View>
-
-        {/* Big Action Bar */}
-        <View style={styles.actionBar}>
           <TouchableOpacity
-            style={styles.challengeActionBtn}
-            onPress={() => onChallengeTake(take)}
-            activeOpacity={0.8}
-            accessibilityLabel="Challenge this take to a 1v1 duel"
+            onPress={handleShare}
+            style={styles.metaShare}
+            accessibilityLabel="Share take"
             accessibilityRole="button"
           >
-            <Icon name="swords" size={18} color="#000000" />
-            <Text style={styles.challengeActionText}>Challenge this take</Text>
+            <Icon name="share-2" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Active Duels Born from this Take */}
+        {/* Secondary context action: challenge the opinion, not the money */}
+        <TouchableOpacity
+          style={styles.challengeRow}
+          onPress={() => onChallengeTake(take)}
+          activeOpacity={0.8}
+          accessibilityLabel="Challenge this take to a 1v1 duel"
+          accessibilityRole="button"
+        >
+          <Icon name="swords" size={16} color={colors.brandPrimary} />
+          <Text style={styles.challengeRowText}>Challenge this take</Text>
+          <Icon name="chevron-right" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        {/* Compact duel attachments born from this take */}
         {duels.length > 0 && (
           <View style={styles.duelsSection}>
-            <Text style={styles.sectionHeader}>Active Duels from this Take</Text>
+            <Text style={styles.sectionHeader}>Duels from this take</Text>
             {duels.map((d) => (
-              <TouchableOpacity
-                key={d.id}
-                style={styles.duelCard}
-                onPress={() => onSelectDuel(d)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.duelCardHeader}>
-                  <View style={styles.liveBadge}>
-                    <View style={styles.liveDot} />
-                    <Text style={styles.liveBadgeText}>LIVE DUEL</Text>
-                  </View>
-                  <Text style={styles.poolAmount}>
-                    ${((Number(d.side_a_total) || 0) + (Number(d.side_b_total) || 0)).toFixed(2)} Pool
-                  </Text>
-                </View>
-                <Text style={styles.duelMatchup}>
-                  {d.captain_a_name || formatWalletShort(d.captain_a_wallet)} vs{' '}
-                  {d.captain_b_name || formatWalletShort(d.captain_b_wallet)}
-                </Text>
-                <View style={styles.duelFooter}>
-                  <Text style={styles.viewDuelLink}>View Duel & Back</Text>
-                  <Icon name="arrow-right" size={14} color={colors.solanaGreen} />
-                </View>
-              </TouchableOpacity>
+              <DuelAttachment key={d.id} duel={d} onOpen={onSelectDuel} />
             ))}
           </View>
         )}
@@ -210,18 +190,21 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
           )}
 
           {loading ? (
-            <ActivityIndicator size="small" color={colors.solanaGreen} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator size="small" color={colors.brandPrimary} style={{ marginVertical: spacing.lg }} />
           ) : comments.length === 0 ? (
             <View style={styles.noCommentsBox}>
-              <Text style={styles.noCommentsText}>No replies yet. Be the first to weigh in!</Text>
+              <Text style={styles.noCommentsText}>No replies yet. Start the thread below.</Text>
             </View>
           ) : (
             comments.map((comment) => (
               <View key={comment.id} style={styles.commentItem}>
-                <Image
-                  source={{ uri: getAvatarUri(null, comment.author_wallet) }}
-                  style={styles.commentAvatar}
-                />
+                <View style={styles.railCol}>
+                  <Image
+                    source={{ uri: getAvatarUri(null, comment.author_wallet) }}
+                    style={styles.commentAvatar}
+                  />
+                  <View style={styles.rail} />
+                </View>
                 <View style={styles.commentBody}>
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentAuthor}>
@@ -232,16 +215,6 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
                     </Text>
                   </View>
                   <Text style={styles.commentText}>{comment.content}</Text>
-
-                  {/* Challenge Action on Reply */}
-                  <TouchableOpacity
-                    style={styles.replyChallengeBtn}
-                    onPress={() => onChallengeTake(take)}
-                    activeOpacity={0.8}
-                  >
-                    <Icon name="swords" size={12} color={colors.textSecondary} />
-                    <Text style={styles.replyChallengeText}>Challenge</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             ))
@@ -359,6 +332,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
@@ -366,6 +342,40 @@ const styles = StyleSheet.create({
   timestamp: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  metaShare: {
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  challengeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: touchMin + 4,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  challengeRowText: {
+    ...typography.bodyBold,
+    color: colors.brandPrimary,
+    flex: 1,
+  },
+  railCol: {
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  rail: {
+    flex: 1,
+    width: 2,
+    backgroundColor: colors.surfaceLight,
+    marginTop: 6,
+    minHeight: 12,
   },
   actionBar: {
     marginVertical: spacing.md,

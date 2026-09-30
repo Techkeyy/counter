@@ -188,13 +188,7 @@ export default function App() {
 
       <Header
         wallet={walletState.publicKey}
-        connectionStatus={connectionStatus}
-        onConnectWallet={handleConnectWallet}
-        onOpenActivity={() => openTab('ACTIVITY')}
-        onComposeTake={() => {
-          clearDetailViews();
-          setShowComposer(true);
-        }}
+        onAvatarPress={() => openTab('PROFILE')}
       />
 
       <View style={styles.content}>
@@ -248,7 +242,6 @@ export default function App() {
               <FeedScreen
                 onSelectTake={(take: Take) => setSelectedTake(take)}
                 onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
-                onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
                 onChallengePress={(take: Take) => setChallengeTargetTake(take)}
                 onCreateTakePress={() => {
                   clearDetailViews();
@@ -289,6 +282,21 @@ export default function App() {
           </>
         )}
       </View>
+
+      {currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            clearDetailViews();
+            setShowComposer(true);
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel="Post a take"
+          accessibilityRole="button"
+        >
+          <Icon name="plus" size={24} color="#000000" />
+        </TouchableOpacity>
+      )}
 
       <ChallengeModal
         visible={!!challengeTargetTake}
@@ -358,6 +366,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  fab: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: 84,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.brandPrimary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   linkNotice: {
     flexDirection: 'row',

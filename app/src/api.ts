@@ -32,17 +32,55 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    // Transport never reached the backend (offline, DNS, refused).
+    console.warn(`[API] transport failure ${endpoint}:`, err?.message);
+    throw new Error('NETWORK_UNREACHABLE');
+  }
 
-  const data = await response.json();
+  // Never assume JSON: gateways and default error pages answer HTML (which
+  // used to surface on-device as "JSON Parse error: Unexpected character:
+  // <"). Server JSON error bodies are preserved verbatim; anything else
+  // becomes a status-coded reachability error with no parser text.
+  const contentType = response.headers.get('content-type') || '';
+  let data: any = null;
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch (err: any) {
+      console.warn(`[API] malformed JSON ${endpoint}:`, err?.message);
+      data = null;
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(data.error || `HTTP error ${response.status}`);
+    if (data && typeof data.error === 'string' && data.error.length > 0) {
+      throw new Error(data.error);
+    }
+    throw new Error(`REQUEST_FAILED:${response.status}`);
+  }
+  if (data === null || data === undefined) {
+    throw new Error('REQUEST_FAILED:200');
   }
   return data as T;
 }
+
+// True when the backend was never reached (or answered non-JSON): the UI
+// should render its offline variant, never raw parser text.
+export function isUnreachable(err: any): boolean {
+  const msg = String(err?.message || '');
+  return /NETWORK_UNREACHABLE|REQUEST_FAILED:5|network request failed|failed to fetch|offline/i.test(msg);
+}
+
+// Fixed UI copy for list-level failures. Backend-provided messages stay for
+// action flows (they carry meaning); screens show these instead of raw text.
+export const OFFLINE_MESSAGE = 'NETWORK_UNREACHABLE';
 
 export const api = {
   // Auth

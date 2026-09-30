@@ -1,99 +1,70 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-} from 'react-native';
-import { Take, Duel, Receipt, Category } from '../types';
-import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
-import { api } from '../api';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { Take, Duel } from '../types';
+import { colors, typography, spacing } from '../theme';
+import { api, isUnreachable } from '../api';
 import { SocialPostCard, FeedItem } from '../components/SocialPostCard';
 import { SkeletonPostCard } from '../components/SkeletonLoader';
 import { EmptyState, ErrorState } from '../components/StateViews';
 
-// Honest tabs only: chronological latest + open duels. There is no follow
-// graph and no ranking backend, so Following / For-You tabs were removed.
-type FeedTab = 'LATEST' | 'DUELS';
-
-const CATEGORY_FILTERS: (Category | 'ALL')[] = [
-  'ALL',
-  'CRYPTO',
-  'SPORTS',
-  'WEATHER',
-  'POLITICS',
-  'CULTURE',
-];
-
-function categoryLabel(c: Category | 'ALL'): string {
-  if (c === 'ALL') return 'All';
-  return c.charAt(0) + c.slice(1).toLowerCase();
-}
-
 interface FeedScreenProps {
   onSelectTake: (take: Take) => void;
   onSelectDuel: (duel: Duel) => void;
-  onSelectReceipt?: (receipt: Receipt) => void;
   onChallengePress?: (take: Take) => void;
   onCreateTakePress?: () => void;
   userWallet?: string | null;
   refreshSignal?: number;
 }
 
+// One timeline, chronological, no tabs, no category strip. Category discovery
+// lives in Duels; Following does not exist as backend semantics.
 export const FeedScreen: React.FC<FeedScreenProps> = ({
   onSelectTake,
   onSelectDuel,
-  onSelectReceipt,
   onChallengePress,
   onCreateTakePress,
   refreshSignal,
 }) => {
-  const [activeTab, setActiveTab] = useState<FeedTab>('LATEST');
-  const [selectedCategory, setSelectedCategory] = useState<Category | 'ALL'>('ALL');
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setError(null);
-      const catParam = selectedCategory === 'ALL' ? undefined : selectedCategory;
       const [fetchedTakes, fetchedDuels] = await Promise.all([
-        api.getTakes(catParam),
-        api.getDuels({ category: catParam }),
+        api.getTakes(),
+        api.getDuels(),
       ]);
       setTakes(Array.isArray(fetchedTakes) ? fetchedTakes : []);
       setDuels(Array.isArray(fetchedDuels) ? fetchedDuels : []);
     } catch (err: any) {
-      setError(err?.message || "Couldn't load your feed.");
+      if (isUnreachable(err)) setError('NETWORK_UNREACHABLE');
+      else setError("The timeline couldn't load. Try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, [selectedCategory]);
+  }, [loadData]);
 
   useEffect(() => {
     if (refreshSignal) {
       setRefreshing(true);
       loadData();
     }
-  }, [refreshSignal]);
+  }, [refreshSignal, loadData]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
   };
 
-  // Unified feed: takes with their duel lifecycle state attached. Settled
-  // duels render from duel fields only; receipts always load as backend rows.
   const feedItems = useMemo<FeedItem[]>(() => {
     const duelByTakeId = new Map<string, Duel>();
     const duelList = Array.isArray(duels) ? duels : [];
@@ -136,59 +107,14 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
         items.push({ id: `duel_${d.id}`, type: 'DUEL', take: fallbackTake, duel: d });
       }
     });
-
-    if (activeTab === 'DUELS') {
-      return items.filter((i) => i.type === 'DUEL');
-    }
     return items;
-  }, [takes, duels, activeTab]);
+  }, [takes, duels]);
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabHeader}>
-        {(['LATEST', 'DUELS'] as FeedTab[]).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.primaryTab, activeTab === tab && styles.primaryTabActive]}
-            onPress={() => setActiveTab(tab)}
-            activeOpacity={0.8}
-            accessibilityLabel={tab === 'LATEST' ? 'Latest takes' : 'Open duels'}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === tab }}
-          >
-            <Text style={[styles.primaryTabText, activeTab === tab && styles.primaryTabTextActive]}>
-              {tab === 'LATEST' ? 'Latest' : 'Duels'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.intro}>
+        <Text style={styles.introTitle}>Latest takes</Text>
       </View>
-
-      <View style={styles.categoryBar}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={CATEGORY_FILTERS}
-          keyExtractor={(item) => item}
-          contentContainerStyle={styles.categoryList}
-          renderItem={({ item }) => {
-            const isSelected = selectedCategory === item;
-            return (
-              <TouchableOpacity
-                style={[styles.catChip, isSelected && styles.catChipActive]}
-                onPress={() => setSelectedCategory(item)}
-                activeOpacity={0.8}
-                accessibilityLabel={`Filter by ${categoryLabel(item)}`}
-                accessibilityState={{ selected: isSelected }}
-              >
-                <Text style={[styles.catChipText, isSelected && styles.catChipTextActive]}>
-                  {categoryLabel(item)}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
-
       {loading ? (
         <View style={styles.skeletonContainer}>
           <SkeletonPostCard />
@@ -206,10 +132,10 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
               item={item}
               onPressTake={onSelectTake}
               onPressDuel={onSelectDuel}
-              onPressReceipt={(r) => onSelectReceipt && onSelectReceipt(r)}
               onChallengePress={onChallengePress}
             />
           )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -220,15 +146,11 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
           }
           ListEmptyComponent={
             <EmptyState
-              icon={activeTab === 'DUELS' ? 'swords' : 'message-circle'}
-              title={activeTab === 'DUELS' ? 'No open duels right now' : 'No takes yet'}
-              subtitle={
-                activeTab === 'DUELS'
-                  ? 'Open 1v1 duels appear here as soon as takes get challenged.'
-                  : 'Be the first to post a take worth arguing about.'
-              }
-              actionLabel={activeTab === 'DUELS' ? undefined : 'Post your take'}
-              onAction={activeTab === 'DUELS' ? undefined : onCreateTakePress}
+              icon="message-circle"
+              title="No takes yet"
+              subtitle="Start the conversation with the first take worth arguing about."
+              actionLabel="Post your take"
+              onAction={onCreateTakePress}
             />
           }
         />
@@ -242,66 +164,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  tabHeader: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
+  intro: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  primaryTab: {
-    flex: 1,
-    minHeight: touchMin,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  primaryTabActive: {
-    borderBottomColor: colors.brandPrimary,
-  },
-  primaryTabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  primaryTabTextActive: {
+  introTitle: {
+    ...typography.h2,
     color: colors.textPrimary,
-    fontWeight: '700',
+    fontSize: 20,
   },
-  categoryBar: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-    paddingVertical: spacing.sm,
-  },
-  categoryList: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-  },
-  catChip: {
-    minHeight: touchMin,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.surfaceLight,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  catChipActive: {
-    backgroundColor: colors.surfaceHighlight,
-    borderColor: colors.brandPrimary,
-  },
-  catChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  catChipTextActive: {
-    color: colors.brandPrimary,
-    fontWeight: '700',
+  separator: {
+    height: 1,
+    backgroundColor: colors.cardBorder,
+    marginLeft: 68,
   },
   listContent: {
-    padding: spacing.lg,
     paddingBottom: 96,
   },
   skeletonContainer: {
