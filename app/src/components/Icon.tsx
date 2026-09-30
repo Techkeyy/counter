@@ -32,7 +32,11 @@ export type IconName =
   | 'trending-up'
   | 'users'
   | 'arrow-right'
-  | 'trophy';
+  | 'trophy'
+  | 'send'
+  | 'info'
+  | 'wifi-off'
+  | 'history';
 
 interface IconProps {
   name: IconName;
@@ -242,6 +246,41 @@ export const Icon: React.FC<IconProps> = ({
             <Path d="M4 22h16" />
             <Path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34" />
             <Path d="M18 2H6v7a6 6 0 0 0 12 0V2z" />
+          </>
+        );
+      case 'send':
+        return (
+          <>
+            <Path d="m22 2-7 20-4-9-9-4Z" />
+            <Path d="M22 2 11 13" />
+          </>
+        );
+      case 'info':
+        return (
+          <>
+            <Circle cx="12" cy="12" r="10" />
+            <Path d="M12 16v-4" />
+            <Path d="M12 8h.01" />
+          </>
+        );
+      case 'wifi-off':
+        return (
+          <>
+            <Line x1="2" y1="2" x2="22" y2="22" />
+            <Path d="M8.5 16.5a5 5 0 0 1 7 0" />
+            <Path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+            <Path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76" />
+            <Path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
+            <Path d="M5 13a10 10 0 0 1 5.24-2.76" />
+            <Line x1="12" y1="20" x2="12.01" y2="20" />
+          </>
+        );
+      case 'history':
+        return (
+          <>
+            <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <Path d="M3 3v5h5" />
+            <Path d="M12 7v5l4 2" />
           </>
         );
       default:
