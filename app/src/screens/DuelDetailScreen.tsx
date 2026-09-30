@@ -23,7 +23,7 @@ import {
   mwaSignSendConfirm,
 } from '../chain';
 import { describeCriteria, formatDeadline } from '../utils/criteria';
-import { formatWalletShort, formatRelativeTime, isRealSignature } from '../utils/identity';
+import { formatUserDisplayName, formatRelativeTime, isRealSignature } from '../utils/identity';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -148,7 +148,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     try {
       const res = await api.resolveDuel(duelId);
       if (res.success) {
-        setMessage(`Settled. Winner: ${formatWalletShort(res.winnerWallet)}.`);
+        setMessage('Settled. View the receipt for the outcome.');
         await loadDuelData();
       } else {
         setMessage(`Resolution issue: ${res.error}`);
@@ -213,8 +213,16 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     !myPosition.claimed;
   const isLoser =
     isResolved && !!myPosition && myPosition.side !== duel.winning_side;
-  const nameA = duel.captain_a_name || formatWalletShort(duel.captain_a_wallet);
-  const nameB = duel.captain_b_name || formatWalletShort(duel.captain_b_wallet);
+  const nameA = formatUserDisplayName({
+    display_name: duel.captain_a_name,
+    handle: duel.captain_a_handle,
+    wallet: duel.captain_a_wallet,
+  });
+  const nameB = formatUserDisplayName({
+    display_name: duel.captain_b_name,
+    handle: duel.captain_b_handle,
+    wallet: duel.captain_b_wallet,
+  });
 
   const timeline: { label: string; detail: string }[] = [
     { label: 'Duel formed', detail: formatRelativeTime(duel.created_at) },
@@ -344,9 +352,11 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         ) : (
           positions.map((pos) => (
             <View key={pos.id} style={styles.backerRow}>
-              <Text style={styles.backerWallet}>{formatWalletShort(pos.user_wallet)}</Text>
+              <Text style={styles.backerWallet}>
+                {pos.side === 1 ? 'Side A' : 'Side B'} backer
+              </Text>
               <Text style={[styles.backerSide, pos.side === 1 ? { color: colors.sideA } : { color: colors.sideB }]}>
-                {pos.side === 1 ? 'A' : 'B'} · ${Number(pos.stake_amount).toFixed(0)}
+                ${Number(pos.stake_amount).toFixed(0)}
               </Text>
             </View>
           ))

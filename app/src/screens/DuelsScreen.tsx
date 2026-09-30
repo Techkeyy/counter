@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { Duel, Category } from '../types';
+import { Duel } from '../types';
+import { ALL_CATEGORIES, CategoryFilter, categoryLabel } from '../topics';
 import { colors, typography, spacing, touchMin } from '../theme';
 import { api, isUnreachable } from '../api';
 import { SkeletonPostCard } from '../components/SkeletonLoader';
@@ -22,7 +23,7 @@ const FILTERS: { key: DuelFilter; label: string }[] = [
   { key: 'RESOLVED', label: 'Resolved' },
 ];
 
-const CATEGORIES: (Category | 'ALL')[] = ['ALL', 'CRYPTO', 'SPORTS', 'WEATHER', 'POLITICS', 'CULTURE'];
+const CATEGORIES: CategoryFilter[] = ALL_CATEGORIES;
 
 interface DuelsScreenProps {
   userWallet: string | null;
@@ -34,7 +35,7 @@ interface DuelsScreenProps {
 export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDuel }) => {
   const [duels, setDuels] = useState<Duel[]>([]);
   const [filter, setFilter] = useState<DuelFilter>('OPEN');
-  const [category, setCategory] = useState<Category | 'ALL'>('ALL');
+  const [category, setCategory] = useState<CategoryFilter>('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +151,7 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
             accessibilityState={{ selected: category === c }}
           >
             <Text style={[styles.catText, category === c && styles.catTextActive]}>
-              {c === 'ALL' ? 'All' : c.charAt(0) + c.slice(1).toLowerCase()}
+              {categoryLabel(c)}
             </Text>
           </TouchableOpacity>
         ))}

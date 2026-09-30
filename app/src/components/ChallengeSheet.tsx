@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { api } from '../api';
 import { describeCriteria, formatDeadline } from '../utils/criteria';
-import { formatWalletShort } from '../utils/identity';
+import { formatUserDisplayName, INCOMPLETE_PROFILE_NAME } from '../utils/identity';
 
 interface ChallengeSheetProps {
   challenge: Challenge | null;
@@ -33,11 +33,34 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
   const [counterStake, setCounterStake] = useState('');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [challengerName, setChallengerName] = useState<string>(INCOMPLETE_PROFILE_NAME);
+
+  useEffect(() => {
+    setChallengerName(INCOMPLETE_PROFILE_NAME);
+    if (!challenge) return;
+    let cancelled = false;
+    api
+      .getUserProfile(challenge.challenger_wallet)
+      .then((user) => {
+        if (!cancelled && user) {
+          setChallengerName(
+            formatUserDisplayName({
+              display_name: user.display_name,
+              handle: user.handle,
+              wallet: challenge.challenger_wallet,
+            })
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [challenge?.id]);
 
   if (!challenge) return null;
 
   const isCreator = userWallet === challenge.creator_wallet;
-  const challengerLabel = formatWalletShort(challenge.challenger_wallet);
   const status = challenge.status;
 
   const run = async (fn: () => Promise<any>, after: (res: any) => void) => {
@@ -95,7 +118,7 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
 
             <View style={styles.statusRow}>
               <Text style={styles.statusText}>
-                From {challengerLabel} · {status.toLowerCase()}
+                From {challengerName} · {status.toLowerCase()}
               </Text>
             </View>
 

@@ -21,7 +21,6 @@ import {
   formatUserDisplayName,
   formatUserHandle,
   getAvatarUri,
-  formatWalletShort,
 } from '../utils/identity';
 
 interface TakeDetailScreenProps {
@@ -208,7 +207,11 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
                 <View style={styles.commentBody}>
                   <View style={styles.commentHeader}>
                     <Text style={styles.commentAuthor}>
-                      {comment.author_name || formatWalletShort(comment.author_wallet)}
+                      {formatUserDisplayName({
+                        display_name: comment.author_name,
+                        handle: comment.author_handle,
+                        wallet: comment.author_wallet,
+                      })}
                     </Text>
                     <Text style={styles.commentTime}>
                       {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

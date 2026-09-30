@@ -16,8 +16,22 @@ interface UserIdentityInput {
   wallet?: string | null;
 }
 
+// Designed incomplete-profile state. Wallets are NEVER used as social names:
+// surfaces show this label when no linked Counter profile exists yet.
+export const INCOMPLETE_PROFILE_NAME = 'Unnamed contender';
+
+function hasRealField(value?: string | null): boolean {
+  const v = value?.replace(/^@/, '').trim();
+  return !!v && v.length > 0 && !v.startsWith('user_');
+}
+
+export function hasRealIdentity(user?: UserIdentityInput | null): boolean {
+  if (!user) return false;
+  return hasRealField(user.display_name) || hasRealField(user.name) || hasRealField(user.handle);
+}
+
 export function formatUserDisplayName(user?: UserIdentityInput | null): string {
-  if (!user) return 'Contender';
+  if (!user) return INCOMPLETE_PROFILE_NAME;
   const displayName = user.display_name?.trim();
   if (displayName && displayName.length > 0 && !displayName.startsWith('user_')) {
     return displayName;
@@ -30,10 +44,7 @@ export function formatUserDisplayName(user?: UserIdentityInput | null): string {
   if (handle && handle.length > 0 && !handle.startsWith('user_')) {
     return handle;
   }
-  if (user.wallet) {
-    return formatWalletShort(user.wallet);
-  }
-  return 'Contender';
+  return INCOMPLETE_PROFILE_NAME;
 }
 
 export function formatUserHandle(user?: UserIdentityInput | null): string | null {

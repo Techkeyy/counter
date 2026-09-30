@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
 import { Receipt } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from '../components/Icon';
-import { formatWalletShort, isRealSignature } from '../utils/identity';
+import { api } from '../api';
+import { formatUserDisplayName, isRealSignature } from '../utils/identity';
 
 interface ReceiptScreenProps {
   receipt: Receipt;
@@ -32,13 +33,48 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   const verified = isRealSignature(receipt.onchain_signature);
   const [showProof, setShowProof] = useState(false);
 
+  // Participant names come from the real duel record, never wallets.
+  const [captainAName, setCaptainAName] = useState<string | null>(null);
+  const [captainBName, setCaptainBName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setCaptainAName(null);
+    setCaptainBName(null);
+    api
+      .getDuel(receipt.duel_id)
+      .then((duel) => {
+        if (cancelled || !duel) return;
+        setCaptainAName(
+          formatUserDisplayName({
+            display_name: duel.captain_a_name,
+            handle: duel.captain_a_handle,
+            wallet: receipt.captain_a_wallet,
+          })
+        );
+        setCaptainBName(
+          formatUserDisplayName({
+            display_name: duel.captain_b_name,
+            handle: duel.captain_b_handle,
+            wallet: receipt.captain_b_wallet,
+          })
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [receipt.duel_id]);
+
+  const winnerName = isCaptainAWinner ? captainAName : captainBName;
+
   const handleShare = async () => {
     try {
       const amount = `$${(Number(receipt.total_pool) || 0).toFixed(2)} cUSD`;
+      const who = winnerName || winnerSideName;
       await Share.share({
         message: verified
-          ? `Counter duel receipt: ${formatWalletShort(winnerWallet)} won ${amount}. Verified on Solana: ${receipt.onchain_signature}`
-          : `Counter duel result: ${formatWalletShort(winnerWallet)} won ${amount}.`,
+          ? `Counter duel receipt: ${who} won ${amount}. Verified on Solana: ${receipt.onchain_signature}`
+          : `Counter duel result: ${who} won ${amount}.`,
       });
     } catch {
       // user cancelled
@@ -73,7 +109,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         <View style={styles.winnerRow}>
           <Text style={styles.winnerLabel}>Winner</Text>
           <Text style={styles.winnerValue}>
-            {winnerSideName} · {formatWalletShort(winnerWallet)}
+            {winnerSideName}{winnerName ? ` · ${winnerName}` : ''}
           </Text>
         </View>
 
@@ -93,11 +129,11 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         <Text style={styles.sectionTitle}>Participants</Text>
         <View style={styles.personRow}>
           <Text style={styles.personSide}>Side A</Text>
-          <Text style={styles.personWallet}>{formatWalletShort(receipt.captain_a_wallet)}</Text>
+          <Text style={styles.personWallet}>{captainAName === null ? 'Resolving name' : captainAName}</Text>
         </View>
         <View style={styles.personRow}>
           <Text style={styles.personSide}>Side B</Text>
-          <Text style={styles.personWallet}>{formatWalletShort(receipt.captain_b_wallet)}</Text>
+          <Text style={styles.personWallet}>{captainBName === null ? 'Resolving name' : captainBName}</Text>
         </View>
 
         <Text style={styles.sectionTitle}>Resolution</Text>

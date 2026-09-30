@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Category } from '../types';
+import { TOPIC_CATEGORIES } from '../topics';
 import { colors, spacing, touchMin } from '../theme';
 import { Icon } from '../components/Icon';
 import { api } from '../api';
@@ -18,7 +19,7 @@ interface CreateTakeScreenProps {
   onCancel: () => void;
 }
 
-const CATEGORIES: Category[] = ['CRYPTO', 'SPORTS', 'WEATHER', 'POLITICS', 'CULTURE'];
+const CATEGORIES: Category[] = TOPIC_CATEGORIES;
 
 export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
   onSuccess,

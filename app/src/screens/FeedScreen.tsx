@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
-import { Take, Duel, Category } from '../types';
+import { Take, Duel } from '../types';
+import { ALL_CATEGORIES, CategoryFilter, categoryLabel } from '../topics';
 import { colors, typography, spacing } from '../theme';
 import { api, isUnreachable } from '../api';
 import { SocialPostCard, FeedItem } from '../components/SocialPostCard';
@@ -27,7 +28,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
-  const [category, setCategory] = useState<Category | 'ALL'>('ALL');
+  const [category, setCategory] = useState<CategoryFilter>('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +132,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                 accessibilityState={{ selected }}
               >
                 <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-                  {item === 'ALL' ? 'All' : item.charAt(0) + item.slice(1).toLowerCase()}
+                  {categoryLabel(item)}
                 </Text>
               </TouchableOpacity>
             );
@@ -182,7 +183,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   );
 };
 
-const CATEGORIES: (Category | 'ALL')[] = ['ALL', 'CRYPTO', 'SPORTS', 'WEATHER', 'POLITICS', 'CULTURE'];
+const CATEGORIES: CategoryFilter[] = ALL_CATEGORIES;
 
 const styles = StyleSheet.create({
   container: {

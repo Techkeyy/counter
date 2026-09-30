@@ -13,6 +13,7 @@ import { Take, Category } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { api } from '../api';
+import { formatUserDisplayName } from '../utils/identity';
 import {
   CRYPTO_ASSETS,
   WEATHER_CITIES,
@@ -164,9 +165,11 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                 <Text style={styles.label}>Opponent</Text>
                 <View style={styles.readonlyBox}>
                   <Text style={styles.readonlyText}>
-                    {take.author_handle && !take.author_handle.startsWith('user_')
-                      ? `@${take.author_handle.replace(/^@/, '')}`
-                      : `${take.author_wallet.slice(0, 4)}...${take.author_wallet.slice(-4)}`}
+                    {formatUserDisplayName({
+                      display_name: take.author_name,
+                      handle: take.author_handle,
+                      wallet: take.author_wallet,
+                    })}
                   </Text>
                 </View>
 

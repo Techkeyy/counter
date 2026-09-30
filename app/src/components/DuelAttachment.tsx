@@ -6,7 +6,6 @@ import { Icon } from './Icon';
 import { PRODUCTION_WEB_URL } from '../api';
 import {
   formatUserDisplayName,
-  formatWalletShort,
   isRealSignature,
 } from '../utils/identity';
 
@@ -22,10 +21,13 @@ export const DuelAttachment: React.FC<{
   const total = poolA + poolB;
   const pctA = total > 0 ? Math.round((poolA / total) * 100) : 50;
   const resolved = duel.status.startsWith('RESOLVED');
-  const winner =
-    duel.winning_side === 1 ? duel.captain_a_wallet : duel.captain_b_wallet;
+  const winnerName = formatUserDisplayName(
+    duel.winning_side === 1
+      ? { display_name: duel.captain_a_name, handle: duel.captain_a_handle, wallet: duel.captain_a_wallet }
+      : { display_name: duel.captain_b_name, handle: duel.captain_b_handle, wallet: duel.captain_b_wallet }
+  );
   const statusLine = resolved
-    ? `${formatWalletShort(winner)} won · $${total.toFixed(2)} settled`
+    ? `${winnerName} won · $${total.toFixed(2)} settled`
     : duel.chain_status === 'INITIALIZED'
       ? `Live · $${total.toFixed(2)} pool`
       : `Forming · $${total.toFixed(2)} pool`;
