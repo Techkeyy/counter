@@ -130,6 +130,10 @@ export interface Position {
   claim_tx?: string;
   stake_tx_signature?: string;
   created_at: string;
+  // Live-joined profile fields (server LEFT JOINs users on reads).
+  handle?: string;
+  display_name?: string;
+  avatar_url?: string;
 }
 
 export interface Receipt {

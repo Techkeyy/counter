@@ -247,6 +247,7 @@ export default function App() {
                   clearDetailViews();
                   setShowComposer(true);
                 }}
+                onOpenProfile={() => openTab('PROFILE')}
                 userWallet={walletState.publicKey}
                 refreshSignal={feedRefresh}
               />

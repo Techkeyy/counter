@@ -18,7 +18,7 @@ interface UserIdentityInput {
 
 // Designed incomplete-profile state. Wallets are NEVER used as social names:
 // surfaces show this label when no linked Counter profile exists yet.
-export const INCOMPLETE_PROFILE_NAME = 'Unnamed contender';
+export const INCOMPLETE_PROFILE_NAME = 'Counter user';
 
 function hasRealField(value?: string | null): boolean {
   const v = value?.replace(/^@/, '').trim();

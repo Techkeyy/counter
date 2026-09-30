@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { Take, Duel } from '../types';
 import { ALL_CATEGORIES, CategoryFilter, categoryLabel } from '../topics';
-import { colors, typography, spacing } from '../theme';
+import { hasRealIdentity } from '../utils/identity';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api, isUnreachable } from '../api';
 import { SocialPostCard, FeedItem } from '../components/SocialPostCard';
 import { SkeletonPostCard } from '../components/SkeletonLoader';
@@ -13,17 +14,20 @@ interface FeedScreenProps {
   onSelectDuel: (duel: Duel) => void;
   onChallengePress?: (take: Take) => void;
   onCreateTakePress?: () => void;
+  onOpenProfile?: () => void;
   userWallet?: string | null;
   refreshSignal?: number;
 }
 
-// One timeline, chronological, no tabs, no category strip. Category discovery
-// lives in Duels; Following does not exist as backend semantics.
+// One timeline, chronological. Category strip filters on the real backend
+// param; Following does not exist as backend semantics.
 export const FeedScreen: React.FC<FeedScreenProps> = ({
   onSelectTake,
   onSelectDuel,
   onChallengePress,
   onCreateTakePress,
+  onOpenProfile,
+  userWallet,
   refreshSignal,
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
@@ -32,6 +36,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -42,6 +47,18 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
       ]);
       setTakes(Array.isArray(fetchedTakes) ? fetchedTakes : []);
       setDuels(Array.isArray(fetchedDuels) ? fetchedDuels : []);
+      if (userWallet) {
+        try {
+          const u: any = await api.getUserProfile(userWallet);
+          setProfileIncomplete(
+            !hasRealIdentity({ display_name: u?.display_name, handle: u?.handle, wallet: userWallet })
+          );
+        } catch {
+          setProfileIncomplete(false);
+        }
+      } else {
+        setProfileIncomplete(false);
+      }
     } catch (err: any) {
       if (isUnreachable(err)) setError('NETWORK_UNREACHABLE');
       else setError("The timeline couldn't load. Try again.");
@@ -49,7 +66,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [category]);
+  }, [category, userWallet]);
 
   useEffect(() => {
     loadData();
@@ -179,6 +196,19 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
           }
         />
       )}
+      {profileIncomplete && !loading && !error && (
+        <TouchableOpacity
+          style={styles.completeBanner}
+          onPress={onOpenProfile}
+          activeOpacity={0.85}
+          accessibilityLabel="Finish your profile"
+          accessibilityRole="button"
+        >
+          <Text style={styles.completeBannerText}>
+            Finish your profile so people recognize you
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -225,6 +255,25 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 96,
+  },
+  completeBanner: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.brandPrimary,
+    minHeight: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  completeBannerText: {
+    ...typography.bodyBold,
+    color: colors.brandPrimary,
+    fontSize: 14,
   },
   skeletonContainer: {
     padding: spacing.lg,

@@ -14,8 +14,9 @@ import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
 import * as Clipboard from 'expo-clipboard';
-import { formatUserDisplayName, formatUserHandle, getAvatarUri, formatWalletShort } from '../utils/identity';
+import { formatUserDisplayName, formatUserHandle, getAvatarUri, formatWalletShort, hasRealIdentity } from '../utils/identity';
 import { EmptyState, ErrorState } from '../components/StateViews';
+import { EditProfileSheet } from '../components/EditProfileSheet';
 
 interface ProfileScreenProps {
   wallet: string | null;
@@ -43,6 +44,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const loadProfile = async () => {
     if (!wallet) return;
@@ -116,6 +118,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     wallet,
   });
   const avatarUri = getAvatarUri(user?.avatar_url, wallet);
+  const profileComplete = hasRealIdentity({
+    display_name: user?.display_name,
+    handle: user?.handle,
+    wallet,
+  });
 
   // Stats calculation
   const totalDuels = stats?.total_duels || myDuels.length || 0;
@@ -179,7 +186,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
         {handle ? <Text style={styles.handle}>{handle}</Text> : null}
         {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => setEditing(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Edit profile"
+          accessibilityRole="button"
+        >
+          <Text style={styles.editBtnText}>Edit profile</Text>
+        </TouchableOpacity>
       </View>
+
+      {!profileComplete && (
+        <View style={styles.completeCard}>
+          <View style={styles.completeTextCol}>
+            <Text style={styles.completeTitle}>Finish your profile</Text>
+            <Text style={styles.completeBody}>
+              Add your name, handle, and photo so people recognize you.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.completeBtn}
+            onPress={() => setEditing(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Finish your profile"
+            accessibilityRole="button"
+          >
+            <Text style={styles.completeBtnText}>Finish</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 2. Counts: tappable, real */}
       <View style={styles.countsRow}>
@@ -394,6 +430,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <Text style={styles.disconnectText}>Disconnect wallet</Text>
         </TouchableOpacity>
       </View>
+
+      <EditProfileSheet
+        user={user}
+        wallet={wallet}
+        visible={editing}
+        onClose={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false);
+          setLoading(true);
+          loadProfile();
+        }}
+      />
     </ScrollView>
   );
 };
@@ -460,6 +508,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 280,
   },
+  editBtn: {
+    marginTop: spacing.md,
+    minHeight: touchMin,
+    paddingHorizontal: spacing.xl,
+    justifyContent: 'center',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  editBtnText: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    fontSize: 14,
+  },
+  completeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.brandPrimary,
+  },
+  completeTextCol: { flex: 1 },
+  completeTitle: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 15 },
+  completeBody: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
+  completeBtn: {
+    minHeight: touchMin,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.brandPrimary,
+  },
+  completeBtnText: { ...typography.bodyBold, color: '#000000', fontSize: 14 },
   countsRow: {
     flexDirection: 'row',
     marginBottom: spacing.md,

@@ -352,11 +352,15 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         ) : (
           positions.map((pos) => (
             <View key={pos.id} style={styles.backerRow}>
-              <Text style={styles.backerWallet}>
-                {pos.side === 1 ? 'Side A' : 'Side B'} backer
+              <Text style={styles.backerWallet} numberOfLines={1}>
+                {formatUserDisplayName({
+                  display_name: pos.display_name,
+                  handle: pos.handle,
+                  wallet: pos.user_wallet,
+                })}
               </Text>
               <Text style={[styles.backerSide, pos.side === 1 ? { color: colors.sideA } : { color: colors.sideB }]}>
-                ${Number(pos.stake_amount).toFixed(0)}
+                {pos.side === 1 ? 'Side A' : 'Side B'} · ${Number(pos.stake_amount).toFixed(0)}
               </Text>
             </View>
           ))

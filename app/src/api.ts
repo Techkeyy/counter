@@ -277,6 +277,19 @@ export const api = {
     });
     return res?.user || res;
   },
+  uploadAvatar: async (dataUrl: string) => {
+    const res = await request<any>(`/users/profile/avatar`, {
+      method: 'POST',
+      body: JSON.stringify({ dataUrl }),
+    });
+    return res?.user || res;
+  },
+  removeAvatar: async () => {
+    const res = await request<any>(`/users/profile/avatar`, {
+      method: 'DELETE',
+    });
+    return res?.user || res;
+  },
 
   // Faucet (Devnet test cUSD — no monetary value)
   requestFaucet: async () => {
