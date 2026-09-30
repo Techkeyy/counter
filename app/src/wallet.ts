@@ -18,6 +18,21 @@ export interface WalletState {
   skrStakedAmount: number;
 }
 
+// Explicit connection lifecycle (Gate 8). Failures never silently return to
+// idle: every terminal failure carries a status the UI must render with a
+// recovery action.
+export type WalletConnectionStatus =
+  | 'IDLE'
+  | 'CONNECTING'
+  | 'WAITING_FOR_WALLET'
+  | 'VERIFYING'
+  | 'CONNECTED'
+  | 'USER_REJECTED'
+  | 'NO_WALLET'
+  | 'MWA_TIMEOUT'
+  | 'NETWORK_ERROR'
+  | 'AUTH_FAILED';
+
 let connection: Connection | null = null;
 export function getConnection(): Connection {
   if (!connection) {

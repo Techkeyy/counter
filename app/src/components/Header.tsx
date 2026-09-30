@@ -1,63 +1,94 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
+import { WalletConnectionStatus } from '../wallet';
 
 interface HeaderProps {
   wallet: string | null;
-  isArenaEligible: boolean;
+  connectionStatus: WalletConnectionStatus;
   onConnectWallet: () => void;
-  onOpenNotifications?: () => void;
-  unreadCount?: number;
+  onOpenActivity?: () => void;
+  onComposeTake?: () => void;
+}
+
+function shortWallet(w: string): string {
+  return `${w.slice(0, 4)}...${w.slice(-4)}`;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   wallet,
-  isArenaEligible,
+  connectionStatus,
   onConnectWallet,
-  onOpenNotifications,
-  unreadCount = 0,
+  onOpenActivity,
+  onComposeTake,
 }) => {
-  const formatWallet = (w: string) => {
-    return `${w.slice(0, 4)}...${w.slice(-4)}`;
-  };
+  const busy = connectionStatus === 'CONNECTING' || connectionStatus === 'WAITING_FOR_WALLET' || connectionStatus === 'VERIFYING';
+  const walletLabel =
+    connectionStatus === 'CONNECTED' && wallet
+      ? shortWallet(wallet)
+      : connectionStatus === 'CONNECTING'
+        ? 'Connecting'
+        : connectionStatus === 'WAITING_FOR_WALLET'
+          ? 'Opening wallet'
+          : connectionStatus === 'VERIFYING'
+            ? 'Verifying'
+            : 'Connect';
 
   return (
     <View style={styles.container}>
       <View style={styles.brandRow}>
-        <Icon name="swords" size={20} color={colors.solanaGreen} />
+        <Icon name="swords" size={22} color={colors.brandPrimary} accessibilityLabel="Counter home" />
         <Text style={styles.logoText}>COUNTER</Text>
-        {isArenaEligible && (
-          <View style={styles.arenaBadge}>
-            <Icon name="trophy" size={10} color={colors.arenaBadge} />
-            <Text style={styles.arenaBadgeText}>ARENA</Text>
-          </View>
-        )}
+        <View style={styles.devnetBadge} accessibilityLabel="Test build on Solana Devnet">
+          <Text style={styles.devnetText}>Test build · Solana Devnet</Text>
+        </View>
       </View>
 
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.walletButton} onPress={onConnectWallet} activeOpacity={0.8}>
-          {wallet ? (
+        {onComposeTake && (
+          <TouchableOpacity
+            style={styles.composeButton}
+            onPress={onComposeTake}
+            activeOpacity={0.8}
+            accessibilityLabel="Post a take"
+            accessibilityRole="button"
+          >
+            <Icon name="plus" size={20} color="#000000" />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={styles.walletButton}
+          onPress={onConnectWallet}
+          activeOpacity={0.8}
+          disabled={busy}
+          accessibilityLabel={wallet ? `Wallet ${shortWallet(wallet)}` : 'Connect Solana wallet'}
+          accessibilityRole="button"
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={colors.brandPrimary} />
+          ) : wallet ? (
             <View style={styles.connectedRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.walletText}>{formatWallet(wallet)}</Text>
+              <Text style={styles.walletText}>{walletLabel}</Text>
             </View>
           ) : (
             <View style={styles.connectedRow}>
-              <Icon name="wallet" size={14} color={colors.solanaGreen} />
-              <Text style={styles.connectText}>Connect</Text>
+              <Icon name="wallet" size={16} color={colors.brandPrimary} />
+              <Text style={styles.connectText}>{walletLabel}</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        {onOpenNotifications && (
-          <TouchableOpacity style={styles.bellButton} onPress={onOpenNotifications} activeOpacity={0.8}>
+        {onOpenActivity && (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={onOpenActivity}
+            activeOpacity={0.8}
+            accessibilityLabel="Open activity"
+            accessibilityRole="button"
+          >
             <Icon name="bell" size={20} color={colors.textPrimary} />
-            {unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{unreadCount}</Text>
-              </View>
-            )}
           </TouchableOpacity>
         )}
       </View>
@@ -71,7 +102,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
@@ -79,7 +110,8 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
+    flex: 1,
   },
   logoText: {
     ...typography.h3,
@@ -87,31 +119,37 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     color: colors.textPrimary,
   },
-  arenaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.badgeBg,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  devnetBadge: {
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
     borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.arenaBadge,
-    gap: 4,
+    borderColor: colors.cardBorder,
   },
-  arenaBadgeText: {
-    color: colors.arenaBadge,
-    fontSize: 10,
-    fontWeight: '800',
+  devnetText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
+  composeButton: {
+    width: touchMin,
+    height: touchMin,
+    borderRadius: touchMin / 2,
+    backgroundColor: colors.brandPrimary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   walletButton: {
+    minHeight: touchMin,
+    justifyContent: 'center',
     backgroundColor: colors.surfaceLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -125,37 +163,24 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: colors.solanaGreen,
+    backgroundColor: colors.brandPrimary,
   },
   walletText: {
     ...typography.mono,
     color: colors.textPrimary,
-    fontSize: 12,
+    fontSize: 13,
   },
   connectText: {
     ...typography.bodyBold,
-    color: colors.solanaGreen,
-    fontSize: 12,
+    color: colors.brandPrimary,
+    fontSize: 13,
   },
-  bellButton: {
-    position: 'relative',
-    padding: 6,
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    backgroundColor: colors.duelCrimson,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+  iconButton: {
+    width: touchMin,
+    height: touchMin,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  unreadText: {
-    color: '#FFF',
-    fontSize: 9,
-    fontWeight: '800',
+    borderRadius: touchMin / 2,
   },
 });
 

@@ -10,7 +10,7 @@ import {
 import * as Linking from 'expo-linking';
 import { Header } from './src/components/Header';
 import { FeedScreen } from './src/screens/FeedScreen';
-import { ArenaScreen } from './src/screens/ArenaScreen';
+import { DuelsScreen } from './src/screens/DuelsScreen';
 import { CreateTakeScreen } from './src/screens/CreateTakeScreen';
 import { DuelDetailScreen } from './src/screens/DuelDetailScreen';
 import { TakeDetailScreen } from './src/screens/TakeDetailScreen';
@@ -19,9 +19,9 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ChallengeModal } from './src/components/ChallengeModal';
 import { OnboardingModal } from './src/components/OnboardingModal';
-import { Icon } from './src/components/Icon';
-import { colors, spacing, borderRadius } from './src/theme';
-import { connectAndAuthenticate, WalletState } from './src/wallet';
+import { Icon, IconName } from './src/components/Icon';
+import { colors, spacing, borderRadius, touchMin } from './src/theme';
+import { connectAndAuthenticate, WalletState, WalletConnectionStatus } from './src/wallet';
 import {
   SecureSessionStorage,
   restoreSession,
@@ -32,17 +32,27 @@ import {
 import { api } from './src/api';
 import { Take, Duel, Receipt } from './src/types';
 
-type Tab = 'FEED' | 'ARENA' | 'CREATE' | 'ACTIVITY' | 'PROFILE';
+type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
+
+const TABS: { key: Tab; label: string; icon: IconName }[] = [
+  { key: 'HOME', label: 'Home', icon: 'home' },
+  { key: 'DUELS', label: 'Duels', icon: 'swords' },
+  { key: 'ACTIVITY', label: 'Activity', icon: 'bell' },
+  { key: 'PROFILE', label: 'Profile', icon: 'user' },
+];
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<Tab>('FEED');
+  const [currentTab, setCurrentTab] = useState<Tab>('HOME');
   const [walletState, setWalletState] = useState<WalletState>(DISCONNECTED);
+  const [connectionStatus, setConnectionStatus] = useState<WalletConnectionStatus>('IDLE');
   const [restoring, setRestoring] = useState(true);
 
   // Selected Detail Views
   const [selectedDuelId, setSelectedDuelId] = useState<string | null>(null);
   const [selectedTake, setSelectedTake] = useState<Take | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [showComposer, setShowComposer] = useState(false);
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -58,10 +68,12 @@ export default function App() {
         const restored = await restoreSession();
         if (cancelled) return;
         setWalletState(restored);
+        setConnectionStatus(restored.connected ? 'CONNECTED' : 'IDLE');
         setShowOnboarding(!restored.connected);
       } catch {
         if (!cancelled) {
           setWalletState(DISCONNECTED);
+          setConnectionStatus('IDLE');
           setShowOnboarding(true);
         }
       } finally {
@@ -77,22 +89,32 @@ export default function App() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const parsed = Linking.parse(event.url);
-      console.log('[DEEP LINK PARSED]:', parsed);
       if (parsed.path?.startsWith('duel/')) {
         const duelId = parsed.path.replace('duel/', '');
+        clearDetailViews();
         setSelectedDuelId(duelId);
-        setSelectedTake(null);
-        setSelectedReceipt(null);
       } else if (parsed.path?.startsWith('receipt/')) {
-        // counter://receipt/:id must render the permanent receipt, not the duel.
         const receiptId = parsed.path.replace('receipt/', '');
-        setSelectedDuelId(null);
+        clearDetailViews();
         setSelectedTake(null);
-        setSelectedReceipt(null);
+        setLinkNotice(null);
         api
           .getReceipt(receiptId)
           .then((receipt) => setSelectedReceipt(receipt))
-          .catch((err) => console.warn('[DEEP LINK] receipt fetch failed:', err?.message));
+          .catch(() => setLinkNotice('That receipt link could not be opened. It may be invalid or removed.'));
+      } else if (parsed.path?.startsWith('d/') || parsed.path?.startsWith('r/')) {
+        // HTTPS app-link paths (/d/slug, /r/id) resolve through the same router.
+        const parts = (parsed.path || '').split('/');
+        if (parts[0] === 'd' && parts[1]) {
+          clearDetailViews();
+          setSelectedDuelId(parts[1]);
+        } else if (parts[0] === 'r' && parts[1]) {
+          clearDetailViews();
+          api
+            .getReceipt(parts[1])
+            .then((receipt) => setSelectedReceipt(receipt))
+            .catch(() => setLinkNotice('That receipt link could not be opened. It may be invalid or removed.'));
+        }
       }
     };
 
@@ -105,9 +127,9 @@ export default function App() {
   }, []);
 
   const handleConnectWallet = async () => {
+    setConnectionStatus('CONNECTING');
     const state = await connectAndAuthenticate();
     if (state.connected && state.publicKey && state.authToken) {
-      // Persist the authenticated session in OS-backed secure storage.
       try {
         await saveSession(SecureSessionStorage, {
           wallet: state.publicKey,
@@ -117,10 +139,12 @@ export default function App() {
         console.warn('[SESSION] persist failed:', (err as Error)?.message);
       }
       setWalletState(state);
+      setConnectionStatus('CONNECTED');
       setShowOnboarding(false);
     } else {
       await clearSession(SecureSessionStorage);
       setWalletState(DISCONNECTED);
+      setConnectionStatus('IDLE');
       setShowOnboarding(true);
     }
   };
@@ -128,6 +152,7 @@ export default function App() {
   const handleDisconnectWallet = async () => {
     await clearSession(SecureSessionStorage);
     setWalletState(DISCONNECTED);
+    setConnectionStatus('IDLE');
     setShowOnboarding(true);
   };
 
@@ -135,27 +160,48 @@ export default function App() {
     setSelectedDuelId(null);
     setSelectedTake(null);
     setSelectedReceipt(null);
+    setShowComposer(false);
+    setLinkNotice(null);
+  };
+
+  const openTab = (tab: Tab) => {
+    clearDetailViews();
+    setCurrentTab(tab);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
 
-      {/* Top Header */}
       <Header
         wallet={walletState.publicKey}
-        isArenaEligible={walletState.isArenaEligible}
+        connectionStatus={connectionStatus}
         onConnectWallet={handleConnectWallet}
-        onOpenNotifications={() => {
+        onOpenActivity={() => openTab('ACTIVITY')}
+        onComposeTake={() => {
           clearDetailViews();
-          setCurrentTab('ACTIVITY');
+          setShowComposer(true);
         }}
-        unreadCount={0}
       />
 
-      {/* Main Content Router */}
       <View style={styles.content}>
-        {selectedDuelId ? (
+        {linkNotice ? (
+          <View style={styles.linkNotice}>
+            <Text style={styles.linkNoticeText}>{linkNotice}</Text>
+            <TouchableOpacity onPress={() => setLinkNotice(null)} style={styles.linkNoticeBtn} accessibilityLabel="Dismiss link error">
+              <Text style={styles.linkNoticeBtnText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {showComposer ? (
+          <CreateTakeScreen
+            onSuccess={() => {
+              setShowComposer(false);
+              setCurrentTab('HOME');
+            }}
+            onCancel={() => setShowComposer(false)}
+          />
+        ) : selectedDuelId ? (
           <DuelDetailScreen
             duelId={selectedDuelId}
             userWallet={walletState.publicKey}
@@ -184,30 +230,24 @@ export default function App() {
           />
         ) : (
           <>
-            {currentTab === 'FEED' && (
+            {currentTab === 'HOME' && (
               <FeedScreen
                 onSelectTake={(take: Take) => setSelectedTake(take)}
                 onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
                 onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
                 onChallengePress={(take: Take) => setChallengeTargetTake(take)}
-                onCreateTakePress={() => setCurrentTab('CREATE')}
+                onCreateTakePress={() => {
+                  clearDetailViews();
+                  setShowComposer(true);
+                }}
                 userWallet={walletState.publicKey}
               />
             )}
 
-            {currentTab === 'ARENA' && (
-              <ArenaScreen
-                isArenaEligible={walletState.isArenaEligible}
-                skrStakedAmount={walletState.skrStakedAmount}
+            {currentTab === 'DUELS' && (
+              <DuelsScreen
                 userWallet={walletState.publicKey}
                 onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
-              />
-            )}
-
-            {currentTab === 'CREATE' && (
-              <CreateTakeScreen
-                onSuccess={() => setCurrentTab('FEED')}
-                onCancel={() => setCurrentTab('FEED')}
               />
             )}
 
@@ -234,18 +274,16 @@ export default function App() {
         )}
       </View>
 
-      {/* Challenge Bottom Sheet Modal */}
       <ChallengeModal
         visible={!!challengeTargetTake}
         take={challengeTargetTake}
         onClose={() => setChallengeTargetTake(null)}
         onChallengeCreated={() => {
           setChallengeTargetTake(null);
-          setCurrentTab('FEED');
+          setCurrentTab('HOME');
         }}
       />
 
-      {/* Onboarding Flow Modal */}
       <OnboardingModal
         visible={showOnboarding}
         onClose={() => setShowOnboarding(false)}
@@ -253,92 +291,30 @@ export default function App() {
         onConnectWallet={handleConnectWallet}
       />
 
-      {/* Bottom Navigation Bar with Vector Icons (Zero Emojis) */}
       <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => {
-            clearDetailViews();
-            setCurrentTab('FEED');
-          }}
-          activeOpacity={0.8}
-        >
-          <Icon
-            name="swords"
-            size={20}
-            color={currentTab === 'FEED' ? colors.solanaGreen : colors.textSecondary}
-          />
-          <Text style={[styles.tabLabel, currentTab === 'FEED' && styles.tabLabelActive]}>
-            Feed
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => {
-            clearDetailViews();
-            setCurrentTab('ARENA');
-          }}
-          activeOpacity={0.8}
-        >
-          <Icon
-            name="trophy"
-            size={20}
-            color={currentTab === 'ARENA' ? colors.arenaBadge : colors.textSecondary}
-          />
-          <Text style={[styles.tabLabel, currentTab === 'ARENA' && styles.tabLabelActive]}>
-            Arena
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => {
-            clearDetailViews();
-            setCurrentTab('CREATE');
-          }}
-          activeOpacity={0.8}
-        >
-          <View style={styles.createTabBadge}>
-            <Icon name="plus" size={20} color="#000000" />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => {
-            clearDetailViews();
-            setCurrentTab('ACTIVITY');
-          }}
-          activeOpacity={0.8}
-        >
-          <Icon
-            name="bell"
-            size={20}
-            color={currentTab === 'ACTIVITY' ? colors.solanaGreen : colors.textSecondary}
-          />
-          <Text style={[styles.tabLabel, currentTab === 'ACTIVITY' && styles.tabLabelActive]}>
-            Activity
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => {
-            clearDetailViews();
-            setCurrentTab('PROFILE');
-          }}
-          activeOpacity={0.8}
-        >
-          <Icon
-            name="user"
-            size={20}
-            color={currentTab === 'PROFILE' ? colors.solanaGreen : colors.textSecondary}
-          />
-          <Text style={[styles.tabLabel, currentTab === 'PROFILE' && styles.tabLabelActive]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
+        {TABS.map((tab) => {
+          const active = currentTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tabItem}
+              onPress={() => openTab(tab.key)}
+              activeOpacity={0.8}
+              accessibilityLabel={tab.label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+            >
+              <Icon
+                name={tab.icon}
+                size={22}
+                color={active ? colors.brandPrimary : colors.textSecondary}
+              />
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </SafeAreaView>
   );
@@ -352,13 +328,39 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  linkNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+    gap: spacing.md,
+  },
+  linkNoticeText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  linkNoticeBtn: {
+    minHeight: touchMin,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  linkNoticeBtnText: {
+    color: colors.brandPrimary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
   tabBar: {
     flexDirection: 'row',
-    height: 60,
+    minHeight: 64,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'space-around',
     paddingBottom: spacing.xs,
   },
@@ -366,24 +368,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+    minHeight: 60,
     paddingVertical: spacing.xs,
   },
   tabLabel: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     marginTop: 3,
   },
   tabLabelActive: {
-    color: colors.solanaGreen,
+    color: colors.brandPrimary,
     fontWeight: '700',
-  },
-  createTabBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.solanaGreen,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
