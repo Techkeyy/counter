@@ -3,6 +3,8 @@ import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, A
 // Dedicated Hosted VPS Backend URL (Fixed Public HTTPS)
 export const STABLE_BACKEND_URL = 'https://counter.103-195-188-198.sslip.io/api';
 export const API_BASE_URL = STABLE_BACKEND_URL;
+// Public web host for share links (duel /d/:slug and receipt /r/:id pages).
+export const PRODUCTION_WEB_URL = 'https://counter.103-195-188-198.sslip.io';
 
 let authToken: string | null = null;
 let currentWallet: string | null = null;

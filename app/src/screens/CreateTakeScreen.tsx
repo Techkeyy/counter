@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Category } from '../types';
-import { colors, spacing } from '../theme';
+import { colors, spacing, touchMin } from '../theme';
+import { Icon } from '../components/Icon';
 import { api } from '../api';
 
 interface CreateTakeScreenProps {
@@ -55,9 +56,9 @@ export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>🔥 POST CONTROVERSIAL TAKE</Text>
-        <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <Text style={styles.title}>Post a take</Text>
+        <TouchableOpacity onPress={onCancel} style={styles.cancelBtn} accessibilityLabel="Cancel" accessibilityRole="button">
+          <Icon name="x" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -83,26 +84,28 @@ export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
         style={styles.input}
         value={topic}
         onChangeText={setTopic}
-        placeholder="e.g. SOL will flip ETH in 2026"
+        placeholder="SOL will flip ETH in 2026"
         placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Topic headline"
       />
 
-      <Text style={styles.label}>Your Take (Others will be able to challenge this 1v1)</Text>
+      <Text style={styles.label}>Your take</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={content}
         onChangeText={setContent}
-        placeholder="State your conviction with clear conditions. Put your reputation and capital on the line..."
+        placeholder="State your conviction with clear conditions others can challenge."
         placeholderTextColor={colors.textMuted}
         multiline
         numberOfLines={5}
         textAlignVertical="top"
+        accessibilityLabel="Take content"
       />
 
       <View style={styles.tipsBox}>
-        <Text style={styles.tipTitle}>💡 Pro-tip for Maximum Duel Volume:</Text>
+        <Text style={styles.tipTitle}>How challenges work</Text>
         <Text style={styles.tipBody}>
-          Hot takes with objective, verifiable conditions (e.g. price thresholds, match outcomes) get challenged 4x faster.
+          Takes with objective, verifiable conditions (price thresholds, match outcomes) can be challenged into 1v1 duels with locked terms.
         </Text>
       </View>
 
@@ -111,11 +114,13 @@ export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
         onPress={handlePublish}
         disabled={loading}
         activeOpacity={0.8}
+        accessibilityLabel="Publish take"
+        accessibilityRole="button"
       >
         {loading ? (
           <ActivityIndicator color="#000" />
         ) : (
-          <Text style={styles.publishText}>PUBLISH TO COUNTER FEED</Text>
+          <Text style={styles.publishText}>Publish take</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -139,17 +144,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 20,
+    fontWeight: '800',
   },
   cancelBtn: {
-    padding: 6,
-  },
-  cancelText: {
-    color: colors.textMuted,
-    fontSize: 14,
-    fontWeight: '600',
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorText: {
     color: colors.duelCrimson,
@@ -174,7 +176,8 @@ const styles = StyleSheet.create({
   catBtn: {
     backgroundColor: colors.surfaceLight,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: touchMin,
+    justifyContent: 'center',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -225,15 +228,15 @@ const styles = StyleSheet.create({
   },
   publishBtn: {
     backgroundColor: colors.solanaGreen,
-    paddingVertical: 14,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 14,
     alignItems: 'center',
     marginTop: spacing.xl,
   },
   publishText: {
     color: '#000',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

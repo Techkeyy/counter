@@ -64,3 +64,28 @@ export function formatCurrency(amount: number): string {
     maximumFractionDigits: 2,
   }).format(amount);
 }
+
+export function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return 'just now';
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// A settlement signature is only treated as chain evidence when it looks like
+// a real base58 Solana signature. Legacy `simulated_*` / `devnet_*` markers
+// are history rows, never verification.
+export function isRealSignature(sig?: string | null): boolean {
+  if (!sig || sig.length < 80 || sig.length > 90) return false;
+  if (sig.startsWith('simulated_') || sig.startsWith('devnet_')) return false;
+  return /^[1-9A-HJ-NP-Za-km-z]+$/.test(sig);
+}

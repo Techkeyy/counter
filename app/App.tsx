@@ -54,6 +54,7 @@ export default function App() {
   const [showComposer, setShowComposer] = useState(false);
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [feedRefresh, setFeedRefresh] = useState(0);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -207,6 +208,7 @@ export default function App() {
             onSuccess={() => {
               setShowComposer(false);
               setCurrentTab('HOME');
+              setFeedRefresh((n) => n + 1);
             }}
             onCancel={() => setShowComposer(false)}
           />
@@ -250,6 +252,7 @@ export default function App() {
                   setShowComposer(true);
                 }}
                 userWallet={walletState.publicKey}
+                refreshSignal={feedRefresh}
               />
             )}
 
