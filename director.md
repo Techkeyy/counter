@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — UX V2 IMPLEMENTED / OWNER PHYSICAL UX REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — SOCIAL EXPERIENCE CLEAN / OWNER PRE-UAT REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `511be22` (+ this ledger: Home category strip + artifact, commit pending at time of writing; packaged app source `511be22` — see §42)
-**Last Updated:** 2026-09-30T16:15:00Z
+**Authoritative Local Commit:** `fe597cd` (+ this ledger: social-experience clean + final artifact, commit pending at time of writing; packaged app source `fe597cd` — see §43)
+**Last Updated:** 2026-09-30T21:00:00Z
 
 ---
 
@@ -1130,7 +1130,7 @@ fixed during the run; product code untouched by them.)
 > Previous UX pass REJECTED as card-heavy and hierarchy-poor. This is an
 > information-architecture rebuild, not polish. Reference study first
 > (`docs/ux-reference-map-v2.md`), then structure, then screens. Status:
-> **`BUILDING — UX V2 IMPLEMENTED / OWNER PHYSICAL UX REVIEW REQUIRED`**
+> **`BUILDING — SOCIAL EXPERIENCE CLEAN / OWNER PRE-UAT REVIEW REQUIRED`**
 > (NOT accepted / UAT passed / RC / submission-ready). No secret in ledger/Git/logs/report.
 
 ### 41.A — Activity failure root cause (Gate 11)
@@ -1247,4 +1247,42 @@ fixed during the run; product code untouched by them.)
 > attached at build time; install + screenshots + Core Outcome UAT await the
 > owner run. VPS untouched this phase.
 
+## 43. SOCIAL-EXPERIENCE CLEAN + FINAL ARTIFACT — 2026-09-30 (Builder)
 
+> Closes the social-cleanup requirements. Status: **`BUILDING — SOCIAL EXPERIENCE CLEAN / OWNER PRE-UAT REVIEW REQUIRED`** (NOT accepted / UAT passed / RC / submission-ready). No secret in ledger/Git/logs/report.
+
+### 43.A — Canonical taxonomy + stable selection (items 1-2)
+
+- New `app/src/topics.ts`: `TOPIC_CATEGORIES`, `ALL_CATEGORIES`, `categoryLabel`. FeedScreen, DuelsScreen, CreateTakeScreen derive from it; no ad-hoc arrays remain (`CATEGORIES` grep: only derived aliases). `ALL` is UI-only, never sent as a value.
+- Selection-stability audit: scripted check of every base/Active style pair for fontSize deltas: ZERO mismatches. Selection signals are weight/color/background on fixed-height targets only.
+
+### 43.B — Person-first identity everywhere (item 3)
+
+- `formatUserDisplayName` no longer falls back to wallet slices: genuinely incomplete profiles render the designed `Unnamed contender` state. `formatUserHandle` already suppresses placeholder handles.
+- Fixed surfaces: Home rows, take detail, comments, ChallengeModal opponent, ChallengeSheet challenger (profile fetch), Duels rows, DuelDetail sides, backer rows (role-based `Side A backer`, no identity invented), receipt winner/participants (duel fetch, `Resolving name` transient), rivalries.
+- Wallets remain ONLY in: Profile Account section, Details & proof, tx message/timeline rows, explorer contexts. Server activity titles/messages verified wallet-free.
+
+### 43.C — Hardcoded-data final evidence (item 4)
+
+- Sweep (demo arrays, mock words, Math.random, hardcoded wallets/sigs outside the 4 authorized chain constants): ZERO hits.
+- Emoji sweep: 0. Em/en dash sweep: 0. Added-lines secret scan: clean.
+- Classification: RUNTIME_HARDCODED_SOCIAL_DATA = 0. Remaining fixtures are PRODUCT_TAXONOMY (topics, cities, assets), REAL_USER_DATA (owner wallet row), REAL_CHAIN_DATA (pool/tx values), TEST_ONLY (server test files, in-memory suites).
+
+### 43.D — Production hygiene execution (item 5, authorized)
+
+- Backups: `counter-pre-cleanup-20260930192103.sqlite` (184320 B, `e1bd3b49…f51`) and `counter-pre-cleanup2-20260930.sqlite` (live hash `0a21ab3e…8488be49`), both hash-verified. Pre-counts 53/13/12/12/13/34/4/75.
+- Pass 1 removed the old ladder (exact IDs in `docs/data-hygiene-cleanup.md`); a boot reseed repopulated a curated demo set (fake likes/pools scripted in `seed.js`).
+- Durable fix (minimal, Counter-only, reversible, same proven surgical deploy): `server/seed.js` now skips unless `SEED_DEMO_CONTENT=1` (committed, pushed, hash-verified on VPS, require-smoke OK). Production does not set the flag. Rollback: previous blob + restart. Rationale: row removal cannot hold zero while boot reseeds; the guard is the necessary machinery of the authorized removal.
+- Pass 2 removed the curated set by explicit ID list (unknown-ID guard returned `[]`). Users: kept owner device wallet `eMMEh8`, dropped 56 synthetic wallets total, each zero-reference-verified.
+- Post-state: users 1 / everything else 0, orphans 0/0/0, schema intact. Boot log confirms skip, no reseed. Public reads: health 200, takes 0, duels 0, category filters 200-empty. App shows honest empty states; nothing reseeded.
+- PERSISTED_SYNTHETIC_DATA_VISIBLE_TO_USERS = 0 (durable across restarts).
+- VPS changes this phase: `server/seed.js` (guard), 2 backup files, content wipes, `counter-backend` restarts only. Full ledger: `docs/data-hygiene-cleanup.md`.
+
+### 43.E — Regression + final artifact (items 7-9)
+
+- tsc 0 · sessions 5/5 · vectors 11/11 · adversarial 8/8 (backend touched, live oracle, fixtures cleaned).
+- Packaged source `fe597cd` (pushed pre-build). `./gradlew assembleRelease --no-daemon` → BUILD SUCCESSFUL (exit 0).
+- APK: **62,058,144 bytes**, SHA-256 **`86D18D7FC19BC7942CB971AE76D05C2BB26FAD1872898B63CBF308A1BE59C76C`**, package `app.counter.mobile` v1/1.0.0, cert `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827` (SAME key).
+- Bundle (2,527,628 B): backend/mint/program 1x each; zero mock/secret hits; localhost profile unchanged. Manifest: duel+receipt hosts, prod `/d`+`/r` autoVerify, zero `counter.app`.
+
+> This exact APK (SHA-256 `86D18D7F…76C`, cert `a11be643…d7827`, package `app.counter.mobile`) built from `fe597cd` is the ONLY APK authorized for owner pre-UAT review. APK `74DD9792…` is SUPERSEDED. No device was attached; install + screenshots + Core Outcome UAT await the owner run.
