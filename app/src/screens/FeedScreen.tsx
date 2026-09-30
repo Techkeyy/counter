@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Take, Duel } from '../types';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { Take, Duel, Category } from '../types';
 import { colors, typography, spacing } from '../theme';
 import { api, isUnreachable } from '../api';
 import { SocialPostCard, FeedItem } from '../components/SocialPostCard';
@@ -27,6 +27,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
+  const [category, setCategory] = useState<Category | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +36,8 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
     try {
       setError(null);
       const [fetchedTakes, fetchedDuels] = await Promise.all([
-        api.getTakes(),
-        api.getDuels(),
+        api.getTakes(category === 'ALL' ? undefined : category),
+        api.getDuels(category === 'ALL' ? {} : { category }),
       ]);
       setTakes(Array.isArray(fetchedTakes) ? fetchedTakes : []);
       setDuels(Array.isArray(fetchedDuels) ? fetchedDuels : []);
@@ -47,7 +48,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [category]);
 
   useEffect(() => {
     loadData();
@@ -112,8 +113,30 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={styles.intro}>
-        <Text style={styles.introTitle}>Latest takes</Text>
+      <View style={styles.chipStrip}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={CATEGORIES}
+          keyExtractor={(item) => item}
+          contentContainerStyle={styles.chipList}
+          renderItem={({ item }) => {
+            const selected = category === item;
+            return (
+              <TouchableOpacity
+                style={[styles.chip, selected && styles.chipActive]}
+                onPress={() => setCategory(item)}
+                activeOpacity={0.8}
+                accessibilityLabel={`Filter timeline by ${item === 'ALL' ? 'all categories' : item.toLowerCase()}`}
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextActive]}>
+                  {item === 'ALL' ? 'All' : item.charAt(0) + item.slice(1).toLowerCase()}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
       </View>
       {loading ? (
         <View style={styles.skeletonContainer}>
@@ -159,20 +182,40 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   );
 };
 
+const CATEGORIES: (Category | 'ALL')[] = ['ALL', 'CRYPTO', 'SPORTS', 'WEATHER', 'POLITICS', 'CULTURE'];
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  intro: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+  chipStrip: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+    paddingVertical: spacing.xs,
   },
-  introTitle: {
-    ...typography.h2,
+  chipList: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.xs,
+  },
+  chip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: 20,
+  },
+  chipActive: {
+    backgroundColor: colors.surfaceHighlight,
+  },
+  chipText: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextActive: {
     color: colors.textPrimary,
-    fontSize: 20,
+    fontWeight: '700',
   },
   separator: {
     height: 1,
