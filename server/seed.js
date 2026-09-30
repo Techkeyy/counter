@@ -4,6 +4,14 @@ const { getDb, queryOne, execute } = require('./db');
 async function seedDatabase() {
   await getDb();
 
+  // Demo seeding is strictly opt-in. Production must never resurrect demo
+  // rows on boot: an empty takes table means "clean", not "please seed".
+  // Set SEED_DEMO_CONTENT=1 only in throwaway local/dev environments.
+  if (process.env.SEED_DEMO_CONTENT !== '1') {
+    console.log('[SEED] Demo seeding disabled (SEED_DEMO_CONTENT is not 1). Skipping.');
+    return;
+  }
+
   const existingTake = queryOne(`SELECT COUNT(*) as count FROM takes`);
   if (existingTake && existingTake.count > 0) {
     console.log('[SEED] Database already contains initial data. Skipping seed.');
