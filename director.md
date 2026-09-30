@@ -7,8 +7,8 @@
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `05ef5fd` (+ this ledger: signing-rotation/UAT-artifact record, commit pending at time of writing; packaged app source `9b58c59` — see §39.D)
-**Last Updated:** 2026-09-30T08:00:00Z
+**Authoritative Local Commit:** `83f98b2` (+ this ledger: app-link alignment/UAT-artifact rebinding, commit pending at time of writing; packaged app source `83f98b2` — see §40.D)
+**Last Updated:** 2026-09-30T09:30:00Z
 
 ---
 
@@ -1058,5 +1058,69 @@ fixed during the run; product code untouched by them.)
   `counter-backend.service` restart. Old backup + new vault files are LOCAL only (never transmitted).
 - Remaining blockers: physical Android hardware (cold launch, MWA, faucet UX, Core Outcome);
   owner off-machine backup of the DPAPI-protected password recommended.
+
+---
+
+## 40. APP-LINK HOST ALIGNMENT + ARTIFACT REBIND — 2026-09-30 (Builder, Director-directed)
+
+> Director review found the §39 APK's HTTPS App Link targeted unowned `counter.app` while production
+> and assetlinks live on `counter.103-195-188-198.sslip.io`. Rotation itself stays ACCEPTED (same key,
+> same DPAPI file, no regeneration, old archive retained, password never exposed).
+> APK `205F83C3…4F473` is SUPERSEDED for UAT. Fresh host-aligned artifact built below.
+> Status restored: **`BUILDING — PHYSICAL ANDROID UAT READY`** (NOT UAT passed / release candidate /
+> submission ready). No secret appears in this ledger, Git, logs, or report.
+
+### 40.A — Diagnosed mismatch + authoritative model
+
+- `app.json`/`AndroidManifest.xml` declared `https://counter.app/d` (autoVerify) with NO `/r` filter;
+  no evidence `counter.app` is owned/live (no assetlinks endpoint proven there). Proven production host:
+  `counter.103-195-188-198.sslip.io` (serves `/d/:slug`, `/r/:id`, assetlinks, API).
+- Shares use `counter://duel/:id` (DuelDetailScreen) + explorer links (ReceiptScreen); server pages emit
+  `counter://duel|receipt` applinks meta but carried wrong package `com.counter.app`.
+- In-app router (`App.tsx`) already handles `duel/` + `receipt/` paths for any matched scheme.
+
+### 40.B — Fix (commit `83f98b2`, 5 files)
+
+- `app/app.json` + `AndroidManifest.xml`: explicit `counter`+`duel` and `counter`+`receipt` host filters;
+  https autoVerify filters for production host with `/d` AND `/r`; `counter.app` removed entirely.
+- `app/src/wallet.ts` + `app/src/chain.ts`: MWA identity `uri` → production host (same alignment).
+- `server/index.js`: `al:android:package` → `app.counter.mobile` on both `/d` and `/r` pages.
+- Pre-commit gates: tsc 0 · session 5/5 · vectors 11/11 · adversarial 8/8 (live oracle, fixtures cleaned);
+  added-lines secret scan clean.
+
+### 40.C — Rebuild (SAME rotated key, DPAPI → process env only)
+
+- `./gradlew assembleRelease --no-daemon` → **BUILD SUCCESSFUL in 11m 50s**.
+- `app/android/app/build/outputs/apk/release/app-release.apk`: **62,018,200 bytes**,
+  SHA-256 **`67F3BE835A05FDAD2F0B026B9476D25B5224A3AA50E0550475FBBA37705E29F3`** (new hash),
+  package `app.counter.mobile`, versionCode `1`, versionName `1.0.0`,
+  signer cert `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827` (SAME rotated key).
+- Built-APK merged manifest (`aapt dump xmltree`, not just source): generic `counter` scheme filter ✓;
+  `counter`+`duel` ✓ and `counter`+`receipt` ✓ (VIEW/DEFAULT/BROWSABLE) → `counter://duel/:id`,
+  `counter://receipt/:id`; https production host + `/d` + autoVerify ✓ and + `/r` + autoVerify ✓;
+  ZERO `counter.app` in merged manifest ✓.
+- Embedded bundle (2,497,724 B): backend ✓, AXMB7 ✓, program ✓ (1× each, https); production identity
+  URI present; absent: mock token, fallback wallet, obsolete mint, key/password literals, JWT default,
+  tunnel/emulator hosts, any `counter.app` URL ✓. `localhost`×3 + `127.0.0.1`×1 = same known library
+  constants (no app-owned backend).
+
+### 40.D — Production alignment + binding (authoritative)
+
+- VPS: deployed ONLY `server/index.js` (`83f98b2` blob, hash-verified), restarted ONLY
+  `counter-backend.service` (active). Live: `/d` → 200 with `counter://duel/…` + `app.counter.mobile`;
+  `/r` → 200 with `counter://receipt/…` + `app.counter.mobile`; health 200; assetlinks 200 on the SAME
+  host with package + NEW cert (+ OLD retained). Caddy/unrelated services untouched.
+
+> This exact APK (SHA-256 `67F3BE83…E29F3`, cert `a11be643…d7827`, package `app.counter.mobile`)
+> was built from authoritative Git state `83f98b2` and is the ONLY APK authorized for the upcoming
+> physical Android UAT. APK `205F83C3…4F473` is SUPERSEDED. Any runtime-affecting app change
+> invalidates this artifact and requires rebuild.
+
+### 40.E — Device + remaining blockers
+
+- `adb devices -l` → empty: `PHYSICAL ANDROID UAT BLOCKED — NO DEVICE ATTACHED`. No emulation.
+- VPS changes this phase (exhaustive): `server/index.js` (applinks package tags) + one service restart.
+- Blockers: physical hardware (cold launch, MWA flows, faucet UX, deep-link tap-through on device,
+  full Core Outcome); off-machine password backup still recommended.
 
 
