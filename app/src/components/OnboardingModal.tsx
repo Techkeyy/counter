@@ -8,22 +8,50 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
+import { ConnectionHelp } from './ConnectionHelp';
+import { WalletConnectionStatus } from '../wallet';
 import { api } from '../api';
 
 interface OnboardingModalProps {
   visible: boolean;
   onClose: () => void;
   wallet: string | null;
+  connectionStatus: WalletConnectionStatus;
+  connectionError?: string | null;
   onConnectWallet: () => void;
   onProfileUpdated?: () => void;
+}
+
+const BUSY_LABEL: Record<string, string> = {
+  CONNECTING: 'Contacting wallet',
+  WAITING_FOR_WALLET: 'Opening wallet',
+  VERIFYING: 'Verifying ownership',
+};
+
+const BUSY_BODY: Record<string, string> = {
+  CONNECTING: 'Dispatching a secure request to your Solana wallet app.',
+  WAITING_FOR_WALLET: 'Check your wallet app and approve the Counter request there.',
+  VERIFYING: 'Confirming the signature with Counter. Almost done.',
+};
+
+function isFailure(s: WalletConnectionStatus): boolean {
+  return (
+    s === 'USER_REJECTED' ||
+    s === 'NO_WALLET' ||
+    s === 'MWA_TIMEOUT' ||
+    s === 'NETWORK_ERROR' ||
+    s === 'AUTH_FAILED'
+  );
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   visible,
   onClose,
   wallet,
+  connectionStatus,
+  connectionError,
   onConnectWallet,
   onProfileUpdated,
 }) => {
@@ -33,13 +61,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const busy = BUSY_LABEL[connectionStatus] !== undefined;
+  const failed = isFailure(connectionStatus);
+
   const handleSaveProfile = async () => {
     if (!wallet) {
-      setError('Please connect your wallet first.');
+      setError('Connect your wallet first.');
       return;
     }
     if (!displayName.trim()) {
-      setError('Please enter a display name.');
+      setError('Enter a display name.');
       return;
     }
     try {
@@ -52,7 +83,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       if (onProfileUpdated) onProfileUpdated();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Failed to update profile.');
+      setError(err.message || 'Could not save profile.');
     } finally {
       setSaving(false);
     }
@@ -64,16 +95,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         <View style={styles.container}>
           {step === 1 ? (
             <View style={styles.stepContent}>
-              <View style={styles.badgeRow}>
-                <View style={styles.iconCircle}>
-                  <Icon name="swords" size={32} color={colors.solanaGreen} />
-                </View>
+              <View style={styles.iconCircle}>
+                <Icon name="swords" size={32} color={colors.brandPrimary} />
               </View>
-
               <Text style={styles.title}>Welcome to Counter</Text>
               <Text style={styles.lead}>
                 A social network where conversations become financially accountable.
               </Text>
+              <View style={styles.devnetRow}>
+                <Text style={styles.devnetText}>Test build on Solana Devnet</Text>
+              </View>
 
               <View style={styles.featureList}>
                 <View style={styles.featureItem}>
@@ -81,28 +112,26 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     <Text style={styles.bulletText}>1</Text>
                   </View>
                   <View style={styles.featureTextCol}>
-                    <Text style={styles.featureTitle}>Post Your Take</Text>
-                    <Text style={styles.featureDesc}>State your stance clearly on crypto, sports, or culture.</Text>
+                    <Text style={styles.featureTitle}>Post your take</Text>
+                    <Text style={styles.featureDesc}>State a stance on crypto, sports, or culture.</Text>
                   </View>
                 </View>
-
                 <View style={styles.featureItem}>
                   <View style={styles.bullet}>
                     <Text style={styles.bulletText}>2</Text>
                   </View>
                   <View style={styles.featureTextCol}>
-                    <Text style={styles.featureTitle}>Face Challenges</Text>
-                    <Text style={styles.featureDesc}>When someone disagrees, 1v1 terms lock in escrow.</Text>
+                    <Text style={styles.featureTitle}>Face challenges</Text>
+                    <Text style={styles.featureDesc}>Disagreements become 1v1 duels with locked terms.</Text>
                   </View>
                 </View>
-
                 <View style={styles.featureItem}>
                   <View style={styles.bullet}>
                     <Text style={styles.bulletText}>3</Text>
                   </View>
                   <View style={styles.featureTextCol}>
-                    <Text style={styles.featureTitle}>Permanent Receipts</Text>
-                    <Text style={styles.featureDesc}>Solana settles the winner. Your track record is forever.</Text>
+                    <Text style={styles.featureTitle}>Settle on Solana</Text>
+                    <Text style={styles.featureDesc}>Winners claim real escrow. Receipts last forever.</Text>
                   </View>
                 </View>
               </View>
@@ -111,16 +140,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 style={styles.primaryButton}
                 onPress={() => setStep(2)}
                 activeOpacity={0.8}
+                accessibilityLabel="Get started"
+                accessibilityRole="button"
               >
-                <Text style={styles.primaryButtonText}>Get Started</Text>
+                <Text style={styles.primaryButtonText}>Get started</Text>
                 <Icon name="arrow-right" size={16} color="#000000" />
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.stepContent}>
-              <Text style={styles.title}>Set Up Contender Profile</Text>
+              <Text style={styles.title}>Set up your profile</Text>
               <Text style={styles.lead}>
-                Choose how others see you when challenging your takes.
+                Choose how others see you when your takes get challenged.
               </Text>
 
               {error && (
@@ -130,13 +161,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               )}
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Display Name</Text>
+                <Text style={styles.label}>Display name</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. Wale Adeyemi"
+                  placeholder="Alex Rivera"
                   placeholderTextColor={colors.textMuted}
                   value={displayName}
                   onChangeText={setDisplayName}
+                  accessibilityLabel="Display name"
                 />
               </View>
 
@@ -144,23 +176,34 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <Text style={styles.label}>Handle</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="@wale"
+                  placeholder="@alex"
                   placeholderTextColor={colors.textMuted}
                   value={handle}
                   onChangeText={setHandle}
                   autoCapitalize="none"
+                  accessibilityLabel="Handle"
                 />
               </View>
 
-              {!wallet ? (
+              {busy ? (
+                <View style={styles.statusBox}>
+                  <ActivityIndicator size="large" color={colors.brandPrimary} />
+                  <Text style={styles.statusTitle}>{BUSY_LABEL[connectionStatus]}</Text>
+                  <Text style={styles.statusBody}>{BUSY_BODY[connectionStatus]}</Text>
+                </View>
+              ) : failed ? (
+                <ConnectionHelp status={connectionStatus} detail={connectionError} onRetry={onConnectWallet} />
+              ) : !wallet ? (
                 <TouchableOpacity
-                  style={[styles.primaryButton, { backgroundColor: colors.solanaPurple }]}
+                  style={[styles.primaryButton, { backgroundColor: colors.brandSecondary }]}
                   onPress={onConnectWallet}
                   activeOpacity={0.8}
+                  accessibilityLabel="Connect Solana wallet"
+                  accessibilityRole="button"
                 >
                   <Icon name="wallet" size={16} color="#FFFFFF" />
                   <Text style={[styles.primaryButtonText, { color: '#FFFFFF' }]}>
-                    Connect Solana Wallet
+                    Connect Solana wallet
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -169,12 +212,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   onPress={handleSaveProfile}
                   disabled={saving}
                   activeOpacity={0.8}
+                  accessibilityLabel="Finish setup"
+                  accessibilityRole="button"
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="#000000" />
                   ) : (
                     <>
-                      <Text style={styles.primaryButtonText}>Finish Setup</Text>
+                      <Text style={styles.primaryButtonText}>Finish setup</Text>
                       <Icon name="check" size={16} color="#000000" />
                     </>
                   )}
@@ -185,8 +230,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 style={styles.skipButton}
                 onPress={onClose}
                 activeOpacity={0.8}
+                accessibilityLabel="Skip for now"
+                accessibilityRole="button"
               >
-                <Text style={styles.skipText}>Skip for Now</Text>
+                <Text style={styles.skipText}>Skip for now</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -199,7 +246,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
@@ -212,108 +259,62 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  stepContent: {
-    alignItems: 'center',
-  },
-  badgeRow: {
-    marginBottom: spacing.md,
-  },
+  stepContent: { alignItems: 'center' },
   iconCircle: {
     width: 64,
     height: 64,
-    borderRadius: borderRadius.full,
+    borderRadius: 32,
     backgroundColor: 'rgba(20, 241, 149, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  title: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  lead: {
-    ...typography.bodyMuted,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-    lineHeight: 18,
-  },
-  featureList: {
-    width: '100%',
-    marginBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  bullet: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  title: { ...typography.h2, color: colors.textPrimary, marginBottom: spacing.xs, textAlign: 'center' },
+  lead: { ...typography.bodyMuted, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
+  devnetRow: {
     backgroundColor: colors.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    marginBottom: spacing.lg,
   },
-  bulletText: {
-    ...typography.captionBold,
-    color: colors.solanaGreen,
+  devnetText: { ...typography.caption, color: colors.textSecondary },
+  featureList: { width: '100%', marginBottom: spacing.xl, gap: spacing.md },
+  featureItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  bullet: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.surfaceLight, alignItems: 'center', justifyContent: 'center', marginTop: 2,
   },
-  featureTextCol: {
-    flex: 1,
-  },
-  featureTitle: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-  },
-  featureDesc: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-  },
+  bulletText: { ...typography.captionBold, color: colors.brandPrimary },
+  featureTextCol: { flex: 1 },
+  featureTitle: { ...typography.bodyBold, color: colors.textPrimary },
+  featureDesc: { ...typography.caption, color: colors.textSecondary, marginTop: 2, lineHeight: 17, fontSize: 13 },
   primaryButton: {
     flexDirection: 'row',
     width: '100%',
-    backgroundColor: colors.solanaGreen,
-    paddingVertical: spacing.md,
+    minHeight: touchMin,
+    backgroundColor: colors.brandPrimary,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
   },
-  primaryButtonText: {
-    ...typography.bodyBold,
-    color: '#000000',
-  },
-  skipButton: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  skipText: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  inputGroup: {
-    width: '100%',
-    marginBottom: spacing.md,
-  },
-  label: {
-    ...typography.captionBold,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
+  primaryButtonText: { ...typography.bodyBold, color: '#000000' },
+  skipButton: { marginTop: spacing.sm, minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  skipText: { ...typography.caption, color: colors.textMuted, fontSize: 13 },
+  inputGroup: { width: '100%', marginBottom: spacing.md },
+  label: { ...typography.captionBold, color: colors.textSecondary, marginBottom: spacing.xs, fontSize: 13 },
   input: {
     backgroundColor: colors.surfaceLight,
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    minHeight: touchMin,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    fontSize: 15,
   },
   errorBox: {
     backgroundColor: 'rgba(255, 71, 87, 0.1)',
@@ -322,11 +323,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     width: '100%',
   },
-  errorText: {
-    ...typography.caption,
-    color: colors.danger,
-    textAlign: 'center',
-  },
+  errorText: { ...typography.caption, color: colors.error, textAlign: 'center', fontSize: 13 },
+  statusBox: { alignItems: 'center', width: '100%', paddingVertical: spacing.md, gap: spacing.sm },
+  statusTitle: { ...typography.h3, color: colors.textPrimary, marginTop: spacing.sm },
+  statusBody: { ...typography.bodyMuted, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
 });
-
-export default OnboardingModal;

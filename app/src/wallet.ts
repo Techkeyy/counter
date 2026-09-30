@@ -47,10 +47,75 @@ export function getConnection(): Connection {
 // The previous local derive* helpers were removed: they used an incompatible
 // seed scheme ([b"duel", u32-hash]) and were dead code (no on-chain calls).
 
-// Connect Wallet & perform SIWS
-export async function connectAndAuthenticate(): Promise<WalletState> {
-  try {
-    return await transact(async (wallet) => {
+// Connect Wallet & perform SIWS.
+//
+// Staged, timeout-guarded, and explicitly classified: failures NEVER silently
+// collapse to idle. The caller receives a WalletConnectionStatus it must
+// render with a recovery action (retry / help), plus the raw detail message
+// for the help view (never user-facing jargon as the headline).
+export interface ConnectOutcome {
+  state: WalletState;
+  status: WalletConnectionStatus;
+  detail?: string;
+}
+
+const DISCONNECTED_STATE: WalletState = {
+  connected: false,
+  publicKey: null,
+  authToken: null,
+  isArenaEligible: false,
+  skrStakedAmount: 0,
+};
+
+// Local MWA handshake budget. The wallet app opens over a local socket; if it
+// has not answered in this window (e.g. OS power saving stalls the dispatch),
+// fail closed with MWA_TIMEOUT instead of hanging forever.
+export const MWA_HANDSHAKE_TIMEOUT_MS = 45000;
+
+function classifyConnectError(err: any, stage: 'authorize' | 'verify'): WalletConnectionStatus {
+  const msg = String(err?.message || err || '').toLowerCase();
+  if (/reject|cancel|declin|dismiss|denied|user cancel/.test(msg)) return 'USER_REJECTED';
+  if (/no wallet|wallet not|no compatible|not installed|unavailable|no mwa|protocol/.test(msg)) return 'NO_WALLET';
+  if (/network|fetch|failed to fetch|econn|socket|dns|offline|unreachable|load failed/.test(msg)) return 'NETWORK_ERROR';
+  if (/timeout|timed out|expired/.test(msg)) return stage === 'authorize' ? 'MWA_TIMEOUT' : 'NETWORK_ERROR';
+  if (/nonce|verif|signature|token|401|unauthor|forbidden|invalid/.test(msg)) return 'AUTH_FAILED';
+  return stage === 'authorize' ? 'NO_WALLET' : 'AUTH_FAILED';
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const gate = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      reject(new Error('MWA handshake timed out'));
+    }, ms);
+  });
+  return Promise.race([promise, gate]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+export async function connectAndAuthenticate(
+  onStage?: (stage: WalletConnectionStatus) => void,
+  timeoutMs: number = MWA_HANDSHAKE_TIMEOUT_MS
+): Promise<ConnectOutcome> {
+  const emit = (s: WalletConnectionStatus) => {
+    try {
+      if (onStage) onStage(s);
+    } catch {}
+  };
+  let timedOut = false;
+  let settled = false;
+
+  // If authorization has not returned quickly, the user is most likely
+  // looking at their wallet app (or the dispatch stalled): say so instead
+  // of showing a generic spinner forever.
+  const waitingTimer = setTimeout(() => {
+    if (!settled) emit('WAITING_FOR_WALLET');
+  }, 2500);
+
+  const attempt = transact(async (wallet) => {
+    try {
       const authResult = await wallet.authorize({
         cluster: 'devnet',
         identity: {
@@ -64,6 +129,7 @@ export async function connectAndAuthenticate(): Promise<WalletState> {
       const userPubkey = new PublicKey(Buffer.from(userPubkeyStr, 'base64'));
       const walletBase58 = userPubkey.toBase58();
 
+      emit('VERIFYING');
       // SIWS Nonce
       const { nonce } = await api.getNonce(walletBase58);
       const message = `Sign-in to Counter with nonce: ${nonce}`;
@@ -87,20 +153,33 @@ export async function connectAndAuthenticate(): Promise<WalletState> {
         authToken: verifyRes.token,
         isArenaEligible: verifyRes.user?.is_arena_eligible === 1,
         skrStakedAmount: verifyRes.user?.skr_staked_amount || 0,
-      };
+      } as WalletState;
+    } catch (err: any) {
+      // Stage the failure by where it happened: anything before the SIWS
+      // verify call is an authorize/wallet-stage failure.
+      throw err;
+    }
+  });
+
+  emit('CONNECTING');
+  try {
+    const state = await withTimeout(attempt, timeoutMs, () => {
+      timedOut = true;
     });
+    settled = true;
+    clearTimeout(waitingTimer);
+    return { state, status: 'CONNECTED' };
   } catch (err: any) {
+    settled = true;
+    clearTimeout(waitingTimer);
     // No mock fallback in any build: a failed/cancelled wallet authorization
-    // must surface as disconnected so the product never fabricates identity,
-    // session tokens, or arena eligibility. Wallet rejection is a normal
-    // outcome the UI handles explicitly.
+    // must surface as an explicit failure state so the product never
+    // fabricates identity, session tokens, or arena eligibility. Wallet
+    // rejection is a normal outcome the UI handles explicitly.
     console.warn('[MWA] authorization failed or cancelled:', err?.message);
-    return {
-      connected: false,
-      publicKey: null,
-      authToken: null,
-      isArenaEligible: false,
-      skrStakedAmount: 0,
-    };
+    const status: WalletConnectionStatus = timedOut
+      ? 'MWA_TIMEOUT'
+      : classifyConnectError(err, 'authorize');
+    return { state: DISCONNECTED_STATE, status, detail: String(err?.message || err || 'Wallet connection failed') };
   }
 }

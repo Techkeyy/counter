@@ -53,6 +53,7 @@ export default function App() {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showComposer, setShowComposer] = useState(false);
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -127,8 +128,14 @@ export default function App() {
   }, []);
 
   const handleConnectWallet = async () => {
+    // Failures never silently return to idle: the outcome status stays
+    // visible (with retry/help) until the user succeeds or dismisses.
+    setConnectionError(null);
     setConnectionStatus('CONNECTING');
-    const state = await connectAndAuthenticate();
+    const outcome = await connectAndAuthenticate((stage) => {
+      setConnectionStatus(stage);
+    });
+    const { state } = outcome;
     if (state.connected && state.publicKey && state.authToken) {
       try {
         await saveSession(SecureSessionStorage, {
@@ -140,11 +147,13 @@ export default function App() {
       }
       setWalletState(state);
       setConnectionStatus('CONNECTED');
+      setConnectionError(null);
       setShowOnboarding(false);
     } else {
       await clearSession(SecureSessionStorage);
       setWalletState(DISCONNECTED);
-      setConnectionStatus('IDLE');
+      setConnectionStatus(outcome.status);
+      setConnectionError(outcome.detail || null);
       setShowOnboarding(true);
     }
   };
@@ -288,6 +297,8 @@ export default function App() {
         visible={showOnboarding}
         onClose={() => setShowOnboarding(false)}
         wallet={walletState.publicKey}
+        connectionStatus={connectionStatus}
+        connectionError={connectionError}
         onConnectWallet={handleConnectWallet}
       />
 
