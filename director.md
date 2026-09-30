@@ -7,8 +7,8 @@
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `20faf9b` (+ this ledger: production-alignment record, commit pending at time of writing)
-**Last Updated:** 2026-09-30T06:35:00Z
+**Authoritative Local Commit:** `05ef5fd` (+ this ledger: signing-rotation/UAT-artifact record, commit pending at time of writing; packaged app source `9b58c59` — see §39.D)
+**Last Updated:** 2026-09-30T08:00:00Z
 
 ---
 
@@ -984,5 +984,79 @@ fixed during the run; product code untouched by them.)
    4. `/opt/counter/backups/` (new dir): DB backup, code snapshot, working-tree patch.
    5. `/opt/counter/server/data/counter.sqlite` — migrated in place (schema added, data preserved,
    3 probe-fixture user rows removed). Nothing else on the VPS was created, modified, or deleted.
+   (Post-§38: `server/index.js` updated once more for the §39 signing rotation — see below.)
+
+---
+
+## 39. SIGNING ROTATION + FINAL UAT ARTIFACT — 2026-09-30 (Builder, owner-authorized)
+
+> Owner-directed Android release signing-key rotation before physical UAT (intentional, not a breach).
+> Old keystore archived (retained, untouched). New identity is authoritative going forward.
+> No secret appears in this ledger, in Git, in logs, or in the report — password handled locally only
+> (generated 32 random bytes → base64url; DPAPI-encrypted recovery file; process-local env for
+> keytool/Gradle; cleared afterward). Final status remains:
+> **`BUILDING — PHYSICAL ANDROID UAT READY`** (NOT UAT passed / release candidate / submission ready).
+
+### 39.A — New signing identity (non-secret metadata only)
+
+- Created 2026-09-30, alias `counter`, RSA 2048-bit, validity 10000 days (until 2054),
+  subject `CN=Counter Mobile, OU=Counter, O=CounterApp, L=Global, ST=Solana, C=US`.
+- External keystore (NOT in repo): `C:\Users\HomePC\.counter-secrets\counter-release.keystore`
+  (directory + files restricted to the current Windows user).
+- Recovery: `C:\Users\HomePC\.counter-secrets\counter-release-password.dpapi` (DPAPI current-user
+  encrypted bytes only) + non-secret `README.txt` (metadata + off-machine backup recommendation).
+- Old backup retained untouched: `counter-release-OLD-20260930-082457.keystore` (old cert
+  `3AB28E39…FBFF25` remains authorized in assetlinks for transition compatibility).
+- NEW certificate SHA-256: `A1:1B:E6:43:07:AE:1E:F3:67:36:2D:5B:32:D0:0B:C4:32:18:FE:AB:FC:91:D6:8C:EA:F2:7C:B4:6F:7D:78:27`
+  (differs from old — rotation confirmed). Actual password deliberately excluded everywhere.
+- Gradle config: unchanged mechanism (env-based, fail-closed without credentials); build invoked with
+  `COUNTER_RELEASE_STORE_FILE` (+ alias/password) decrypted into the build process only. Nothing
+  persisted in plaintext; no repo change required for signing config.
+
+### 39.B — Fresh release build (packaged source `9b58c59`)
+
+- Pre-build gates: tsc 0 errors · session 5/5 · chain vectors 11/11 · adversarial 8/8 (oracle section
+  passed live this run; fixtures cleaned). Production pre-verified healthy (health 200, program exact,
+  `chain-accounts` present). Release config: keystore untracked, no hardcoded passwords, no `.env`
+  tracked, app backend/mint/program exact, mock fallback absent.
+- `./gradlew assembleRelease --no-daemon` from `app/android` → **BUILD SUCCESSFUL in 16m 33s**.
+- Artifact `app/android/app/build/outputs/apk/release/app-release.apk`: **62,018,104 bytes** (new),
+  SHA-256 **`205F83C3B0D8C582D038EDFED7B8F5FB66F1B70023750588C613511195A4F473`**,
+  package `app.counter.mobile`, versionCode `1`, versionName `1.0.0`,
+  signer cert SHA-256 `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827` (= new key).
+- Embedded `index.android.bundle` (2,497,736 B): backend ✓, AXMB7 mint ✓, program ✓ (1× each, https);
+  absent: mock token, fallback wallet, obsolete mint, key headers, signing-password literals, JWT default,
+  emulator/tunnel hosts ✓. `localhost`×3 + `127.0.0.1`×1 re-traced to the same library constants
+  (Metro :8080, web3 cluster enum, default RPC :8899) — no app-owned localhost backend.
+- Deep links (config only): `counter` scheme + `counter://duel` host filter + `https://counter.app/d`
+  App Link in manifest; in-app `counter://receipt/:id` routing (fixed §33); live assetlinks authorizes
+  the package. Hardware execution NOT claimed.
+
+### 39.C — Assetlinks rotation deploy (Counter backend only)
+
+- Repo: `server/index.js` assetlinks now lists NEW fingerprint first, OLD release + debug retained
+  (commit `05ef5fd`, pushed). No secret in the change (fingerprints are public).
+- VPS: deployed ONLY `server/index.js` (hash-verified `05ef5fd` blob), restarted ONLY
+  `counter-backend.service` (active, clean boot). Live `/.well-known/assetlinks.json` → HTTP 200,
+  package `app.counter.mobile`, NEW fingerprint present, OLD retained. Health still 200 (program exact).
+  Caddy and all unrelated services untouched.
+
+### 39.D — Source ↔ APK binding (authoritative)
+
+> This exact APK (SHA-256 `205F83C3…4F473`, cert `a11be643…d7827`, package `app.counter.mobile`)
+> was built from authoritative Git state `9b58c59` and is the ONLY APK approved for the upcoming
+> physical Android UAT.
+
+- Post-build commits (`05ef5fd` server-only, this ledger) touch NO `app/` packaged source
+  (verified: `git diff 9b58c59..HEAD -- app/` empty) — artifact remains valid. Any future
+  runtime-affecting app change invalidates it and requires rebuild.
+
+### 39.E — Device + closure
+
+- `adb devices -l` → empty: `PHYSICAL ANDROID UAT BLOCKED — NO DEVICE ATTACHED`. No emulation.
+- VPS changes this phase (exhaustive): `server/index.js` (assetlinks fingerprints) + one
+  `counter-backend.service` restart. Old backup + new vault files are LOCAL only (never transmitted).
+- Remaining blockers: physical Android hardware (cold launch, MWA, faucet UX, Core Outcome);
+  owner off-machine backup of the DPAPI-protected password recommended.
 
 
