@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,16 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Take, Category } from '../types';
-import { colors, spacing } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
+import { Icon } from './Icon';
 import { api } from '../api';
+import {
+  CRYPTO_ASSETS,
+  WEATHER_CITIES,
+  CryptoOperator,
+  describeCriteria,
+  formatDeadline,
+} from '../utils/criteria';
 
 interface ChallengeModalProps {
   visible: boolean;
@@ -20,146 +28,388 @@ interface ChallengeModalProps {
   onChallengeCreated: () => void;
 }
 
+const STAKE_PRESETS = ['10', '25', '50', '100', '250'];
+const CUTOFF_PRESETS = [
+  { label: '24 hours', seconds: 24 * 3600 },
+  { label: '3 days', seconds: 3 * 24 * 3600 },
+  { label: '7 days', seconds: 7 * 24 * 3600 },
+];
+const OPERATORS: CryptoOperator[] = ['>=', '<='];
+
 export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   visible,
   take,
   onClose,
   onChallengeCreated,
 }) => {
-  const [stakeAmount, setStakeAmount] = useState('50');
+  const [step, setStep] = useState<1 | 2>(1);
+  const [stakeAmount, setStakeAmount] = useState('25');
   const [sideATerms, setSideATerms] = useState('');
   const [sideBTerms, setSideBTerms] = useState('');
-  const [category, setCategory] = useState<Category>('CRYPTO');
+  const [cutoffSeconds, setCutoffSeconds] = useState(CUTOFF_PRESETS[0].seconds);
+  // Crypto decider
+  const [assetId, setAssetId] = useState<string>('solana');
+  const [operator, setOperator] = useState<CryptoOperator>('>=');
+  const [targetPrice, setTargetPrice] = useState('250');
+  // Sports decider
+  const [eventId, setEventId] = useState('');
+  const [homeTeam, setHomeTeam] = useState('');
+  const [awayTeam, setAwayTeam] = useState('');
+  const [targetSide, setTargetSide] = useState<'home' | 'away'>('home');
+  // Weather decider
+  const [cityIndex, setCityIndex] = useState(0);
+  const [weatherCondition, setWeatherCondition] = useState<'rain' | 'temp'>('rain');
+  const [threshold, setThreshold] = useState('0.1');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (take) {
+      setStep(1);
       setSideATerms(take.content);
-      setSideBTerms(`Contra: ${take.topic} fails to materialize`);
-      setCategory(take.category || 'CRYPTO');
+      setSideBTerms('');
+      setError(null);
     }
   }, [take]);
 
-  const handleSubmit = async () => {
-    if (!take) return;
+  if (!take) return null;
+  const category: Category = take.category || 'CRYPTO';
+  const needsCrypto = category !== 'SPORTS' && category !== 'WEATHER';
+
+  const buildSourceConfig = (): Record<string, any> => {
+    if (category === 'SPORTS') {
+      return { eventId: eventId.trim(), homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), targetSide };
+    }
+    if (category === 'WEATHER') {
+      const city = WEATHER_CITIES[cityIndex];
+      return { latitude: city.latitude, longitude: city.longitude, city: city.city, condition: weatherCondition, threshold: Number(threshold) };
+    }
+    return { assetId, targetPriceUsd: Number(targetPrice), operator };
+  };
+
+  const validate = (): string | null => {
     const stake = parseFloat(stakeAmount);
-    if (isNaN(stake) || stake <= 0) {
-      setError('Please enter a valid stake amount in cUSD');
+    if (Number.isNaN(stake) || stake <= 0) return 'Enter a valid stake amount in test cUSD.';
+    if (!sideATerms.trim() || !sideBTerms.trim()) return 'Write both sides of the dispute in plain words.';
+    if (category === 'SPORTS') {
+      if (!eventId.trim() || !homeTeam.trim() || !awayTeam.trim()) return 'Add the event ID and both teams so anyone can check the result.';
+    } else if (category === 'WEATHER') {
+      if (Number.isNaN(Number(threshold))) return 'Enter a numeric threshold for the weather decider.';
+    } else {
+      if (Number.isNaN(Number(targetPrice)) || Number(targetPrice) <= 0) return 'Enter a target price above zero.';
+    }
+    return null;
+  };
+
+  const cutoffTs = Math.floor(Date.now() / 1000) + cutoffSeconds;
+  const resolutionTs = cutoffTs + 48 * 3600;
+
+  const handleSubmit = async () => {
+    const problem = validate();
+    if (problem) {
+      setError(problem);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       await api.proposeChallenge({
         takeId: take.id,
         targetWallet: take.author_wallet,
-        propositionA: sideATerms,
-        propositionB: sideBTerms,
+        propositionA: sideATerms.trim(),
+        propositionB: sideBTerms.trim(),
         category,
-        stakeAmountUsd: stake,
-        // Server stores cutoff_ts / resolution_ts as UNIX seconds.
-        cutoffTs: Math.floor(Date.now() / 1000) + 24 * 3600, // 24 hours lock
-        resolutionTs: Math.floor(Date.now() / 1000) + 48 * 3600,
+        stakeAmountUsd: parseFloat(stakeAmount),
+        cutoffTs,
+        resolutionTs,
         sourceType: category,
-        sourceConfig: {
-          category,
-          targetPriceUsd: 250,
-          condition: 'GTE',
-        },
+        sourceConfig: buildSourceConfig(),
       });
-
       setLoading(false);
       onChallengeCreated();
       onClose();
     } catch (err: any) {
       setLoading(false);
-      setError(err.message || 'Failed to issue challenge');
+      setError(err.message || 'Could not send the challenge.');
     }
   };
+
+  const criteriaSummary = describeCriteria(category, JSON.stringify(buildSourceConfig()));
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>⚔️ ISSUE 1V1 CHALLENGE</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+            <View style={styles.titleRow}>
+              <Icon name="swords" size={20} color={colors.brandPrimary} />
+              <Text style={styles.title}>{step === 1 ? 'Challenge to a 1v1' : 'Review challenge'}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              accessibilityLabel="Close challenge sheet"
+              accessibilityRole="button"
+            >
+              <Icon name="x" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {error && <Text style={styles.errorText}>{error}</Text>}
 
-            <Text style={styles.label}>Challenging Contender</Text>
-            <View style={styles.readonlyBox}>
-              <Text style={styles.readonlyText}>
-                @{take?.author_handle || take?.author_wallet.slice(0, 8)}
-              </Text>
-            </View>
-
-            <Text style={styles.label}>Captain A Terms (Author's Position)</Text>
-            <TextInput
-              style={styles.input}
-              value={sideATerms}
-              onChangeText={setSideATerms}
-              placeholder="Side A terms"
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
-
-            <Text style={styles.label}>Captain B Terms (Your Counter-Position)</Text>
-            <TextInput
-              style={styles.input}
-              value={sideBTerms}
-              onChangeText={setSideBTerms}
-              placeholder="Side B counter terms"
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
-
-            <Text style={styles.label}>Initial Captain Stake (cUSD)</Text>
-            <View style={styles.stakeRow}>
-              {['25', '50', '100', '250', '500'].map((amt) => (
-                <TouchableOpacity
-                  key={amt}
-                  style={[styles.stakePreset, stakeAmount === amt && styles.stakePresetActive]}
-                  onPress={() => setStakeAmount(amt)}
-                >
-                  <Text style={[styles.stakePresetText, stakeAmount === amt && styles.stakePresetTextActive]}>
-                    ${amt}
+            {step === 1 ? (
+              <>
+                <Text style={styles.label}>Opponent</Text>
+                <View style={styles.readonlyBox}>
+                  <Text style={styles.readonlyText}>
+                    {take.author_handle && !take.author_handle.startsWith('user_')
+                      ? `@${take.author_handle.replace(/^@/, '')}`
+                      : `${take.author_wallet.slice(0, 4)}...${take.author_wallet.slice(-4)}`}
                   </Text>
+                </View>
+
+                <Text style={styles.label}>Side A states (their position)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={sideATerms}
+                  onChangeText={setSideATerms}
+                  placeholder="What they claim"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  accessibilityLabel="Side A terms"
+                />
+
+                <Text style={styles.label}>Side B states (your counter)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={sideBTerms}
+                  onChangeText={setSideBTerms}
+                  placeholder="What you claim instead"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  accessibilityLabel="Side B terms"
+                />
+
+                <Text style={styles.label}>Deciding evidence · {category.toLowerCase()}</Text>
+                {category === 'SPORTS' ? (
+                  <>
+                    <TextInput style={styles.input} value={eventId} onChangeText={setEventId} placeholder="Event ID (sports database)" placeholderTextColor={colors.textMuted} accessibilityLabel="Event ID" />
+                    <View style={styles.twoCol}>
+                      <TextInput style={[styles.input, styles.flex]} value={homeTeam} onChangeText={setHomeTeam} placeholder="Home team" placeholderTextColor={colors.textMuted} accessibilityLabel="Home team" />
+                      <TextInput style={[styles.input, styles.flex]} value={awayTeam} onChangeText={setAwayTeam} placeholder="Away team" placeholderTextColor={colors.textMuted} accessibilityLabel="Away team" />
+                    </View>
+                    <View style={styles.chipRow}>
+                      {(['home', 'away'] as const).map((s) => (
+                        <TouchableOpacity
+                          key={s}
+                          style={[styles.chip, targetSide === s && styles.chipActive]}
+                          onPress={() => setTargetSide(s)}
+                          accessibilityLabel={`Side A wins if ${s} wins`}
+                        >
+                          <Text style={[styles.chipText, targetSide === s && styles.chipTextActive]}>
+                            Side A if {s} wins
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                ) : category === 'WEATHER' ? (
+                  <>
+                    <View style={styles.chipRow}>
+                      {WEATHER_CITIES.map((c, i) => (
+                        <TouchableOpacity
+                          key={c.city}
+                          style={[styles.chip, cityIndex === i && styles.chipActive]}
+                          onPress={() => setCityIndex(i)}
+                          accessibilityLabel={c.city}
+                        >
+                          <Text style={[styles.chipText, cityIndex === i && styles.chipTextActive]}>{c.city}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <View style={styles.chipRow}>
+                      {(['rain', 'temp'] as const).map((c) => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.chip, weatherCondition === c && styles.chipActive]}
+                          onPress={() => setWeatherCondition(c)}
+                          accessibilityLabel={c === 'rain' ? 'Decided by rain' : 'Decided by temperature'}
+                        >
+                          <Text style={[styles.chipText, weatherCondition === c && styles.chipTextActive]}>
+                            {c === 'rain' ? 'Rain' : 'Temperature'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={threshold}
+                      onChangeText={setThreshold}
+                      placeholder={weatherCondition === 'rain' ? 'Rain threshold in mm' : 'Temperature threshold in C'}
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numeric"
+                      accessibilityLabel="Weather threshold"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.chipRow}>
+                      {CRYPTO_ASSETS.map((a) => (
+                        <TouchableOpacity
+                          key={a.id}
+                          style={[styles.chip, assetId === a.id && styles.chipActive]}
+                          onPress={() => setAssetId(a.id)}
+                          accessibilityLabel={a.label}
+                        >
+                          <Text style={[styles.chipText, assetId === a.id && styles.chipTextActive]}>{a.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <View style={styles.chipRow}>
+                      {OPERATORS.map((op) => (
+                        <TouchableOpacity
+                          key={op}
+                          style={[styles.chip, operator === op && styles.chipActive]}
+                          onPress={() => setOperator(op)}
+                          accessibilityLabel={`Side A wins if price ${op} target`}
+                        >
+                          <Text style={[styles.chipText, operator === op && styles.chipTextActive]}>
+                            {op === '>=' ? 'At or above' : 'At or below'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={targetPrice}
+                      onChangeText={setTargetPrice}
+                      placeholder="Target price in USD"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numeric"
+                      accessibilityLabel="Target price in USD"
+                    />
+                    {category !== 'CRYPTO' && (
+                      <Text style={styles.note}>
+                        This category has no dedicated data feed, so the duel is decided by this public market reference.
+                      </Text>
+                    )}
+                  </>
+                )}
+
+                <Text style={styles.label}>Captain stake each (test cUSD)</Text>
+                <View style={styles.chipRow}>
+                  {STAKE_PRESETS.map((amt) => (
+                    <TouchableOpacity
+                      key={amt}
+                      style={[styles.chip, stakeAmount === amt && styles.chipActive]}
+                      onPress={() => setStakeAmount(amt)}
+                      accessibilityLabel={`Stake ${amt} cUSD`}
+                    >
+                      <Text style={[styles.chipText, stakeAmount === amt && styles.chipTextActive]}>${amt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={stakeAmount}
+                  onChangeText={setStakeAmount}
+                  placeholder="Custom amount"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numeric"
+                  accessibilityLabel="Custom stake amount"
+                />
+
+                <Text style={styles.label}>Staking closes</Text>
+                <View style={styles.chipRow}>
+                  {CUTOFF_PRESETS.map((p) => (
+                    <TouchableOpacity
+                      key={p.label}
+                      style={[styles.chip, cutoffSeconds === p.seconds && styles.chipActive]}
+                      onPress={() => setCutoffSeconds(p.seconds)}
+                      accessibilityLabel={`Staking closes in ${p.label}`}
+                    >
+                      <Text style={[styles.chipText, cutoffSeconds === p.seconds && styles.chipTextActive]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={() => {
+                    const problem = validate();
+                    if (problem) setError(problem);
+                    else {
+                      setError(null);
+                      setStep(2);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Review challenge"
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.primaryText}>Review challenge</Text>
+                  <Icon name="arrow-right" size={16} color="#000000" />
                 </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={styles.stakeInput}
-              value={stakeAmount}
-              onChangeText={setStakeAmount}
-              placeholder="Custom cUSD amount"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
-            />
-
-            <Text style={styles.note}>
-              🔒 Stakes will be locked into Counter PDA Vault on-chain once accepted.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.submitButton}
-              onPress={handleSubmit}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.submitText}>PROPOSE CHALLENGE</Text>
-              )}
-            </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={styles.reviewBox}>
+                  <Text style={styles.reviewLabel}>Side A</Text>
+                  <Text style={styles.reviewText}>{sideATerms.trim()}</Text>
+                </View>
+                <View style={styles.reviewBox}>
+                  <Text style={styles.reviewLabel}>Side B</Text>
+                  <Text style={styles.reviewText}>{sideBTerms.trim()}</Text>
+                </View>
+                <View style={styles.reviewBox}>
+                  <Text style={styles.reviewLabel}>Decided by</Text>
+                  <Text style={styles.reviewText}>{criteriaSummary}</Text>
+                </View>
+                <View style={styles.reviewRow}>
+                  <View style={styles.reviewHalf}>
+                    <Text style={styles.reviewLabel}>Stake each</Text>
+                    <Text style={styles.reviewText}>${parseFloat(stakeAmount).toFixed(2)} test cUSD</Text>
+                  </View>
+                  <View style={styles.reviewHalf}>
+                    <Text style={styles.reviewLabel}>Staking closes</Text>
+                    <Text style={styles.reviewText}>{formatDeadline(cutoffTs)}</Text>
+                  </View>
+                </View>
+                <View style={styles.vaultNote}>
+                  <Icon name="shield-check" size={16} color={colors.success} />
+                  <Text style={styles.vaultText}>
+                    Stakes lock in the on-chain vault only after both captains accept and initialize.
+                  </Text>
+                </View>
+                <View style={styles.reviewActions}>
+                  <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => setStep(1)}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Back to editing"
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.backText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sendButton}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Send challenge"
+                    accessibilityRole="button"
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#000000" />
+                    ) : (
+                      <Text style={styles.sendText}>Send challenge</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -168,131 +418,76 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   content: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: spacing.xl,
-    maxHeight: '90%',
+    maxHeight: '92%',
     borderTopWidth: 1,
     borderColor: colors.cardBorder,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  closeText: {
-    color: colors.textMuted,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  body: {
-    marginBottom: spacing.lg,
-  },
-  label: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-    marginTop: spacing.md,
-    textTransform: 'uppercase',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  title: { ...typography.h3, color: colors.textPrimary },
+  closeBtn: { minHeight: touchMin, minWidth: touchMin, justifyContent: 'center', alignItems: 'center' },
+  body: { marginBottom: spacing.lg },
+  errorText: { color: colors.error, fontSize: 13, fontWeight: '700', marginBottom: spacing.sm },
+  label: { ...typography.captionBold, color: colors.textSecondary, fontSize: 13, marginBottom: 6, marginTop: spacing.md },
   readonlyBox: {
-    backgroundColor: colors.surfaceLight,
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: colors.surfaceLight, paddingHorizontal: spacing.md, minHeight: touchMin,
+    justifyContent: 'center', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.cardBorder,
   },
-  readonlyText: {
-    color: colors.solanaGreen,
-    fontWeight: '700',
-  },
+  readonlyText: { color: colors.brandPrimary, fontWeight: '700', fontSize: 14 },
   input: {
-    backgroundColor: colors.surfaceLight,
-    color: colors.textPrimary,
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    minHeight: 50,
+    backgroundColor: colors.surfaceLight, color: colors.textPrimary,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: touchMin,
+    borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.cardBorder, fontSize: 15, marginBottom: spacing.sm,
   },
-  stakeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
+  twoCol: { flexDirection: 'row', gap: spacing.sm },
+  flex: { flex: 1 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  chip: {
+    minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full, backgroundColor: colors.surfaceLight,
+    borderWidth: 1, borderColor: colors.cardBorder,
   },
-  stakePreset: {
-    flex: 1,
-    backgroundColor: colors.surfaceLight,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+  chipActive: { borderColor: colors.brandPrimary, backgroundColor: colors.surfaceHighlight },
+  chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: colors.brandPrimary, fontWeight: '700' },
+  note: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
+  primaryButton: {
+    flexDirection: 'row', minHeight: touchMin + 4, backgroundColor: colors.brandPrimary,
+    borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.md,
   },
-  stakePresetActive: {
-    backgroundColor: 'rgba(153, 69, 255, 0.2)',
-    borderColor: colors.solanaPurple,
+  primaryText: { ...typography.bodyBold, color: '#000000' },
+  reviewBox: {
+    backgroundColor: colors.surfaceLight, borderRadius: borderRadius.md, padding: spacing.md,
+    marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.cardBorder,
   },
-  stakePresetText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
+  reviewLabel: { ...typography.captionBold, color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  reviewText: { ...typography.body, color: colors.textPrimary, fontSize: 14, lineHeight: 20 },
+  reviewRow: { flexDirection: 'row', gap: spacing.sm },
+  reviewHalf: {
+    flex: 1, backgroundColor: colors.surfaceLight, borderRadius: borderRadius.md, padding: spacing.md,
+    borderWidth: 1, borderColor: colors.cardBorder, marginBottom: spacing.sm,
   },
-  stakePresetTextActive: {
-    color: colors.solanaPurple,
-    fontWeight: '900',
+  vaultNote: {
+    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',
+    backgroundColor: colors.surfaceLight, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.md,
   },
-  stakeInput: {
-    backgroundColor: colors.surfaceLight,
-    color: colors.textPrimary,
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    fontSize: 16,
-    fontWeight: '800',
+  vaultText: { flex: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  reviewActions: { flexDirection: 'row', gap: spacing.sm },
+  backButton: {
+    minHeight: touchMin + 4, paddingHorizontal: spacing.xl, borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceLight, borderWidth: 1, borderColor: colors.cardBorder,
+    alignItems: 'center', justifyContent: 'center',
   },
-  note: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: spacing.md,
-    textAlign: 'center',
+  backText: { ...typography.bodyBold, color: colors.textPrimary },
+  sendButton: {
+    flex: 1, minHeight: touchMin + 4, backgroundColor: colors.brandPrimary,
+    borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center',
   },
-  errorText: {
-    color: colors.duelCrimson,
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: spacing.sm,
-  },
-  submitButton: {
-    backgroundColor: colors.solanaPurple,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: spacing.lg,
-  },
-  submitText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
+  sendText: { ...typography.bodyBold, color: '#000000' },
 });

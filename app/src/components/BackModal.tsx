@@ -11,7 +11,8 @@ import {
 import { PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Duel } from '../types';
-import { colors, spacing } from '../theme';
+import { colors, spacing, borderRadius, touchMin } from '../theme';
+import { Icon } from './Icon';
 import { api } from '../api';
 import { getConnection } from '../wallet';
 import {
@@ -201,10 +202,15 @@ export const BackModal: React.FC<BackModalProps> = ({
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: sideColor }]}>
-              + BACK {sideLabel} ({captainName})
+              Back {sideLabel} · {captainName || 'TBD'}
             </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              accessibilityLabel="Close back sheet"
+              accessibilityRole="button"
+            >
+              <Icon name="x" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -271,11 +277,13 @@ export const BackModal: React.FC<BackModalProps> = ({
             onPress={handleDeposit}
             disabled={loading}
             activeOpacity={0.8}
+            accessibilityLabel={`Deposit ${stakeNum || 0} test cUSD on ${sideLabel}`}
+            accessibilityRole="button"
           >
             {loading ? (
               <ActivityIndicator color="#000" />
             ) : (
-              <Text style={styles.submitText}>CONFIRM & DEPOSIT CUSD</Text>
+              <Text style={styles.submitText}>Deposit test cUSD</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -310,12 +318,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   closeBtn: {
-    padding: 4,
-  },
-  closeText: {
-    color: colors.textMuted,
-    fontSize: 18,
-    fontWeight: '700',
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   propBox: {
     backgroundColor: colors.surfaceLight,
@@ -345,7 +351,8 @@ const styles = StyleSheet.create({
   presetBtn: {
     flex: 1,
     backgroundColor: colors.surfaceLight,
-    paddingVertical: 8,
+    minHeight: touchMin,
+    justifyContent: 'center',
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
@@ -402,27 +409,28 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   submitBtn: {
-    paddingVertical: 14,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 12,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   submitText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '800',
   },
   faucetBtn: {
-    backgroundColor: colors.warningYellow,
-    paddingVertical: 12,
+    backgroundColor: colors.warning,
+    minHeight: touchMin,
+    justifyContent: 'center',
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
   faucetBtnText: {
     color: '#000',
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

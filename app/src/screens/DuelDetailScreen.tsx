@@ -11,10 +11,12 @@ import {
 import { PublicKey } from '@solana/web3.js';
 import { Duel, Position } from '../types';
 import { BackModal } from '../components/BackModal';
-import { colors, spacing } from '../theme';
-import { api } from '../api';
+import { colors, spacing, touchMin } from '../theme';
+import { api, PRODUCTION_WEB_URL } from '../api';
 import { Icon } from '../components/Icon';
 import { getConnection } from '../wallet';
+import { describeCriteria, formatDeadline } from '../utils/criteria';
+import { formatWalletShort } from '../utils/identity';
 import {
   ChainAccounts,
   buildInitializeDuelIx,
@@ -161,11 +163,11 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   };
 
   const handleShare = async () => {
-    const deepLink = `counter://duel/${duelId}`;
+    const link = `${PRODUCTION_WEB_URL}/d/${duel?.share_slug || duelId}`;
     try {
       await Share.share({
-        message: `⚔️ Back my side in this 1v1 Duel on Counter:\n"${duel?.proposition_a}" vs "${duel?.proposition_b}"\n🔗 Join Backer Pool: ${deepLink}`,
-        url: deepLink,
+        message: `1v1 Duel on Counter: "${duel?.proposition_a}" vs "${duel?.proposition_b}". Back your side: ${link}`,
+        url: link,
       });
     } catch (e) {}
   };
@@ -183,8 +185,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Duel not found{loadError ? `: ${loadError}` : ''}.</Text>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backBtn}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+        >
+          <Icon name="chevron-left" size={20} color={colors.textPrimary} />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -213,12 +221,24 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backBtn}
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+        >
+          <Icon name="chevron-left" size={20} color={colors.textPrimary} />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.categoryTag}>{duel.category}</Text>
-        <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
-          <Text style={styles.shareText}>📤 Share</Text>
+        <TouchableOpacity
+          onPress={handleShare}
+          style={styles.shareBtn}
+          accessibilityLabel="Share duel"
+          accessibilityRole="button"
+        >
+          <Icon name="share-2" size={18} color={colors.textPrimary} />
+          <Text style={styles.shareText}>Share</Text>
         </TouchableOpacity>
       </View>
 
@@ -283,20 +303,39 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         )}
       </View>
 
-      {/* Progressive Disclosure: Verified on Solana Accordion */}
+      {/* Deciding evidence + deadline (exact terms before money) */}
+      <View style={styles.section}>
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Decided by</Text>
+          </View>
+          <Text style={styles.criteriaText}>
+            {describeCriteria(duel.source_type || duel.category, duel.source_config)}
+          </Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Staking closes</Text>
+            <Text style={styles.infoValue}>{formatDeadline(duel.cutoff_ts)}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Chain proof: only verifiable content after initialization */}
+      {isInitialized ? (
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.proofHeader}
           onPress={() => setShowProofDetails(!showProofDetails)}
           activeOpacity={0.8}
+          accessibilityLabel={showProofDetails ? 'Hide chain proof' : 'View chain proof'}
+          accessibilityRole="button"
         >
           <View style={styles.proofHeaderLeft}>
-            <Icon name="shield-check" size={16} color={colors.solanaGreen} />
+            <Icon name="shield-check" size={16} color={colors.success} />
             <Text style={styles.proofHeaderText}>Verified on Solana</Text>
           </View>
           <View style={styles.proofHeaderRight}>
             <Text style={styles.proofToggleText}>
-              {showProofDetails ? 'Hide Proof' : 'View Proof'}
+              {showProofDetails ? 'Hide proof' : 'View proof'}
             </Text>
             <Icon
               name={showProofDetails ? 'chevron-down' : 'chevron-right'}
@@ -331,6 +370,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           </View>
         )}
       </View>
+      ) : (
+        <View style={styles.pendingProof}>
+          <Icon name="clock" size={16} color={colors.textMuted} />
+          <Text style={styles.pendingProofText}>
+            Chain proof appears here after a captain initializes this duel on Solana.
+          </Text>
+        </View>
+      )}
 
       {message && (
         <View style={styles.messageBox}>
@@ -402,18 +449,20 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         </View>
       )}
 
-      {/* Settlement Trigger */}
-      {!isResolved && (
+      {/* Settlement: only offered when it can succeed */}
+      {isInitialized && !isResolved && (
         <TouchableOpacity
           style={styles.resolveBtn}
           onPress={handleResolve}
           disabled={resolving}
           activeOpacity={0.8}
+          accessibilityLabel="Resolve duel with oracle data"
+          accessibilityRole="button"
         >
           {resolving ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.resolveBtnText}>Resolve Duel (Oracle)</Text>
+            <Text style={styles.resolveBtnText}>Resolve duel</Text>
           )}
         </TouchableOpacity>
       )}
@@ -431,7 +480,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
 
       {/* Outside Backers List */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>👥 BACKER POSITIONS ({positions.length})</Text>
+        <Text style={styles.sectionTitle}>Backers ({positions.length})</Text>
         {positions.map((pos) => (
           <View key={pos.id} style={styles.posCard}>
             <View style={styles.posHeader}>
@@ -484,10 +533,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   backBtn: {
-    padding: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    minHeight: touchMin,
+    paddingHorizontal: spacing.sm,
   },
   backText: {
-    color: colors.solanaPurple,
+    color: colors.brandSecondary,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -497,11 +550,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   shareBtn: {
-    padding: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: touchMin,
+    paddingHorizontal: spacing.sm,
   },
   shareText: {
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   card: {
@@ -593,14 +650,15 @@ const styles = StyleSheet.create({
   },
   ctaBtn: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 12,
     alignItems: 'center',
   },
   ctaBtnText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '800',
   },
   section: {
     marginBottom: spacing.xl,
@@ -669,6 +727,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  criteriaText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  pendingProof: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  pendingProofText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   messageBox: {
     backgroundColor: 'rgba(20, 241, 149, 0.1)',
     borderRadius: 12,
@@ -704,56 +784,56 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   initBtn: {
-    backgroundColor: colors.warningYellow || '#FFA502',
-    paddingVertical: 14,
+    backgroundColor: colors.warning,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: spacing.md,
   },
   initBtnText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '800',
   },
   claimBtn: {
-    backgroundColor: colors.solanaGreen,
-    paddingVertical: 14,
+    backgroundColor: colors.brandPrimary,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
   claimBtnText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '800',
   },
   resolveBtn: {
-    backgroundColor: colors.solanaPurple,
-    paddingVertical: 14,
+    backgroundColor: colors.brandSecondary,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
   resolveBtnText: {
     color: '#FFF',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '800',
   },
   receiptBtn: {
-    backgroundColor: colors.solanaGreen,
-    paddingVertical: 14,
+    backgroundColor: colors.brandPrimary,
+    minHeight: touchMin + 4,
+    justifyContent: 'center',
     borderRadius: 14,
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
   receiptBtnText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '800',
   },
   posCard: {
     backgroundColor: colors.surface,
