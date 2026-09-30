@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   // Verification is real only for genuine settlement signatures. Legacy
   // history rows (simulated markers) render honestly without chain claims.
   const verified = isRealSignature(receipt.onchain_signature);
+  const [showProof, setShowProof] = useState(false);
 
   const handleShare = async () => {
     try {
@@ -66,124 +67,108 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* Physical Ticket Container */}
-        <View style={styles.ticket}>
-          {/* Ticket Header */}
-          <View style={styles.ticketHeader}>
-            <View style={styles.iconCircle}>
-              <Icon name="trophy" size={28} color={colors.arenaBadge} />
-            </View>
-            <Text style={styles.ticketTitle}>Duel settled</Text>
-            <Text style={styles.ticketSubtitle}>
-              {verified ? 'Permanent record on Solana' : 'Outcome recorded by Counter'}
+        <Text style={styles.statusLine}>Resolved</Text>
+        <Text style={styles.proposition}>{receipt.resolution_summary}</Text>
+
+        <View style={styles.winnerRow}>
+          <Text style={styles.winnerLabel}>Winner</Text>
+          <Text style={styles.winnerValue}>
+            {winnerSideName} · {formatWalletShort(winnerWallet)}
+          </Text>
+        </View>
+
+        <View style={styles.figuresRow}>
+          <View style={styles.figure}>
+            <Text style={styles.figureLabel}>Pool settled</Text>
+            <Text style={styles.figureValue}>
+              ${(Number(receipt.total_pool) || 0).toFixed(2)}
             </Text>
           </View>
-
-          {/* Perforated Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.leftNotch} />
-            <View style={styles.dashedLine} />
-            <View style={styles.rightNotch} />
-          </View>
-
-          {/* Social Conflict Narrative */}
-          <View style={styles.narrativeSection}>
-            <Text style={styles.narrativeLabel}>THE DISPUTE</Text>
-            <View style={styles.contenderRow}>
-              <View style={styles.contenderCol}>
-                <Text style={styles.contenderRole}>Captain A</Text>
-                <Text style={styles.contenderWallet}>{formatWalletShort(receipt.captain_a_wallet)}</Text>
-              </View>
-              <Text style={styles.vsBadge}>VS</Text>
-              <View style={[styles.contenderCol, { alignItems: 'flex-end' }]}>
-                <Text style={styles.contenderRole}>Captain B</Text>
-                <Text style={styles.contenderWallet}>{formatWalletShort(receipt.captain_b_wallet)}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Resolution Outcome */}
-          <View style={styles.outcomeSection}>
-            <Text style={styles.narrativeLabel}>ACTUAL OUTCOME</Text>
-            <View style={styles.outcomeBox}>
-              <Text style={styles.outcomeText}>{receipt.resolution_summary}</Text>
-            </View>
-          </View>
-
-          {/* Financial Breakdown Table */}
-          <View style={styles.financialSection}>
-            <Text style={styles.narrativeLabel}>SETTLEMENT TOTALS</Text>
-
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Winning Side</Text>
-              <Text style={[styles.rowValue, { color: colors.solanaGreen }]}>
-                {winnerSideName} ({formatWalletShort(winnerWallet)})
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Total Escrow Settled</Text>
-              <Text style={styles.rowValueHighlight}>
-                ${(Number(receipt.total_pool) || 0).toFixed(2)} cUSD
-              </Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>Settlement Date</Text>
-              <Text style={styles.rowValue}>
-                {new Date(receipt.created_at).toLocaleDateString([], {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
-            </View>
-          </View>
-
-          {/* Proof & Verification Section */}
-          <View style={styles.proofSection}>
-            <Text style={styles.narrativeLabel}>Settlement evidence</Text>
-
-            {verified ? (
-              <>
-                <View style={styles.chainBadgeRow}>
-                  <Icon name="shield-check" size={16} color={colors.success} />
-                  <Text style={styles.chainBadgeLabel}>Settled on Solana Devnet</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.signatureBtn}
-                  onPress={handleOpenExplorer}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Open settlement transaction in explorer"
-                  accessibilityRole="button"
-                >
-                  <View style={styles.sigInfo}>
-                    <Text style={styles.sigLabel}>Transaction signature</Text>
-                    <Text style={styles.sigValue} numberOfLines={1}>
-                      {receipt.onchain_signature}
-                    </Text>
-                  </View>
-                  <Icon name="external-link" size={16} color={colors.success} />
-                </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.unverifiedBox}>
-                <Icon name="clock" size={16} color={colors.textMuted} />
-                <Text style={styles.unverifiedText}>
-                  Recorded before on-chain verification. No settlement transaction is attached to this record.
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Ticket Footer Barcode / Receipt ID */}
-          <View style={styles.ticketFooter}>
-            <Text style={styles.receiptIdText}>RECEIPT #{receipt.id.slice(-8).toUpperCase()}</Text>
+          <View style={styles.figure}>
+            <Text style={styles.figureLabel}>Currency</Text>
+            <Text style={styles.figureValue}>test cUSD</Text>
           </View>
         </View>
 
-        {/* Action Buttons */}
+        <Text style={styles.sectionTitle}>Participants</Text>
+        <View style={styles.personRow}>
+          <Text style={styles.personSide}>Side A</Text>
+          <Text style={styles.personWallet}>{formatWalletShort(receipt.captain_a_wallet)}</Text>
+        </View>
+        <View style={styles.personRow}>
+          <Text style={styles.personSide}>Side B</Text>
+          <Text style={styles.personWallet}>{formatWalletShort(receipt.captain_b_wallet)}</Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Resolution</Text>
+        <View style={styles.personRow}>
+          <Text style={styles.personSide}>Date</Text>
+          <Text style={styles.personWallet}>
+            {new Date(receipt.created_at).toLocaleDateString([], {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </Text>
+        </View>
+        <View style={styles.personRow}>
+          <Text style={styles.personSide}>Source</Text>
+          <Text style={styles.personWallet}>Deterministic oracle</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.proofToggle}
+          onPress={() => setShowProof((v) => !v)}
+          activeOpacity={0.8}
+          accessibilityLabel={showProof ? 'Hide transaction proof' : 'Show transaction proof'}
+          accessibilityRole="button"
+        >
+          <Text style={styles.proofToggleText}>Transaction proof</Text>
+          <Icon name={showProof ? 'chevron-down' : 'chevron-right'} size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+        {showProof && (
+          verified ? (
+            <>
+              <TouchableOpacity
+                style={styles.signatureBtn}
+                onPress={handleOpenExplorer}
+                activeOpacity={0.8}
+                accessibilityLabel="Open settlement transaction in explorer"
+                accessibilityRole="button"
+              >
+                <View style={styles.sigInfo}>
+                  <Text style={styles.sigLabel}>Settlement transaction</Text>
+                  <Text style={styles.sigValue} numberOfLines={1}>
+                    {receipt.onchain_signature}
+                  </Text>
+                </View>
+                <Icon name="external-link" size={16} color={colors.success} />
+              </TouchableOpacity>
+              <Text style={styles.receiptIdText}>Record {receipt.id.slice(-8).toUpperCase()}</Text>
+            </>
+          ) : (
+            <View style={styles.unverifiedBox}>
+              <Icon name="clock" size={16} color={colors.textMuted} />
+              <Text style={styles.unverifiedText}>
+                Recorded before on-chain verification. No settlement transaction is attached to this record.
+              </Text>
+            </View>
+          )
+        )}
+
         <View style={styles.actionsContainer}>
+          {verified && (
+            <TouchableOpacity
+              style={styles.explorerButton}
+              onPress={handleOpenExplorer}
+              activeOpacity={0.8}
+              accessibilityLabel="View on Solana explorer"
+              accessibilityRole="button"
+            >
+              <Icon name="external-link" size={16} color={colors.brandPrimary} />
+              <Text style={styles.explorerText}>View on Solana Explorer</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.shareButtonBig}
             onPress={handleShare}
@@ -248,162 +233,96 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: spacing.lg,
   },
-  ticket: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    overflow: 'hidden',
+  statusLine: {
+    ...typography.captionBold,
+    color: colors.success,
+    fontSize: 13,
+    marginBottom: 4,
   },
-  ticketHeader: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: colors.surface,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(255, 165, 2, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  ticketTitle: {
-    ...typography.h2,
+  proposition: {
+    ...typography.h1,
     color: colors.textPrimary,
+    fontSize: 22,
+    lineHeight: 30,
+    marginBottom: spacing.lg,
+  },
+  winnerRow: {
+    marginBottom: spacing.lg,
+  },
+  winnerLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
     marginBottom: 2,
   },
-  ticketSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
+  winnerValue: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    fontSize: 20,
   },
-  dividerContainer: {
+  figuresRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    height: 24,
-    backgroundColor: colors.surface,
-    position: 'relative',
+    gap: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  leftNotch: {
-    width: 16,
-    height: 24,
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
-    backgroundColor: colors.background,
-    position: 'absolute',
-    left: 0,
-  },
-  rightNotch: {
-    width: 16,
-    height: 24,
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-    backgroundColor: colors.background,
-    position: 'absolute',
-    right: 0,
-  },
-  dashedLine: {
+  figure: {
     flex: 1,
-    marginHorizontal: 24,
-    height: 1,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderStyle: 'dashed',
   },
-  narrativeSection: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceLight,
+  figureLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 12,
+    marginBottom: 2,
   },
-  narrativeLabel: {
+  figureValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.success,
+  },
+  sectionTitle: {
     ...typography.captionBold,
     color: colors.textMuted,
-    fontSize: 10,
-    letterSpacing: 1,
+    fontSize: 12,
     marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
-  contenderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  contenderCol: {
-    flex: 1,
-  },
-  contenderRole: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  contenderWallet: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  vsBadge: {
-    ...typography.captionBold,
-    color: colors.textMuted,
-    paddingHorizontal: spacing.md,
-  },
-  outcomeSection: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceLight,
-  },
-  outcomeBox: {
-    backgroundColor: colors.surfaceLight,
-    padding: spacing.md,
-    borderRadius: borderRadius.sm,
-  },
-  outcomeText: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    lineHeight: 20,
-  },
-  financialSection: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.surfaceLight,
-  },
-  row: {
+  personRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.xs,
   },
-  rowLabel: {
-    ...typography.bodyMuted,
+  personSide: {
+    ...typography.body,
     color: colors.textSecondary,
+    fontSize: 14,
   },
-  rowValue: {
-    ...typography.bodyBold,
+  personWallet: {
+    ...typography.mono,
     color: colors.textPrimary,
+    fontSize: 13,
   },
-  rowValueHighlight: {
-    ...typography.h3,
-    color: colors.solanaGreen,
-  },
-  proofSection: {
-    padding: spacing.lg,
-  },
-  chainBadgeRow: {
+  proofToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: spacing.md,
+    justifyContent: 'space-between',
+    minHeight: touchMin,
+    marginTop: spacing.sm,
   },
-  chainBadgeLabel: {
-    ...typography.captionBold,
-    color: colors.solanaGreen,
+  proofToggleText: {
+    ...typography.bodyBold,
+    color: colors.textPrimary,
+    fontSize: 14,
   },
   signatureBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   sigInfo: {
     flex: 1,
@@ -412,20 +331,23 @@ const styles = StyleSheet.create({
   sigLabel: {
     ...typography.caption,
     color: colors.textSecondary,
+    fontSize: 12,
   },
   sigValue: {
     ...typography.mono,
     color: colors.textPrimary,
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   unverifiedBox: {
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'flex-start',
-    backgroundColor: colors.surfaceLight,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   unverifiedText: {
     flex: 1,
@@ -433,21 +355,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
-  ticketFooter: {
-    padding: spacing.md,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
-  },
   receiptIdText: {
     ...typography.mono,
     color: colors.textMuted,
-    letterSpacing: 2,
+    fontSize: 12,
+    marginTop: spacing.sm,
   },
   actionsContainer: {
     marginTop: spacing.xl,
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  explorerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: touchMin + 4,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.brandPrimary,
+    gap: spacing.xs,
+  },
+  explorerText: {
+    ...typography.bodyBold,
+    color: colors.brandPrimary,
   },
   shareButtonBig: {
     flexDirection: 'row',

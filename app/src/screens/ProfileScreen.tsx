@@ -181,34 +181,39 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
       </View>
 
-      {/* 2. Strava-Style Reputation & Competitive Records */}
-      <View style={styles.statsCard}>
-        <Text style={styles.cardHeaderTitle}>COMPETITIVE RECORD</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{totalDuels}</Text>
-            <Text style={styles.statLabel}>Duels</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: colors.sideA }]}>{wins}</Text>
-            <Text style={styles.statLabel}>Wins</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: colors.danger }]}>{losses}</Text>
-            <Text style={styles.statLabel}>Losses</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{winRate}%</Text>
-            <Text style={styles.statLabel}>Win Rate</Text>
-          </View>
-        </View>
-
-        {/* Current Streak Indicator */}
-        <View style={styles.streakRow}>
-          <Icon name="flame" size={16} color={colors.brandPrimary} />
-          <Text style={styles.streakText}>Current Streak: <Text style={styles.streakHighlight}>{streak}</Text></Text>
-        </View>
+      {/* 2. Counts: tappable, real */}
+      <View style={styles.countsRow}>
+        {([
+          { key: 'TAKES', label: 'Takes', count: myTakes.length },
+          { key: 'DUELS', label: 'Duels', count: myDuels.length },
+          { key: 'RECEIPTS', label: 'Receipts', count: receipts.length },
+        ] as const).map((c) => (
+          <TouchableOpacity
+            key={c.key}
+            style={styles.countCell}
+            onPress={() => setActiveTab(c.key)}
+            activeOpacity={0.8}
+            accessibilityLabel={`${c.label}, ${c.count}`}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === c.key }}
+          >
+            <Text style={styles.countNumber}>{c.count}</Text>
+            <Text style={[styles.countLabel, activeTab === c.key && styles.countLabelActive]}>
+              {c.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
+
+      {/* 3. Compact record (server stats when present, else derived) */}
+      {totalDuels > 0 && (
+        <View style={styles.recordRow}>
+          <Icon name="trophy" size={14} color={colors.textMuted} />
+          <Text style={styles.recordText}>
+            {wins}W · {losses}L{streak && wins > 0 ? ` · ${streak}` : ''}
+          </Text>
+        </View>
+      )}
 
       {/* 3. Head-to-head record, computed from your real duels */}
       {rivalries.length > 0 && (
@@ -342,9 +347,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         )}
       </View>
 
-      {/* 5. Secondary Account & Wallet Section */}
+      {/* 5. Account: wallet lives here, not in the header */}
       <View style={styles.accountCard}>
-        <Text style={styles.cardHeaderTitle}>CONNECTED ACCOUNT</Text>
+        <Text style={styles.cardHeaderTitle}>Account</Text>
 
         <View style={styles.accountRow}>
           <Text style={styles.accountKey}>Wallet Address</Text>
@@ -375,12 +380,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
 
         <View style={styles.accountRow}>
-          <Text style={styles.accountKey}>Escrow Network</Text>
-          <Text style={styles.accountVal}>Solana Devnet (cUSD)</Text>
+          <Text style={styles.accountKey}>Network</Text>
+          <Text style={styles.accountVal}>Solana Devnet · test cUSD</Text>
         </View>
 
-        <TouchableOpacity style={styles.disconnectBtn} onPress={onDisconnect} activeOpacity={0.8}>
-          <Text style={styles.disconnectText}>Disconnect Wallet</Text>
+        <TouchableOpacity
+          style={styles.disconnectBtn}
+          onPress={onDisconnect}
+          activeOpacity={0.8}
+          accessibilityLabel="Disconnect wallet"
+          accessibilityRole="button"
+        >
+          <Text style={styles.disconnectText}>Disconnect wallet</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -448,6 +459,47 @@ const styles = StyleSheet.create({
     ...typography.bodyMuted,
     textAlign: 'center',
     maxWidth: 280,
+  },
+  countsRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  countCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    minHeight: touchMin,
+    justifyContent: 'center',
+  },
+  countNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  countLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  countLabelActive: {
+    color: colors.brandPrimary,
+    fontWeight: '700',
+  },
+  recordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+    paddingHorizontal: 2,
+  },
+  recordText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 13,
   },
   statsCard: {
     backgroundColor: colors.card,

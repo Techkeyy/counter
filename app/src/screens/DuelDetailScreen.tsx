@@ -11,12 +11,10 @@ import {
 import { PublicKey } from '@solana/web3.js';
 import { Duel, Position } from '../types';
 import { BackModal } from '../components/BackModal';
-import { colors, spacing, touchMin } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api, PRODUCTION_WEB_URL } from '../api';
 import { Icon } from '../components/Icon';
 import { getConnection } from '../wallet';
-import { describeCriteria, formatDeadline } from '../utils/criteria';
-import { formatWalletShort } from '../utils/identity';
 import {
   ChainAccounts,
   buildInitializeDuelIx,
@@ -24,6 +22,8 @@ import {
   buildClaimPayoutIx,
   mwaSignSendConfirm,
 } from '../chain';
+import { describeCriteria, formatDeadline } from '../utils/criteria';
+import { formatWalletShort, formatRelativeTime, isRealSignature } from '../utils/identity';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -46,9 +46,8 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [claiming, setClaiming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [showProofDetails, setShowProofDetails] = useState(false);
+  const [showProof, setShowProof] = useState(false);
 
-  // Backer Modal
   const [backModalVisible, setBackModalVisible] = useState(false);
   const [backSide, setBackSide] = useState<1 | 2>(1);
 
@@ -59,7 +58,6 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       setPositions(data.positions || []);
       setLoadError(null);
     } catch (err: any) {
-      console.warn('Failed to load duel:', err);
       setLoadError(err?.message || 'Duel not found');
     } finally {
       setLoading(false);
@@ -71,13 +69,13 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
 
   const handleInitialize = async () => {
     if (!userWallet) {
-      setMessage('Connect a Solana wallet first (MWA) to initialize.');
+      setMessage('Connect a wallet first to initialize.');
       return;
     }
     setInitializing(true);
     setMessage(null);
     try {
-      setMessage('Fetching canonical duel accounts…');
+      setMessage('Fetching canonical duel accounts.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
       if (acct.chainStatus === 'INITIALIZED') {
         throw new Error('Duel is already initialized on-chain.');
@@ -86,7 +84,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const conn = getConnection();
       const vaultAtaInfo = await conn.getAccountInfo(new PublicKey(acct.vaultAta));
 
-      setMessage('Approve initialization in your wallet…');
+      setMessage('Approve initialization in your wallet.');
       const ixs = [];
       const vaultAtaIx = buildVaultAtaCreateIxIfNeeded(
         payer,
@@ -96,13 +94,13 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       if (vaultAtaIx) ixs.push(vaultAtaIx);
       ixs.push(buildInitializeDuelIx(acct, payer));
 
-      setMessage('Sending to Devnet…');
+      setMessage('Sending to Devnet.');
       const signature = await mwaSignSendConfirm(ixs, payer);
 
-      setMessage('Verifying on-chain initialization…');
+      setMessage('Verifying on-chain initialization.');
       await api.initOnChainDuel(duelId, signature);
 
-      setMessage(`Initialized on-chain: ${signature.slice(0, 8)}…`);
+      setMessage(`Bound on-chain: ${signature.slice(0, 8)}.`);
       await loadDuelData();
     } catch (err: any) {
       setMessage(`Initialization failed: ${err.message}`);
@@ -119,18 +117,18 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     setClaiming(true);
     setMessage(null);
     try {
-      setMessage('Fetching canonical duel accounts…');
+      setMessage('Fetching canonical duel accounts.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
       const user = new PublicKey(userWallet);
 
-      setMessage('Approve the claim in your wallet…');
+      setMessage('Approve the claim in your wallet.');
       const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user);
 
-      setMessage('Verifying on-chain payout…');
+      setMessage('Verifying on-chain payout.');
       const res = await api.claimDuel(duelId, signature);
 
       setMessage(
-        `Claimed ${res.payoutUsd !== null ? `$${Number(res.payoutUsd).toFixed(2)}` : 'payout'} cUSD: ${signature.slice(0, 8)}…`
+        `Claimed ${res.payoutUsd !== null ? `$${Number(res.payoutUsd).toFixed(2)}` : 'payout'} test cUSD.`
       );
       await loadDuelData();
     } catch (err: any) {
@@ -150,10 +148,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     try {
       const res = await api.resolveDuel(duelId);
       if (res.success) {
-        setMessage(`Settled! Winner: ${res.winnerWallet.slice(0, 6)}...`);
+        setMessage(`Settled. Winner: ${formatWalletShort(res.winnerWallet)}.`);
         await loadDuelData();
       } else {
-        setMessage(`Resolution error: ${res.error}`);
+        setMessage(`Resolution issue: ${res.error}`);
       }
     } catch (err: any) {
       setMessage(`Settlement failed: ${err.message}`);
@@ -174,25 +172,24 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.solanaPurple} />
-        <Text style={styles.loadingText}>Loading Duel Escrow & State...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.brandPrimary} />
+        <Text style={styles.centerText}>Loading duel.</Text>
       </View>
     );
   }
 
   if (!duel) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Duel not found{loadError ? `: ${loadError}` : ''}.</Text>
+      <View style={styles.center}>
+        <Text style={styles.centerText}>Duel not found{loadError ? `: ${loadError}` : ''}.</Text>
         <TouchableOpacity
           onPress={onBack}
-          style={styles.backBtn}
+          style={styles.ghostBtn}
           accessibilityLabel="Go back"
           accessibilityRole="button"
         >
-          <Icon name="chevron-left" size={20} color={colors.textPrimary} />
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.ghostText}>Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -216,283 +213,232 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     !myPosition.claimed;
   const isLoser =
     isResolved && !!myPosition && myPosition.side !== duel.winning_side;
+  const nameA = duel.captain_a_name || formatWalletShort(duel.captain_a_wallet);
+  const nameB = duel.captain_b_name || formatWalletShort(duel.captain_b_wallet);
+
+  const timeline: { label: string; detail: string }[] = [
+    { label: 'Duel formed', detail: formatRelativeTime(duel.created_at) },
+  ];
+  if (isInitialized && duel.init_tx_signature) {
+    timeline.push({ label: 'Bound on-chain', detail: `${duel.init_tx_signature.slice(0, 8)}` });
+  }
+  if (isResolved && duel.resolution_tx) {
+    timeline.push({ label: 'Resolved', detail: `${duel.resolution_tx.slice(0, 8)}` });
+  }
+  if (myPosition?.claimed && myPosition.claim_tx) {
+    timeline.push({ label: 'You claimed', detail: `${myPosition.claim_tx.slice(0, 8)}` });
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={onBack}
-          style={styles.backBtn}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <Icon name="chevron-left" size={20} color={colors.textPrimary} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.categoryTag}>{duel.category}</Text>
-        <TouchableOpacity
-          onPress={handleShare}
-          style={styles.shareBtn}
-          accessibilityLabel="Share duel"
-          accessibilityRole="button"
-        >
-          <Icon name="share-2" size={18} color={colors.textPrimary} />
-          <Text style={styles.shareText}>Share</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Matchup Header */}
-      <View style={styles.card}>
-        <View style={styles.statusRow}>
-          <Text style={styles.duelIdText}>DUEL #{duel.id.slice(0, 8)}</Text>
-          <View style={[styles.statusBadge, isResolved && styles.statusResolved]}>
-            <Text style={styles.statusBadgeText}>{duel.status.replace('_', ' ')}</Text>
-          </View>
+    <View style={styles.container}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.iconBtn}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
+            <Icon name="chevron-left" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.topState}>
+            {isResolved
+              ? duel.status.replace(/_/g, ' ').toLowerCase()
+              : isInitialized
+                ? 'Live on-chain'
+                : 'Forming'}
+          </Text>
+          <TouchableOpacity
+            onPress={handleShare}
+            style={styles.iconBtn}
+            accessibilityLabel="Share duel"
+            accessibilityRole="button"
+          >
+            <Icon name="share-2" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.mainTitle}>{duel.proposition_a} vs {duel.proposition_b}</Text>
+        <Text style={styles.proposition}>
+          {duel.proposition_a} vs {duel.proposition_b}
+        </Text>
+        <Text style={styles.meta}>
+          {duel.category.toLowerCase()} · closes {formatDeadline(duel.cutoff_ts)}
+        </Text>
 
-        {/* Dynamic Odds Comparison */}
-        <View style={styles.oddsBox}>
-          <View style={styles.sideBlock}>
-            <Text style={[styles.sideName, { color: colors.sideA }]}>
-              {duel.captain_a_name || 'Captain A'}
-            </Text>
-            <Text style={[styles.multiplier, { color: colors.sideA }]}>{oddsA}x</Text>
-            <Text style={styles.sidePool}>${poolA} cUSD</Text>
+        <View style={styles.sidesRow}>
+          <View style={styles.sideCol}>
+            <Text style={styles.sideName} numberOfLines={1}>{nameA}</Text>
+            <Text style={[styles.sideOdds, { color: colors.sideA }]}>{oddsA}x</Text>
+            <Text style={styles.sidePool}>${poolA.toFixed(0)} cUSD</Text>
           </View>
-
-          <View style={styles.vsCenter}>
-            <Text style={styles.vsLabel}>TOTAL POOL</Text>
-            <Text style={styles.totalPoolAmount}>${totalPool} cUSD</Text>
+          <View style={styles.poolCenter}>
+            <Text style={styles.poolLabel}>Pool</Text>
+            <Text style={styles.poolTotal}>${totalPool.toFixed(0)}</Text>
           </View>
-
-          <View style={styles.sideBlock}>
-            <Text style={[styles.sideName, { color: colors.sideB }]}>
-              {duel.captain_b_name || 'Captain B'}
-            </Text>
-            <Text style={[styles.multiplier, { color: colors.sideB }]}>{oddsB}x</Text>
-            <Text style={styles.sidePool}>${poolB} cUSD</Text>
+          <View style={[styles.sideCol, { alignItems: 'flex-end' }]}>
+            <Text style={styles.sideName} numberOfLines={1}>{nameB}</Text>
+            <Text style={[styles.sideOdds, { color: colors.sideB }]}>{oddsB}x</Text>
+            <Text style={styles.sidePool}>${poolB.toFixed(0)} cUSD</Text>
           </View>
         </View>
+        <View style={styles.splitBar}>
+          <View style={[styles.segA, { flex: Math.max(totalPool > 0 ? Math.round((poolA / totalPool) * 100) : 50, 5) }]} />
+          <View style={[styles.segB, { flex: 5 }]} />
+        </View>
 
-        {/* Backing CTA buttons */}
-        {!isResolved && (
-          <View style={styles.ctaRow}>
+        {myPosition && (
+          <View style={styles.positionRow}>
+            <Icon name="wallet" size={16} color={colors.textSecondary} />
+            <Text style={styles.positionText}>
+              You backed {myPosition.side === 1 ? 'Side A' : 'Side B'} with $
+              {Number(myPosition.stake_amount).toFixed(0)} cUSD
+              {myPosition.claimed ? ' · claimed' : isResolved ? (isLoser ? ' · lost' : ' · claimable') : ''}
+            </Text>
+          </View>
+        )}
+
+        {message && (
+          <View style={styles.messageBox}>
+            <Text style={styles.messageText}>{message}</Text>
+          </View>
+        )}
+
+        <Text style={styles.sectionTitle}>How this settles</Text>
+        <Text style={styles.criteriaText}>
+          {describeCriteria(duel.source_type || duel.category, duel.source_config)}
+        </Text>
+
+        <Text style={styles.sectionTitle}>Timeline</Text>
+        {timeline.map((t) => (
+          <View key={t.label} style={styles.timelineRow}>
+            <View style={styles.timelineDot} />
+            <Text style={styles.timelineLabel}>{t.label}</Text>
+            <Text style={styles.timelineDetail}>{t.detail}</Text>
+          </View>
+        ))}
+
+        <TouchableOpacity
+          style={styles.proofToggle}
+          onPress={() => setShowProof((v) => !v)}
+          activeOpacity={0.8}
+          accessibilityLabel={showProof ? 'Hide details and proof' : 'Show details and proof'}
+          accessibilityRole="button"
+        >
+          <Text style={styles.proofToggleText}>Details and proof</Text>
+          <Icon name={showProof ? 'chevron-down' : 'chevron-right'} size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
+        {showProof && (
+          <View style={styles.proofBox}>
+            <ProofRow label="Program" value="52Qgq...NmT" mono />
+            <ProofRow label="Duel account" value={duel.onchain_duel_pda ? `${duel.onchain_duel_pda.slice(0, 8)}` : 'Not bound yet'} mono />
+            <ProofRow label="Vault account" value={duel.onchain_vault_pda ? `${duel.onchain_vault_pda.slice(0, 8)}` : 'Not bound yet'} mono />
+            <ProofRow label="Init transaction" value={duel.init_tx_signature ? `${duel.init_tx_signature.slice(0, 12)}` : 'None'} mono />
+            <ProofRow label="Resolve transaction" value={duel.resolution_tx && isRealSignature(duel.resolution_tx) ? `${duel.resolution_tx.slice(0, 12)}` : 'None yet'} mono />
+            <ProofRow label="Resolution source" value={`${duel.source_type || duel.category} deterministic oracle`} />
+          </View>
+        )}
+
+        <Text style={styles.sectionTitle}>Backers ({positions.length})</Text>
+        {positions.length === 0 ? (
+          <Text style={styles.emptyNote}>No backers yet. Pools grow as people back a side.</Text>
+        ) : (
+          positions.map((pos) => (
+            <View key={pos.id} style={styles.backerRow}>
+              <Text style={styles.backerWallet}>{formatWalletShort(pos.user_wallet)}</Text>
+              <Text style={[styles.backerSide, pos.side === 1 ? { color: colors.sideA } : { color: colors.sideB }]}>
+                {pos.side === 1 ? 'A' : 'B'} · ${Number(pos.stake_amount).toFixed(0)}
+              </Text>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
+      {!isResolved && !isInitialized && isCaptain && (
+        <View style={styles.ctaBar}>
+          <TouchableOpacity
+            style={styles.ctaPrimary}
+            onPress={handleInitialize}
+            disabled={initializing}
+            activeOpacity={0.85}
+            accessibilityLabel="Initialize duel on-chain"
+            accessibilityRole="button"
+          >
+            {initializing ? (
+              <ActivityIndicator color="#000000" />
+            ) : (
+              <Text style={styles.ctaPrimaryText}>Initialize on-chain</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+      {!isResolved && !isInitialized && !isCaptain && (
+        <View style={styles.ctaBar}>
+          <Text style={styles.ctaNote}>Stakes unlock once a captain binds this duel on-chain.</Text>
+        </View>
+      )}
+      {!isResolved && isInitialized && (
+        <View style={styles.ctaBar}>
+          <View style={styles.ctaSplit}>
             <TouchableOpacity
-              style={[styles.ctaBtn, { backgroundColor: colors.sideA }]}
+              style={[styles.ctaHalf, { backgroundColor: colors.sideA }]}
               onPress={() => {
                 setBackSide(1);
                 setBackModalVisible(true);
               }}
+              activeOpacity={0.85}
+              accessibilityLabel="Back Side A"
+              accessibilityRole="button"
             >
-              <Text style={styles.ctaBtnText}>+ Back Side A</Text>
+              <Text style={styles.ctaHalfText}>Back A</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={[styles.ctaBtn, { backgroundColor: colors.sideB }]}
+              style={[styles.ctaHalf, { backgroundColor: colors.sideB }]}
               onPress={() => {
                 setBackSide(2);
                 setBackModalVisible(true);
               }}
+              activeOpacity={0.85}
+              accessibilityLabel="Back Side B"
+              accessibilityRole="button"
             >
-              <Text style={styles.ctaBtnText}>+ Back Side B</Text>
+              <Text style={styles.ctaHalfText}>Back B</Text>
             </TouchableOpacity>
           </View>
-        )}
-      </View>
-
-      {/* Deciding evidence + deadline (exact terms before money) */}
-      <View style={styles.section}>
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Decided by</Text>
-          </View>
-          <Text style={styles.criteriaText}>
-            {describeCriteria(duel.source_type || duel.category, duel.source_config)}
-          </Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Staking closes</Text>
-            <Text style={styles.infoValue}>{formatDeadline(duel.cutoff_ts)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Chain proof: only verifiable content after initialization */}
-      {isInitialized ? (
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.proofHeader}
-          onPress={() => setShowProofDetails(!showProofDetails)}
-          activeOpacity={0.8}
-          accessibilityLabel={showProofDetails ? 'Hide chain proof' : 'View chain proof'}
-          accessibilityRole="button"
-        >
-          <View style={styles.proofHeaderLeft}>
-            <Icon name="shield-check" size={16} color={colors.success} />
-            <Text style={styles.proofHeaderText}>Verified on Solana</Text>
-          </View>
-          <View style={styles.proofHeaderRight}>
-            <Text style={styles.proofToggleText}>
-              {showProofDetails ? 'Hide proof' : 'View proof'}
-            </Text>
-            <Icon
-              name={showProofDetails ? 'chevron-down' : 'chevron-right'}
-              size={14}
-              color={colors.textSecondary}
-            />
-          </View>
-        </TouchableOpacity>
-
-        {showProofDetails && (
-          <View style={[styles.infoCard, { marginTop: spacing.sm }]}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Program ID:</Text>
-              <Text style={styles.infoMono}>52Qgq...NmT</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Duel PDA:</Text>
-              <Text style={styles.infoMono}>
-                {duel.onchain_duel_pda ? `${duel.onchain_duel_pda.slice(0, 8)}...` : 'Derived on Devnet'}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Vault PDA:</Text>
-              <Text style={styles.infoMono}>
-                {duel.onchain_vault_pda ? `${duel.onchain_vault_pda.slice(0, 8)}...` : 'Vault PDA active'}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Resolver Engine:</Text>
-              <Text style={styles.infoValue}>{duel.source_type} Deterministic Oracle</Text>
-            </View>
-          </View>
-        )}
-      </View>
-      ) : (
-        <View style={styles.pendingProof}>
-          <Icon name="clock" size={16} color={colors.textMuted} />
-          <Text style={styles.pendingProofText}>
-            Chain proof appears here after a captain initializes this duel on Solana.
-          </Text>
         </View>
       )}
-
-      {message && (
-        <View style={styles.messageBox}>
-          <Text style={styles.messageText}>{message}</Text>
-        </View>
-      )}
-
-      {/* Authoritative chain binding state — never implied, always shown */}
-      <View style={styles.section}>
-        <View style={[styles.chainBadge, isInitialized && styles.chainBadgeLive]}>
-          <Text style={styles.chainBadgeText}>
-            {isInitialized
-              ? `ON-CHAIN ${duel.init_tx_signature ? `· ${duel.init_tx_signature.slice(0, 8)}…` : ''}`
-              : 'PENDING ON-CHAIN INITIALIZATION'}
-          </Text>
-        </View>
-        {!isInitialized && (
-          <Text style={styles.chainHint}>
-            Stakes, settlement and claims unlock once a captain binds this duel to the Solana program.
-          </Text>
-        )}
-      </View>
-
-      {/* Captain-only on-chain initialization */}
-      {!isInitialized && isCaptain && (
-        <TouchableOpacity
-          style={styles.initBtn}
-          onPress={handleInitialize}
-          disabled={initializing}
-          activeOpacity={0.8}
-        >
-          {initializing ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.initBtnText}>Initialize On-Chain (Captain)</Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* Winner claim (MWA-signed ClaimPayout, backend-verified) */}
       {canClaim && (
-        <TouchableOpacity
-          style={styles.claimBtn}
-          onPress={handleClaim}
-          disabled={claiming}
-          activeOpacity={0.8}
-        >
-          {claiming ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.claimBtnText}>
-              Claim ${Number(myPosition!.stake_amount).toFixed(2)} + Winnings
-            </Text>
-          )}
-        </TouchableOpacity>
-      )}
-      {isResolved && myPosition && !!myPosition.claimed && (
-        <View style={styles.messageBox}>
-          <Text style={styles.messageText}>
-            Already claimed{myPosition.claim_tx ? `: ${myPosition.claim_tx.slice(0, 8)}…` : ''}.
-          </Text>
-        </View>
-      )}
-      {isLoser && (
-        <View style={styles.messageBox}>
-          <Text style={styles.messageText}>
-            Your side lost this duel. Stakes settled to the winners — no claim available.
-          </Text>
-        </View>
-      )}
-
-      {/* Settlement: only offered when it can succeed */}
-      {isInitialized && !isResolved && (
-        <TouchableOpacity
-          style={styles.resolveBtn}
-          onPress={handleResolve}
-          disabled={resolving}
-          activeOpacity={0.8}
-          accessibilityLabel="Resolve duel with oracle data"
-          accessibilityRole="button"
-        >
-          {resolving ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.resolveBtnText}>Resolve duel</Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* View Settled Receipt if Resolved */}
-      {isResolved && (
-        <TouchableOpacity
-          style={styles.receiptBtn}
-          onPress={() => onViewReceipt(`receipt_${duel.id}`)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.receiptBtnText}>View Settlement Receipt</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Outside Backers List */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Backers ({positions.length})</Text>
-        {positions.map((pos) => (
-          <View key={pos.id} style={styles.posCard}>
-            <View style={styles.posHeader}>
-              <Text style={styles.posWallet}>{pos.user_wallet.slice(0, 8)}...</Text>
-              <Text style={[styles.posSide, pos.side === 1 ? { color: colors.sideA } : { color: colors.sideB }]}>
-                {pos.side === 1 ? 'Side A' : 'Side B'}
+        <View style={styles.ctaBar}>
+          <TouchableOpacity
+            style={styles.ctaPrimary}
+            onPress={handleClaim}
+            disabled={claiming}
+            activeOpacity={0.85}
+            accessibilityLabel="Claim payout"
+            accessibilityRole="button"
+          >
+            {claiming ? (
+              <ActivityIndicator color="#000000" />
+            ) : (
+              <Text style={styles.ctaPrimaryText}>
+                Claim ${Number(myPosition!.stake_amount).toFixed(0)} plus winnings
               </Text>
-            </View>
-            <Text style={styles.posAmount}>${pos.stake_amount} cUSD Staked</Text>
-          </View>
-        ))}
-      </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+      {isResolved && !canClaim && (
+        <View style={styles.ctaBar}>
+          <TouchableOpacity
+            style={styles.ctaPrimary}
+            onPress={() => onViewReceipt(`receipt_${duel.id}`)}
+            activeOpacity={0.85}
+            accessibilityLabel="View settlement receipt"
+            accessibilityRole="button"
+          >
+            <Text style={styles.ctaPrimaryText}>View receipt</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <BackModal
         visible={backModalVisible}
@@ -502,363 +448,108 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         onClose={() => setBackModalVisible(false)}
         onStakeRecorded={loadDuelData}
       />
-    </ScrollView>
+    </View>
   );
 };
 
+const ProofRow: React.FC<{ label: string; value: string; mono?: boolean }> = ({ label, value, mono }) => (
+  <View style={proofStyles.row}>
+    <Text style={proofStyles.label}>{label}</Text>
+    <Text style={[proofStyles.value, mono && proofStyles.mono]} numberOfLines={1}>
+      {value}
+    </Text>
+  </View>
+);
+
+const proofStyles = StyleSheet.create({
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, gap: spacing.md },
+  label: { ...typography.caption, color: colors.textSecondary, fontSize: 12 },
+  value: { ...typography.captionBold, color: colors.textPrimary, fontSize: 12, flex: 1, textAlign: 'right' },
+  mono: { fontFamily: 'monospace' },
+});
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  container: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md, padding: spacing.xl },
+  centerText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
+  ghostBtn: {
+    minHeight: touchMin, paddingHorizontal: spacing.xl, justifyContent: 'center',
+    borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.cardBorder,
   },
-  content: {
-    padding: spacing.lg,
-    paddingBottom: 60,
+  ghostText: { ...typography.bodyBold, color: colors.textPrimary },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  iconBtn: { minHeight: touchMin, minWidth: touchMin, justifyContent: 'center', alignItems: 'center' },
+  topState: { ...typography.captionBold, color: colors.textSecondary, fontSize: 13 },
+  proposition: { ...typography.h1, color: colors.textPrimary, fontSize: 22, lineHeight: 30, marginBottom: 4 },
+  meta: { ...typography.caption, color: colors.textMuted, fontSize: 12, marginBottom: spacing.lg },
+  sidesRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  sideCol: { flex: 1 },
+  sideName: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 15, marginBottom: 2 },
+  sideOdds: { fontSize: 22, fontWeight: '800' },
+  sidePool: { ...typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  poolCenter: { alignItems: 'center', paddingHorizontal: spacing.md },
+  poolLabel: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
+  poolTotal: { fontSize: 16, fontWeight: '800', color: colors.textPrimary },
+  splitBar: {
+    flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden',
+    backgroundColor: colors.surface, marginBottom: spacing.lg,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.background,
+  segA: { backgroundColor: colors.sideA },
+  segB: { backgroundColor: colors.sideB },
+  positionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.lg,
   },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    minHeight: touchMin,
-    paddingHorizontal: spacing.sm,
-  },
-  backText: {
-    color: colors.brandSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  categoryTag: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minHeight: touchMin,
-    paddingHorizontal: spacing.sm,
-  },
-  shareText: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginBottom: spacing.xl,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  duelIdText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  statusBadge: {
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  statusResolved: {
-    backgroundColor: 'rgba(20, 241, 149, 0.2)',
-  },
-  statusBadgeText: {
-    color: colors.textPrimary,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  mainTitle: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '800',
-    lineHeight: 24,
-    marginBottom: spacing.lg,
-  },
-  oddsBox: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceLight,
-    borderRadius: 16,
-    padding: spacing.md,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  sideBlock: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  sideName: {
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  multiplier: {
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  sidePool: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  vsCenter: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  vsLabel: {
-    color: colors.textMuted,
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  totalPoolAmount: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  ctaRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  ctaBtn: {
-    flex: 1,
-    minHeight: touchMin + 4,
-    justifyContent: 'center',
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  ctaBtnText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: spacing.md,
-  },
-  proofHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  proofHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs + 2,
-  },
-  proofHeaderText: {
-    color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  proofHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  proofToggleText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  infoCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: spacing.md,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  infoLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  infoMono: {
-    color: colors.textPrimary,
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  infoValue: {
-    color: colors.solanaGreen,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  criteriaText: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: spacing.sm,
-  },
-  pendingProof: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'flex-start',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  pendingProofText: {
-    flex: 1,
-    color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  positionText: { ...typography.body, color: colors.textPrimary, fontSize: 14, flex: 1 },
   messageBox: {
-    backgroundColor: 'rgba(20, 241, 149, 0.1)',
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    borderLeftWidth: 3,
-    borderColor: colors.solanaGreen,
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.lg,
+    borderLeftWidth: 3, borderColor: colors.brandPrimary,
   },
-  messageText: {
-    color: colors.solanaGreen,
-    fontSize: 13,
-    fontWeight: '700',
+  messageText: { color: colors.textPrimary, fontSize: 13, lineHeight: 19 },
+  sectionTitle: { ...typography.captionBold, color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },
+  criteriaText: { ...typography.body, color: colors.textPrimary, fontSize: 14, lineHeight: 21, marginBottom: spacing.sm },
+  timelineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
+  timelineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brandPrimary },
+  timelineLabel: { ...typography.body, color: colors.textPrimary, fontSize: 14, flex: 1 },
+  timelineDetail: { ...typography.mono, color: colors.textMuted, fontSize: 12 },
+  proofToggle: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: touchMin, marginTop: spacing.sm,
   },
-  chainBadge: {
-    backgroundColor: colors.surfaceLight,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
+  proofToggleText: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 14 },
+  proofBox: {
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm,
   },
-  chainBadgeLive: {
-    backgroundColor: 'rgba(20, 241, 149, 0.2)',
+  backerRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.surface,
   },
-  chainBadgeText: {
-    color: colors.textPrimary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  backerWallet: { ...typography.mono, color: colors.textPrimary, fontSize: 13 },
+  backerSide: { fontSize: 13, fontWeight: '700' },
+  emptyNote: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  ctaBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
   },
-  chainHint: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: spacing.xs,
+  ctaNote: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  ctaPrimary: {
+    minHeight: 56, backgroundColor: colors.brandPrimary,
+    borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center',
   },
-  initBtn: {
-    backgroundColor: colors.warning,
-    minHeight: touchMin + 4,
-    justifyContent: 'center',
-    borderRadius: 14,
-    alignItems: 'center',
-    marginBottom: spacing.md,
+  ctaPrimaryText: { ...typography.bodyBold, color: '#000000', fontSize: 15 },
+  ctaSplit: { flexDirection: 'row', gap: spacing.sm },
+  ctaHalf: {
+    flex: 1, minHeight: 56, borderRadius: borderRadius.full,
+    alignItems: 'center', justifyContent: 'center',
   },
-  initBtnText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  claimBtn: {
-    backgroundColor: colors.brandPrimary,
-    minHeight: touchMin + 4,
-    justifyContent: 'center',
-    borderRadius: 14,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  claimBtnText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  resolveBtn: {
-    backgroundColor: colors.brandSecondary,
-    minHeight: touchMin + 4,
-    justifyContent: 'center',
-    borderRadius: 14,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  resolveBtnText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  receiptBtn: {
-    backgroundColor: colors.brandPrimary,
-    minHeight: touchMin + 4,
-    justifyContent: 'center',
-    borderRadius: 14,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  receiptBtnText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  posCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  posHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  posWallet: {
-    color: colors.textPrimary,
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  posSide: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  posAmount: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
+  ctaHalfText: { ...typography.bodyBold, color: '#000000', fontSize: 15 },
 });

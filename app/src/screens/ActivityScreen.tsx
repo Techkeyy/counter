@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { ActivityNotification, Challenge } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
-import { api } from '../api';
+import { api, isUnreachable } from '../api';
 import { Icon, IconName } from '../components/Icon';
 import { EmptyState, ErrorState } from '../components/StateViews';
 
@@ -42,7 +42,8 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
       setActivities(Array.isArray(feed) ? feed : []);
       setChallenges(Array.isArray(list) ? list : []);
     } catch (err: any) {
-      setError(err?.message || "Couldn't load activity.");
+      if (isUnreachable(err)) setError('NETWORK_UNREACHABLE');
+      else setError("Activity couldn't load. Try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -102,17 +103,62 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
     onSelectNotification(item);
   };
 
-  const actionLabel = (type: string): string => {
-    if (type === 'CHALLENGE_RECEIVED' || type === 'COUNTEROFFER' || type === 'COUNTEROFFER_RECEIVED') {
-      return 'Review challenge';
-    }
-    return 'View receipt';
-  };
-
   const filteredActivities = activities.filter((item) => {
     if (filter === 'ACTION_REQUIRED') return ACTIONABLE.includes(item.type);
     return true;
   });
+
+  const isToday = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  };
+  const todayItems = filteredActivities.filter((i) => isToday(i.created_at));
+  const earlierItems = filteredActivities.filter((i) => !isToday(i.created_at));
+
+  const renderRow = (item: ActivityNotification) => {
+    const { icon, color } = getNotificationIcon(item.type);
+    const isActionable = ACTIONABLE.includes(item.type);
+    return (
+      <TouchableOpacity
+        style={[styles.itemRow, item.is_read === 0 && styles.itemUnread]}
+        onPress={() => openItem(item)}
+        activeOpacity={0.8}
+        accessibilityLabel={item.title}
+        accessibilityRole="button"
+      >
+        <View style={[styles.iconCircle, { backgroundColor: `${color}1A` }]}>
+          <Icon name={icon} size={20} color={color} />
+        </View>
+        <View style={styles.itemContent}>
+          <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.itemMessage} numberOfLines={2}>{item.message}</Text>
+          <Text style={styles.itemTime}>
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+            {isActionable ? ' · needs you' : ''}
+          </Text>
+        </View>
+        {isActionable ? (
+          <View style={styles.actionPill}>
+            {openingId === item.id ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Icon name="chevron-right" size={16} color="#000000" />
+            )}
+          </View>
+        ) : (
+          <Icon name="chevron-right" size={16} color={colors.textMuted} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -146,50 +192,16 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
         <ErrorState message={error} onRetry={loadActivities} />
       ) : (
         <FlatList
-          data={filteredActivities}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const { icon, color } = getNotificationIcon(item.type);
-            const isActionable = ACTIONABLE.includes(item.type);
-            return (
-              <TouchableOpacity
-                style={[styles.itemCard, item.is_read === 0 && styles.itemUnread]}
-                onPress={() => openItem(item)}
-                activeOpacity={0.8}
-                accessibilityLabel={item.title}
-                accessibilityRole="button"
-              >
-                <View style={[styles.iconCircle, { backgroundColor: `${color}1A` }]}>
-                  <Icon name={icon} size={20} color={color} />
-                </View>
-                <View style={styles.itemContent}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.itemTitle}>{item.title}</Text>
-                    <Text style={styles.itemDate}>
-                      {new Date(item.created_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemMessage}>{item.message}</Text>
-                  {isActionable && (
-                    <View style={styles.actionRow}>
-                      <View style={styles.actionBtn}>
-                        {openingId === item.id ? (
-                          <ActivityIndicator size="small" color="#000000" />
-                        ) : (
-                          <>
-                            <Text style={styles.actionBtnText}>{actionLabel(item.type)}</Text>
-                            <Icon name="arrow-right" size={12} color="#000000" />
-                          </>
-                        )}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
+          data={[
+            ...(todayItems.length > 0 ? [{ header: 'Today' } as any, ...todayItems] : []),
+            ...(earlierItems.length > 0 ? [{ header: 'Earlier' } as any, ...earlierItems] : []),
+          ]}
+          keyExtractor={(item: any) => item.header || item.id}
+          renderItem={({ item }: any) => {
+            if (item.header) {
+              return <Text style={styles.groupHeader}>{item.header}</Text>;
+            }
+            return renderRow(item as ActivityNotification);
           }}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -235,38 +247,37 @@ const styles = StyleSheet.create({
   filterText: { ...typography.captionBold, color: colors.textSecondary, fontSize: 13 },
   filterTextActive: { color: '#000000' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: spacing.md, paddingBottom: 96 },
-  itemCard: {
+  listContent: { paddingBottom: 96 },
+  groupHeader: {
+    ...typography.captionBold,
+    color: colors.textMuted,
+    fontSize: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  itemRow: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: touchMin + 8,
+    gap: spacing.md,
   },
   itemUnread: {
-    borderColor: 'rgba(20, 241, 149, 0.4)',
     backgroundColor: colors.surface,
   },
   iconCircle: {
     width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', marginRight: spacing.md,
+    alignItems: 'center', justifyContent: 'center',
   },
-  itemContent: { flex: 1 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
-  itemTitle: { ...typography.bodyBold, color: colors.textPrimary, flex: 1 },
-  itemDate: { ...typography.caption, color: colors.textMuted, marginLeft: spacing.sm },
-  itemMessage: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
-  actionRow: { marginTop: spacing.sm, flexDirection: 'row' },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  itemContent: { flex: 1, gap: 1 },
+  itemTitle: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 14 },
+  itemMessage: { ...typography.body, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  itemTime: { ...typography.caption, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  actionPill: {
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: colors.brandPrimary,
-    paddingHorizontal: spacing.md,
-    minHeight: touchMin,
-    borderRadius: borderRadius.full,
-    gap: 4,
+    alignItems: 'center', justifyContent: 'center',
   },
-  actionBtnText: { ...typography.captionBold, color: '#000000', fontSize: 12 },
 });
