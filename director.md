@@ -7,8 +7,8 @@
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `7a1e5f4` (+ this ledger: UX V2 implementation + artifact, commit pending at time of writing; packaged app source `7a1e5f4` — see §41.D)
-**Last Updated:** 2026-09-30T15:30:00Z
+**Authoritative Local Commit:** `511be22` (+ this ledger: Home category strip + artifact, commit pending at time of writing; packaged app source `511be22` — see §42)
+**Last Updated:** 2026-09-30T16:15:00Z
 
 ---
 
@@ -1218,5 +1218,33 @@ fixed during the run; product code untouched by them.)
 - VPS changes this phase: NONE (read-only Caddy/DB inspection only).
 - Remaining: hardware (all UX + Core Outcome observations), off-machine
   password backup still recommended.
+
+---
+
+## 42. HOME CATEGORY STRIP (OWNER-DIRECTED) — 2026-09-30
+
+> Owner-supplied Home mock places a category strip (All, Sports, Crypto,
+> Weather, Politics, ...) above the timeline rows. Implemented on the REAL
+> backend category filter (`GET /api/takes?category=`, `GET /api/duels`,
+> both verified live params). Single timeline retained: no tabs, no cards, no
+> fake Following. Compact 40dp chips consistent with the Duels screen.
+> Status stays: **`BUILDING — UX V2 IMPLEMENTED / OWNER PHYSICAL UX REVIEW REQUIRED`**.
+
+- Change: `app/src/screens/FeedScreen.tsx` only (category state + strip +
+  filtered fetch). tsc 0 · session 5/5.
+- Packaged source `511be22591af3e3de9b15c0910bffd82e66a0401` (pushed pre-build).
+- Rebuilt with the SAME rotated key (DPAPI process env, cleared after):
+  BUILD SUCCESSFUL, **62,057,380 bytes**,
+  SHA-256 **`74DD9792EE16D3E5746F1DF1F49860505AA4ACC606936AC583085ED955DEBC90`**,
+  package `app.counter.mobile` v1/1.0.0, cert `a11be643…d7827`.
+- Bundle (2,526,320 B): backend/mint/program 1× each; zero mock/secret hits;
+  localhost profile unchanged. Merged manifest: prod `/d` + `/r` autoVerify,
+  zero `counter.app`.
+
+> This exact APK (SHA-256 `74DD9792…BC90`, cert `a11be643…d7827`, package
+> `app.counter.mobile`) built from `511be22` is the ONLY APK authorized for
+> owner physical UX review. APK `F12D68BA…` is SUPERSEDED. No device was
+> attached at build time; install + screenshots + Core Outcome UAT await the
+> owner run. VPS untouched this phase.
 
 
