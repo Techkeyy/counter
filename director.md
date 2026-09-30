@@ -7,8 +7,8 @@
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld across all sessions including this close-out: only read-only public GETs; no restart/edit/reload of anything remote)  
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `d6b7fcd` + this ledger (commit pending at time of writing)  
-**Last Updated:** 2026-09-30T02:00:00Z  
+**Authoritative Local Commit:** `b302208` (code) + this ledger (commit pending at time of writing; preserves `d6b7fcd` code with docs `cdfdf88`/`f70af47` + type-only `chain.ts` fix)
+**Last Updated:** 2026-09-30T03:00:00Z
 
 ---
 
@@ -747,5 +747,111 @@ fixed during the run; product code untouched by them.)
 10. Row counts vs backup; `/health` 200; `chain-accounts` now serves AXMB7 model.
 11. Negative probes: fabricated init/stake/claim → 400, no state change; resolver has no pseudo path.
 12. Rollback on any failure: restore backup sqlite + prior commit + restart `counter-backend` only.
+
+---
+
+## 37. GATE CLOSURE CONTINUATION — 2026-09-30 (Builder, from `f70af47`)
+
+> Continuation close-out only: no feature work, no APK rebuild, no VPS mutation, no Devnet lifecycle rerun.
+> Authoritative status: **`DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`**.
+> In this ledger, “deployment” means an **in-place upgrade of the already-running Counter backend**
+> (`/opt/counter/server`, `counter-backend.service`, behind `https://counter.103-195-188-198.sslip.io`),
+> NOT creation of a new VPS deployment.
+
+### 37.A — State reconstruction
+
+- Starting HEAD **`f70af47`** (docs-only `cdfdf88` + `f70af47` preserved on top of code commit `d6b7fcd`;
+  verified: `git show --stat HEAD`, `git diff d6b7fcd..HEAD --stat` = `director.md` only). Nothing discarded.
+- `git status`: clean; branch `master`; `git diff` / `git diff --cached`: empty.
+- Remote: `https://github.com/Techkeyy/counter.git`.
+- One regression found and fixed this session (§37.B): `app/src/chain.ts` type-only, committed as **`b302208`**.
+
+### 37.B — TypeScript regression (diagnosed, minimal fix, runtime-proven identical)
+
+- `tsc --noEmit` initially failed with 3 errors in `app/src/chain.ts` (lines 89, 90, 104):
+  `Argument of type 'bigint' is not assignable to parameter of type 'number'`.
+- Root cause: `buffer@6.0.3` ships incorrect `.d.ts` declaring
+  `writeBigInt64LE/writeBigUInt64LE(value: number)`; Node runtime requires `bigint`
+  (verified: direct `writeBigInt64LE(BigInt(123), 0)` executes correctly).
+- Fix (`b302208`): `writeI64LE`/`writeU64LE` helpers forward the same `bigint` to the same underlying
+  method via a correctly-typed indirection; 3 call sites routed through them. No serializer logic,
+  layout, constant, or control-flow change.
+- Runtime equivalence proven: helper path vs direct path produce identical bytes
+  (`010140420f000000000007`, matching the deposit byte-vector prefix).
+- Re-run: `tsc --noEmit` → **0 errors**. APK NOT rebuilt: the artifact remains tied to `d6b7fcd`
+  code; the fix is type-level indirection with proven-identical runtime behavior.
+
+### 37.C — Deterministic re-verification (no architecture change)
+
+- Session tests (real `session.ts`): **5/5 pass**.
+- Chain vectors: **11/11 pass**.
+- Backend adversarial: **8/8 pass** (external-oracle section honest-SKIPs offline — SKIP, not proof).
+- Fixture check: adversarial suite uses in-memory SQLite and reports fixtures cleaned; local file DB
+  contains **zero `duel_test%` rows** (observed 12 duels / 11 takes / 4 receipts — local runtime state).
+- Migration dry-run and 12-check local smoke NOT rerun (prior exits 0 in §35; intervening commits are
+  `director.md` + the type-only fix above — no covered code changed).
+
+### 37.D — Release APK re-verification (existing artifact, no rebuild)
+
+- Path `app/android/app/build/outputs/apk/release/app-release.apk`: **62,017,908 bytes**,
+  SHA-256 **`0AB0AA189FAEB68C271538446CE99CAD9E6684A309EF0BBDBFCCB177283A3344`** (recomputed, matches),
+  package `app.counter.mobile` (aapt) ✓, cert SHA-256
+  `3ab28e3997b7e3c0f095aaeccbc9b886694adc74f4ab7c3a374463e4bcfbff25` (apksigner) ✓.
+- Embedded `index.android.bundle` (2,497,644 B, fresh extraction): production backend
+  `counter.103-195-188-198.sslip.io` ✓ (1×, https), AXMB7 mint ✓, program `52Qgq…NmT` ✓;
+  `mock_dev_session_token` / fallback wallet / `counter123` / key headers / `COUNTER_RELEASE_*` /
+  `androiddebugkey` / Google/Slack/GitHub/Anthropic key shapes: **absent** ✓.
+- `localhost`×3 + `127.0.0.1`×1 re-traced to the same known library constants (Metro :8080 fallback,
+  web3.js cluster enum, default RPC :8899) — **no application-owned localhost production dependency**.
+
+### 37.E — Secret scan + production/device findings
+
+- Tracked-source scan (154 files; lockfiles + this ledger excluded): **0 actual leaked secrets** → push allowed.
+  One known pre-existing hardcoded JWT fallback default in `server/auth.js`
+  (`process.env.JWT_SECRET || 'counter-secret-key-…'`): NOT a provisioned secret; recorded risk standing
+  since §33.G — production deploy MUST set a strong non-default `JWT_SECRET` (§37.G). Release keystore
+  still untracked; only `debug.keystore` tracked (public-by-convention); no `.env` tracked.
+- Production re-probed read-only (zero mutations): `/api/health` → 200 `ok` (existing Counter VPS
+  deployment, live); `chain-accounts` → 404 → **still OLD backend**; production is not aligned with the
+  current mobile build.
+- `adb devices -l` → empty (see §37.H).
+
+### 37.F — Authoritative claim ledger for this closure
+
+- Final status is exactly: **`DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`**.
+- PROVEN LOCALLY: real Devnet economic path implemented and backend-verified; fail-closed settlement;
+  real claim verification; secure session persistence implementation; session tests 5/5; Devnet test-cUSD
+  faucet uses AXMB7; faucet success requires real on-chain balance reread; migration dry run
+  lossless/idempotent; legacy duels honestly UNINITIALIZED; chain vectors 11/11; backend adversarial 8/8;
+  local chain-boundary smoke 12 checks; fresh signed Android release APK exists.
+- OBSERVED PRODUCTION STATE: Counter already runs on the VPS at
+  `https://counter.103-195-188-198.sslip.io` (service evidence `/opt/counter/server`,
+  `counter-backend.service`, reverse-proxied through existing Counter hostname); production currently
+  serves the OLD Counter backend (previously observed: `/api/health` works,
+  `/api/duels/.../chain-accounts` absent, `/api/duels/.../claim` absent — health + chain-accounts
+  re-confirmed this session); therefore production is not aligned with the current mobile build.
+- NOT YET PROVEN (no claim upgraded): upgraded production backend; production migration; production
+  config equality; Android cold launch on real hardware; MWA signing on physical Android; secure-session
+  restore after actual process kill; faucet UX on actual Android; full Core Outcome through normal Android UI.
+
+### 37.G — Prepared in-place VPS upgrade plan (NOT executed; STRICT ISOLATION ACTIVE)
+
+1. SSH to existing VPS. 2. Inspect only `/opt/counter` and `counter-backend.service`. 3. Record currently
+   deployed Counter files/version. 4. Record existing Counter DB path and counts. 5. Verify available disk.
+   6. Verify required env/config WITHOUT printing secrets. 7. Confirm: PROGRAM_ID, DEVNET_CUSD_MINT
+   (= AXMB7…), KEYPAIR_PATH exists, resolver public key (public key only), non-default strong JWT secret
+   exists. 8. Timestamped backup of Counter SQLite DB. 9. Rollback copy/state of existing Counter backend.
+   10. Upgrade only `/opt/counter/server` to the approved GitHub commit. 11. Install only Counter server
+   dependencies if required. 12. Run the idempotent DB migration. 13. Verify data counts and legacy rows.
+   14. Restart ONLY `counter-backend.service`. 15. Do NOT restart unrelated services. 16. Do NOT modify
+   unrelated VPS directories. 17. Verify health. 18. Verify new `chain-accounts` route exists. 19. Verify
+   claim route exists. 20. Verify fake init/stake/claim signatures fail closed. 21. Verify no
+   pseudo-settlement fallback exists. 22. Verify existing feed/profile/duel reads still work. 23. Verify
+   Caddy routing unchanged unless actually broken. 24. Roll back Counter only if startup/data integrity fails.
+
+### 37.H — Physical device check
+
+- `adb devices -l` → **empty (no device attached)**. Recorded: `PHYSICAL ANDROID UAT BLOCKED — NO DEVICE`.
+  No hardware evidence faked. VPS was NOT mutated (only read-only public GETs this session).
 
 
