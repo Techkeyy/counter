@@ -10,11 +10,12 @@ import {
   Share,
 } from 'react-native';
 import { User, Receipt, Take, Duel } from '../types';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
+import * as Clipboard from 'expo-clipboard';
 import { formatUserDisplayName, formatUserHandle, getAvatarUri, formatWalletShort } from '../utils/identity';
-import { EmptyState } from '../components/StateViews';
+import { EmptyState, ErrorState } from '../components/StateViews';
 
 interface ProfileScreenProps {
   wallet: string | null;
@@ -40,11 +41,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [myDuels, setMyDuels] = useState<Duel[]>([]);
   const [activeTab, setActiveTab] = useState<ProfileTab>('DUELS');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const loadProfile = async () => {
     if (!wallet) return;
     try {
+      setLoadError(null);
       const [profile, userReceipts, allTakes, allDuels] = await Promise.all([
         api.getUserProfile(wallet),
         api.getUserReceipts(wallet),
@@ -62,8 +65,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       const duelsList = Array.isArray(allDuels) ? allDuels : [];
       setMyDuels(duelsList.filter((d) => d.captain_a_wallet === wallet || d.captain_b_wallet === wallet));
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to load profile:', err);
+      setLoadError(err?.message || "Couldn't load this profile.");
     } finally {
       setLoading(false);
     }
@@ -93,6 +97,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     );
   }
 
+  if (loadError && !user) {
+    return (
+      <View style={styles.container}>
+        <ErrorState message={loadError} onRetry={loadProfile} />
+      </View>
+    );
+  }
+
   const displayName = formatUserDisplayName({
     display_name: user?.display_name,
     name: user?.display_name,
@@ -115,6 +127,42 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const skrStaked = user?.skr_staked_amount || 0;
   const isArenaEligible = skrStaked > 0;
 
+  // Head-to-head rows derived strictly from this wallet's real duels.
+  // No names, scores, or rematch actions are invented.
+  const rivalries = (() => {
+    const byOpponent = new Map<string, { label: string; duels: number; wins: number; losses: number; latestDuelId: string }>();
+    for (const d of myDuels) {
+      const isA = d.captain_a_wallet === wallet;
+      const oppWallet = isA ? d.captain_b_wallet : d.captain_a_wallet;
+      if (!oppWallet) continue;
+      const label = formatUserDisplayName({
+        display_name: isA ? d.captain_b_name : d.captain_a_name,
+        handle: isA ? d.captain_b_handle : d.captain_a_handle,
+        wallet: oppWallet,
+      });
+      const row = byOpponent.get(oppWallet) || { label, duels: 0, wins: 0, losses: 0, latestDuelId: d.id };
+      row.duels += 1;
+      row.latestDuelId = d.id;
+      if (d.status.startsWith('RESOLVED')) {
+        const mySide = isA ? 1 : 2;
+        if (d.winning_side === mySide) row.wins += 1;
+        else row.losses += 1;
+      }
+      byOpponent.set(oppWallet, row);
+    }
+    return [...byOpponent.entries()].map(([opponentWallet, r]) => ({
+      opponentWallet,
+      label: r.label,
+      record:
+        r.duels === 1
+          ? '1 duel'
+          : r.wins === r.losses
+            ? `${r.duels} duels, even`
+            : `${r.duels} duels, you lead ${r.wins}-${r.losses}`,
+      latestDuelId: r.latestDuelId,
+    })).slice(0, 5);
+  })();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* 1. Person First Header */}
@@ -130,9 +178,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           )}
         </View>
         {handle ? <Text style={styles.handle}>{handle}</Text> : null}
-        <Text style={styles.bio}>
-          {user?.bio || 'Contender on Counter. Disputing claims on Solana.'}
-        </Text>
+        {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
       </View>
 
       {/* 2. Strava-Style Reputation & Competitive Records */}
@@ -164,33 +210,37 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
       </View>
 
-      {/* 3. Persistent Rivalries Section */}
-      <View style={styles.statsCard}>
-        <View style={styles.rivalryHeaderRow}>
-          <View style={styles.rivalryTitleRow}>
-            <Icon name="swords" size={15} color={colors.brandPrimary} />
-            <Text style={styles.cardHeaderTitle}>HEAD-TO-HEAD RIVALRIES</Text>
+      {/* 3. Head-to-head record, computed from your real duels */}
+      {rivalries.length > 0 && (
+        <View style={styles.statsCard}>
+          <View style={styles.rivalryHeaderRow}>
+            <View style={styles.rivalryTitleRow}>
+              <Icon name="swords" size={15} color={colors.brandPrimary} />
+              <Text style={styles.cardHeaderTitle}>Head-to-head</Text>
+            </View>
           </View>
+          {rivalries.map((r) => (
+            <TouchableOpacity
+              key={r.opponentWallet}
+              style={styles.rivalryItem}
+              onPress={() => {
+                const duel = myDuels.find((d) => d.id === r.latestDuelId);
+                if (duel && onSelectDuel) onSelectDuel(duel);
+              }}
+              activeOpacity={0.8}
+              accessibilityLabel={`Head to head with ${r.label}, ${r.record}`}
+              accessibilityRole="button"
+            >
+              <View style={styles.rivalryCombatants}>
+                <Text style={styles.rivalryName} numberOfLines={1}>You</Text>
+                <Text style={styles.rivalryVs}>vs</Text>
+                <Text style={styles.rivalryName} numberOfLines={1}>{r.label}</Text>
+              </View>
+              <Text style={styles.rivalryScore}>{r.record}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-
-        {/* Rivalry Highlight Card */}
-        <View style={styles.rivalryItem}>
-          <View style={styles.rivalryCombatants}>
-            <Text style={styles.rivalryName}>{displayName}</Text>
-            <Text style={styles.rivalryVs}>vs</Text>
-            <Text style={styles.rivalryName}>Israel</Text>
-          </View>
-          <Text style={styles.rivalryScore}>3 Duels · Leads 2–1</Text>
-          <TouchableOpacity
-            style={styles.rematchBtn}
-            activeOpacity={0.8}
-            accessibilityLabel="Propose rematch"
-          >
-            <Icon name="refresh-cw" size={12} color={colors.brandPrimary} />
-            <Text style={styles.rematchBtnText}>Rematch</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
 
       {/* 4. Content Tabs: Takes | Duels | Receipts */}
       <View style={styles.tabsBar}>
@@ -300,8 +350,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <Text style={styles.accountKey}>Wallet Address</Text>
           <View style={styles.walletCopyRow}>
             <Text style={styles.accountValMono}>{formatWalletShort(wallet)}</Text>
-            <TouchableOpacity onPress={() => setCopied(true)} style={styles.copyBtn}>
-              <Icon name={copied ? 'check' : 'copy'} size={14} color={copied ? colors.brandPrimary : colors.textSecondary} />
+            <TouchableOpacity
+              onPress={async () => {
+                if (wallet) {
+                  await Clipboard.setStringAsync(wallet);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+              style={styles.copyBtn}
+              accessibilityLabel="Copy wallet address"
+              accessibilityRole="button"
+            >
+              <Icon name={copied ? 'check' : 'copy'} size={16} color={copied ? colors.brandPrimary : colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -474,20 +535,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '600',
   },
-  rematchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(20, 241, 149, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: borderRadius.sm,
-  },
-  rematchBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.brandPrimary,
-  },
   tabsBar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -499,7 +546,8 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     flex: 1,
-    paddingVertical: 8,
+    minHeight: touchMin,
+    justifyContent: 'center',
     alignItems: 'center',
     borderRadius: borderRadius.sm,
   },
@@ -597,11 +645,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   copyBtn: {
-    padding: 4,
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   disconnectBtn: {
     marginTop: spacing.sm,
-    paddingVertical: 10,
+    minHeight: touchMin,
+    justifyContent: 'center',
     borderRadius: borderRadius.md,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
     alignItems: 'center',

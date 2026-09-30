@@ -9,9 +9,9 @@ import {
   Linking,
 } from 'react-native';
 import { Receipt } from '../types';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from '../components/Icon';
-import { formatWalletShort } from '../utils/identity';
+import { formatWalletShort, isRealSignature } from '../utils/identity';
 
 interface ReceiptScreenProps {
   receipt: Receipt;
@@ -27,11 +27,17 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   const winnerWallet = receipt.winner_wallet;
   const isCaptainAWinner = winnerWallet === receipt.captain_a_wallet;
   const winnerSideName = isCaptainAWinner ? 'Side A' : 'Side B';
+  // Verification is real only for genuine settlement signatures. Legacy
+  // history rows (simulated markers) render honestly without chain claims.
+  const verified = isRealSignature(receipt.onchain_signature);
 
   const handleShare = async () => {
     try {
+      const amount = `$${(Number(receipt.total_pool) || 0).toFixed(2)} cUSD`;
       await Share.share({
-        message: `Counter Official Duel Receipt: Winner ${formatWalletShort(winnerWallet)} claimed $${(Number(receipt.total_pool) || 0).toFixed(2)} cUSD! Verified on Solana: ${receipt.onchain_signature || ''}`,
+        message: verified
+          ? `Counter duel receipt: ${formatWalletShort(winnerWallet)} won ${amount}. Verified on Solana: ${receipt.onchain_signature}`
+          : `Counter duel result: ${formatWalletShort(winnerWallet)} won ${amount}.`,
       });
     } catch {
       // user cancelled
@@ -39,7 +45,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   };
 
   const handleOpenExplorer = () => {
-    if (receipt.onchain_signature) {
+    if (verified) {
       Linking.openURL(
         `https://explorer.solana.com/tx/${receipt.onchain_signature}?cluster=devnet`
       );
@@ -67,8 +73,10 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
             <View style={styles.iconCircle}>
               <Icon name="trophy" size={28} color={colors.arenaBadge} />
             </View>
-            <Text style={styles.ticketTitle}>Duel Settled</Text>
-            <Text style={styles.ticketSubtitle}>Permanent Record on Solana</Text>
+            <Text style={styles.ticketTitle}>Duel settled</Text>
+            <Text style={styles.ticketSubtitle}>
+              {verified ? 'Permanent record on Solana' : 'Outcome recorded by Counter'}
+            </Text>
           </View>
 
           {/* Perforated Divider */}
@@ -134,28 +142,38 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
 
           {/* Proof & Verification Section */}
           <View style={styles.proofSection}>
-            <Text style={styles.narrativeLabel}>ON-CHAIN VERIFICATION</Text>
+            <Text style={styles.narrativeLabel}>Settlement evidence</Text>
 
-            <View style={styles.chainBadgeRow}>
-              <Icon name="shield-check" size={16} color={colors.solanaGreen} />
-              <Text style={styles.chainBadgeLabel}>Immutable Solana Devnet Program Escrow</Text>
-            </View>
-
-            {receipt.onchain_signature ? (
-              <TouchableOpacity
-                style={styles.signatureBtn}
-                onPress={handleOpenExplorer}
-                activeOpacity={0.8}
-              >
-                <View style={styles.sigInfo}>
-                  <Text style={styles.sigLabel}>Transaction Signature</Text>
-                  <Text style={styles.sigValue} numberOfLines={1}>
-                    {receipt.onchain_signature}
-                  </Text>
+            {verified ? (
+              <>
+                <View style={styles.chainBadgeRow}>
+                  <Icon name="shield-check" size={16} color={colors.success} />
+                  <Text style={styles.chainBadgeLabel}>Settled on Solana Devnet</Text>
                 </View>
-                <Icon name="external-link" size={16} color={colors.solanaGreen} />
-              </TouchableOpacity>
-            ) : null}
+                <TouchableOpacity
+                  style={styles.signatureBtn}
+                  onPress={handleOpenExplorer}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Open settlement transaction in explorer"
+                  accessibilityRole="button"
+                >
+                  <View style={styles.sigInfo}>
+                    <Text style={styles.sigLabel}>Transaction signature</Text>
+                    <Text style={styles.sigValue} numberOfLines={1}>
+                      {receipt.onchain_signature}
+                    </Text>
+                  </View>
+                  <Icon name="external-link" size={16} color={colors.success} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.unverifiedBox}>
+                <Icon name="clock" size={16} color={colors.textMuted} />
+                <Text style={styles.unverifiedText}>
+                  Recorded before on-chain verification. No settlement transaction is attached to this record.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Ticket Footer Barcode / Receipt ID */}
@@ -166,9 +184,15 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.shareButtonBig} onPress={handleShare} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.shareButtonBig}
+            onPress={handleShare}
+            activeOpacity={0.8}
+            accessibilityLabel="Share receipt"
+            accessibilityRole="button"
+          >
             <Icon name="share-2" size={18} color="#000000" />
-            <Text style={styles.shareButtonBigText}>Share Permanent Receipt</Text>
+            <Text style={styles.shareButtonBigText}>Share receipt</Text>
           </TouchableOpacity>
 
           {onViewDuel && (
@@ -176,8 +200,10 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
               style={styles.viewDuelButton}
               onPress={() => onViewDuel(receipt.duel_id)}
               activeOpacity={0.8}
+              accessibilityLabel="View full duel"
+              accessibilityRole="button"
             >
-              <Text style={styles.viewDuelText}>View Full Duel History</Text>
+              <Text style={styles.viewDuelText}>View full duel</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -201,14 +227,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.surfaceLight,
   },
   backButton: {
-    padding: spacing.xs,
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarTitle: {
     ...typography.h3,
     color: colors.textPrimary,
   },
   shareButton: {
-    padding: spacing.xs,
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scroll: {
     flex: 1,
@@ -387,6 +419,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  unverifiedBox: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+  },
+  unverifiedText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   ticketFooter: {
     padding: spacing.md,
     alignItems: 'center',
@@ -407,8 +453,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.solanaGreen,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.brandPrimary,
+    minHeight: touchMin + 4,
     borderRadius: borderRadius.full,
     gap: spacing.xs,
   },
@@ -418,7 +464,8 @@ const styles = StyleSheet.create({
   },
   viewDuelButton: {
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+    minHeight: touchMin,
   },
   viewDuelText: {
     ...typography.bodyMuted,

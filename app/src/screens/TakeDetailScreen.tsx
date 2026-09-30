@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Take, Comment, Duel } from '../types';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
 import {
@@ -70,11 +70,12 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
     if (!replyText.trim()) return;
     try {
       setPosting(true);
+      setError(null);
       const newComment = await api.addComment(take.id, replyText.trim());
       setComments((prev) => [...prev, newComment]);
       setReplyText('');
     } catch (err: any) {
-      console.warn('Failed to post reply:', err);
+      setError(err?.message || "Couldn't post that reply.");
     } finally {
       setPosting(false);
     }
@@ -149,9 +150,11 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
             style={styles.challengeActionBtn}
             onPress={() => onChallengeTake(take)}
             activeOpacity={0.8}
+            accessibilityLabel="Challenge this take to a 1v1 duel"
+            accessibilityRole="button"
           >
             <Icon name="swords" size={18} color="#000000" />
-            <Text style={styles.challengeActionText}>Challenge This Take</Text>
+            <Text style={styles.challengeActionText}>Challenge this take</Text>
           </TouchableOpacity>
         </View>
 
@@ -191,6 +194,20 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
         {/* Threaded Replies Section */}
         <View style={styles.repliesSection}>
           <Text style={styles.sectionHeader}>Replies ({comments.length})</Text>
+
+          {error && (
+            <View style={styles.inlineError}>
+              <Text style={styles.inlineErrorText}>{error}</Text>
+              <TouchableOpacity
+                onPress={loadThread}
+                style={styles.inlineRetry}
+                accessibilityLabel="Retry loading replies"
+                accessibilityRole="button"
+              >
+                <Text style={styles.inlineRetryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {loading ? (
             <ActivityIndicator size="small" color={colors.solanaGreen} style={{ marginVertical: spacing.lg }} />
@@ -274,14 +291,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.surfaceLight,
   },
   backButton: {
-    padding: spacing.xs,
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarTitle: {
     ...typography.h3,
     color: colors.textPrimary,
   },
   shareButton: {
-    padding: spacing.xs,
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scroll: {
     flex: 1,
@@ -351,8 +374,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.solanaGreen,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.brandPrimary,
+    minHeight: touchMin + 4,
     borderRadius: borderRadius.full,
     gap: spacing.xs,
   },
@@ -428,6 +451,33 @@ const styles = StyleSheet.create({
   noCommentsText: {
     ...typography.bodyMuted,
     color: colors.textSecondary,
+  },
+  inlineError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 71, 87, 0.1)',
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  inlineErrorText: {
+    flex: 1,
+    color: colors.error,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  inlineRetry: {
+    minHeight: touchMin,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  inlineRetryText: {
+    color: colors.brandPrimary,
+    fontWeight: '700',
+    fontSize: 13,
   },
   commentItem: {
     flexDirection: 'row',

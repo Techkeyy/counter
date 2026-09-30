@@ -18,6 +18,7 @@ import { ReceiptScreen } from './src/screens/ReceiptScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
 import { ChallengeModal } from './src/components/ChallengeModal';
+import { ChallengeSheet } from './src/components/ChallengeSheet';
 import { OnboardingModal } from './src/components/OnboardingModal';
 import { Icon, IconName } from './src/components/Icon';
 import { colors, spacing, borderRadius, touchMin } from './src/theme';
@@ -30,7 +31,7 @@ import {
   DISCONNECTED,
 } from './src/session';
 import { api } from './src/api';
-import { Take, Duel, Receipt } from './src/types';
+import { Take, Duel, Receipt, Challenge } from './src/types';
 
 type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
 
@@ -58,6 +59,7 @@ export default function App() {
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
+  const [reviewChallenge, setReviewChallenge] = useState<Challenge | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Restore the securely stored session on cold start. The stored token is
@@ -171,6 +173,7 @@ export default function App() {
     setSelectedTake(null);
     setSelectedReceipt(null);
     setShowComposer(false);
+    setReviewChallenge(null);
     setLinkNotice(null);
   };
 
@@ -270,6 +273,7 @@ export default function App() {
                     setSelectedDuelId(notif.target_id.replace('receipt_', ''));
                   }
                 }}
+                onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
               />
             )}
 
@@ -293,6 +297,19 @@ export default function App() {
         onChallengeCreated={() => {
           setChallengeTargetTake(null);
           setCurrentTab('HOME');
+        }}
+      />
+
+      <ChallengeSheet
+        challenge={reviewChallenge}
+        userWallet={walletState.publicKey}
+        onClose={() => setReviewChallenge(null)}
+        onDecided={(duel) => {
+          setReviewChallenge(null);
+          if (duel) {
+            clearDetailViews();
+            setSelectedDuelId(duel.id);
+          }
         }}
       />
 

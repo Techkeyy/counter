@@ -1,7 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, typography, spacing, borderRadius } from '../theme';
+import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon, IconName } from './Icon';
+
+// Anything the fetch layer reports as a transport failure renders the
+// offline variant instead of a generic error.
+export function looksOffline(message?: string | null): boolean {
+  if (!message) return false;
+  return /network request failed|failed to fetch|offline|econn|socket|dns|unreachable|load failed|timeout/i.test(message);
+}
 
 interface EmptyStateProps {
   icon?: IconName;
@@ -40,20 +47,35 @@ interface ErrorStateProps {
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
-  message = "Something went wrong loading this content.",
+  message = 'Something went wrong loading this content.',
   onRetry,
 }) => {
+  const offline = looksOffline(message);
   return (
     <View style={styles.container}>
-      <View style={[styles.iconCircle, styles.errorCircle]}>
-        <Icon name="alert-circle" size={32} color={colors.danger} />
+      <View style={[styles.iconCircle, offline ? styles.offlineCircle : styles.errorCircle]}>
+        <Icon
+          name={offline ? 'wifi-off' : 'alert-circle'}
+          size={32}
+          color={offline ? colors.textSecondary : colors.error}
+        />
       </View>
-      <Text style={styles.title}>Unable to Load</Text>
-      <Text style={styles.subtitle}>{message}</Text>
+      <Text style={styles.title}>{offline ? 'You are offline' : 'Unable to load'}</Text>
+      <Text style={styles.subtitle}>
+        {offline
+          ? 'Check your connection. Your data is safe and nothing was lost.'
+          : message}
+      </Text>
       {onRetry && (
-        <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={onRetry}
+          activeOpacity={0.8}
+          accessibilityLabel={offline ? 'Retry when back online' : 'Try again'}
+          accessibilityRole="button"
+        >
           <Icon name="refresh-cw" size={16} color={colors.textPrimary} />
-          <Text style={styles.retryButtonText}>Try Again</Text>
+          <Text style={styles.retryButtonText}>Try again</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -79,6 +101,9 @@ const styles = StyleSheet.create({
   errorCircle: {
     backgroundColor: 'rgba(255, 71, 87, 0.1)',
   },
+  offlineCircle: {
+    backgroundColor: colors.surfaceLight,
+  },
   title: {
     ...typography.h3,
     color: colors.textPrimary,
@@ -94,9 +119,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   button: {
-    backgroundColor: colors.solanaGreen,
+    backgroundColor: colors.brandPrimary,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    minHeight: touchMin,
+    justifyContent: 'center',
     borderRadius: borderRadius.full,
   },
   buttonText: {
@@ -108,7 +134,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surfaceLight,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    minHeight: touchMin,
     borderRadius: borderRadius.full,
     gap: spacing.xs,
   },
