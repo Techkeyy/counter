@@ -64,6 +64,7 @@ app.get('/.well-known/assetlinks.json', (req, res) => {
         namespace: 'android_app',
         package_name: 'app.counter.mobile',
         sha256_cert_fingerprints: [
+          'A1:1B:E6:43:07:AE:1E:F3:67:36:2D:5B:32:D0:0B:C4:32:18:FE:AB:FC:91:D6:8C:EA:F2:7C:B4:6F:7D:78:27',
           '3A:B2:8E:39:97:B7:E3:C0:F0:95:AA:EC:CB:C9:B8:86:69:4A:DC:74:F4:AB:7C:3A:37:44:63:E4:BC:FB:FF:25',
           'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C'
         ],
