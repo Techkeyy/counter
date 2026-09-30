@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `DEPLOYMENT READY — OWNER AUTHORIZATION REQUIRED`  
-**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Zero shared mutations on `103.195.188.198` — upheld across all sessions including this close-out: only read-only public GETs; no restart/edit/reload of anything remote)  
+**Current Authoritative Status:** `BUILDING — PHYSICAL ANDROID UAT READY`
+**Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `b302208` (code) + this ledger (commit pending at time of writing; preserves `d6b7fcd` code with docs `cdfdf88`/`f70af47` + type-only `chain.ts` fix)
-**Last Updated:** 2026-09-30T03:00:00Z
+**Authoritative Local Commit:** `20faf9b` (+ this ledger: production-alignment record, commit pending at time of writing)
+**Last Updated:** 2026-09-30T06:35:00Z
 
 ---
 
@@ -853,5 +853,136 @@ fixed during the run; product code untouched by them.)
 
 - `adb devices -l` → **empty (no device attached)**. Recorded: `PHYSICAL ANDROID UAT BLOCKED — NO DEVICE`.
   No hardware evidence faked. VPS was NOT mutated (only read-only public GETs this session).
+
+---
+
+## 38. PRODUCTION IN-PLACE UPGRADE — 2026-09-30 (Builder, owner-authorized Counter-only)
+
+> Owner authorization granted for a Counter-only in-place upgrade of the existing Counter backend.
+> Scope honored: no second deployment, no VPS replacement, no unrelated services/dirs, no broad upgrades,
+> no firewall/OS/Docker/Caddy changes (Caddy untouched — routing was never broken).
+> Local GATE 0: branch `master`, HEAD `20faf9b` == `origin/master`, clean tree — approved state confirmed.
+> Final status: **`BUILDING — PHYSICAL ANDROID UAT READY`** (backend aligned; fresh APK rebuild + hardware
+> acceptance still required; NOT UAT passed / release candidate / submission ready). No rollback required.
+
+### 38.A — Pre-upgrade state (GATE 1, read-only)
+
+- Host `host1785934462`; Node `v22.23.2`, npm `10.9.8`; disk `/dev/sda1` 24G, 2.6G avail (89%).
+- `counter-backend.service`: active since Sep 29 16:52:47 UTC, MainPID 926726,
+  WorkingDirectory `/opt/counter/server`, ExecStart `/usr/bin/node index.js`, PORT 8795.
+- `/opt/counter`: git checkout of `https://github.com/Techkeyy/counter`, deployed commit **`aacf234`**
+  with dirty worktree (`server/db.js`, `server/index.js`, `server/package-lock.json`, live sqlite).
+- DB `/opt/counter/server/data/counter.sqlite` (184320 bytes). Baseline counts: users 52 / takes 13 /
+  comments 12 / challenges 12 / duels 13 / positions 34 / receipts 4.
+- Public: `/api/health` 200 ok; takes readable (13); `chain-accounts` → 404, `claim` → 404 → OLD backend.
+
+### 38.B — Config boundary (GATE 2)
+
+- PROGRAM_ID: SET, exact `52Qgq…NmT` ✓. DEVNET_CUSD_MINT: SET, exact `AXMB7…` ✓.
+  DEVNET_RPC: SET `https://api.devnet.solana.com` ✓ (intended Devnet RPC).
+- KEYPAIR_PATH: SET, file exists (600), readable; derived pubkey
+  `3ZtkjCxPTKcEb9T4yWhCArGYbm1D7xqFdMmGXPpzjkv7` — MATCHES expected resolver ✓ (value is public).
+- JWT_SECRET: MISSING (not in unit env, no `.env` files) → DEFAULT-RISK. Remediation (authorized):
+  generated 48-byte random base64url secret directly into `/opt/counter/server/config/counter.env`
+  (600, value never displayed/logged/committed), wired via systemd drop-in
+  `/etc/systemd/system/counter-backend.service.d/counter-env.conf` (`EnvironmentFile=`), daemon-reload.
+  Post-restart process environ confirms `JWT_SECRET` present with 64-char value (name + length only).
+- STOP conditions: none triggered (keypair present + correct, mint/program exact, DB located + backed up,
+  service identity is the expected Counter deployment).
+
+### 38.C — Backup + rollback state (GATE 3)
+
+- Backup `/opt/counter/backups/counter-20260930010909.sqlite`, 184320 bytes,
+  SHA-256 `275e87a373fac7e23e70dddc403fbdadd0f3654faa88e13032f6eca9db2fa33b`
+  (identical to live DB hash at backup time). Production DB never copied into Git.
+- Rollback state: `/opt/counter/backups/server-rollback-20260930010909/` (pre-upgrade server files incl.
+  routes/resolvers/test/config; keypair copy chmod 600) + `/opt/counter/backups/working-tree-20260930010909.patch`
+  (pre-upgrade dirty diff). Prior state = commit `aacf234` + that patch. Old state retained.
+
+### 38.D — Deploy + deps + migration + restart (GATES 4–7)
+
+- GATE 4: fetched `origin`, verified `20faf9b` on VPS; replaced ONLY these 10 files via
+  `git show 20faf9b:server/<path>`: `chain.js` (new), `db.js`, `index.js`, `package.json`,
+  `resolvers/index.js`, `routes/challenges.js`, `routes/duels.js`, `routes/faucet.js`,
+  `test/backend-adversarial-tests.js`, `test/chain-vectors.test.js`. Live DB checksum identical
+  before/after file replacement; keypair + new `counter.env` intact. All 10 files hash-verified
+  (`git hash-object` == `git rev-parse 20faf9b:server/<path>`) — deployed source == approved state.
+  Worktree ref stays `aacf234` + upgraded files (deliberate; full branch switch avoided to protect the
+  live DB from tracking changes). Nothing uploaded: no local DB, `.env`, keystores, keypairs, caches.
+- GATE 5: `server/package.json` deps unchanged `aacf234..20faf9b` (only `test` script) → NO install;
+  require-smoke of new `chain.js` + `db.js` OK against existing `node_modules`.
+- GATE 6: migration ran on boot (idempotent ALTERs). Post-migration: counts IDENTICAL
+  (52/13/12/12/13/34/4); new columns present (`onchain_duel_bump`, `onchain_vault_bump`, `onchain_mint`,
+  `init_tx_signature`, `chain_status`, `positions.stake_tx_signature`); all 13 legacy duels honestly
+  `UNINITIALIZED` with NULL init sig; zero fabricated `devnet_%`/`simulated%` init sigs; existing receipts
+  NOT rewritten (1 legacy `simulated_resolution_tx` preserved as history, 3 real-tx receipts intact).
+- GATE 7: restarted ONLY `counter-backend.service` (stop → deploy → restart; one extra stop/start cycle
+  for race-free fixture cleanup in §38.F). Active, MainPID 960023, listening 8795, no restart loop.
+  Logs: clean boot (`running on http://localhost:8795`, expected Program ID, `[SEED] ... Skipping seed`
+  — data preserved), no fatal/migration/keypair/dependency errors, no JWT fallback warning.
+
+### 38.E — Production equality + reads + routes (GATES 8–10)
+
+- Authenticated `chain-accounts` (open duel): mint `AXMB7…` ✓, program `52Qgq…NmT` ✓,
+  resolver `3Ztkj…jkv7` ✓ — production serves the intended model.
+- Reads: `/api/health` 200; takes 13 ✓; duels 13 ✓; receipt share page `/r/:id` 200 ✓;
+  `/.well-known/assetlinks.json` now serves `app.counter.mobile` + release cert fingerprint ✓.
+  Profile/user auto-create read deliberately NOT exercised (would plant a placeholder row).
+- Routes now exist (no `Cannot GET/POST`): `GET chain-accounts` (auth-gated 401 unauthenticated, 200
+  authenticated), `POST claim` (exists), `POST resolve` (exists, now auth-gated — prior unauthenticated
+  400 is closed), `POST init-onchain` / `POST stake` (exist, exercised in §38.F).
+
+### 38.F — Adversarial boundary (GATE 11, throwaway SIWS identities, seed-duel targets, zero product rows)
+
+- P1 fabricated init → 403 captain-gate, no state change. P2 fabricated stake → 400 uninitialized
+  refusal. P3 fabricated claim → 400 `Transaction is not confirmed on Devnet` (chain verifier engaged,
+  fails closed). P4 resolve on legacy-resolved duel → 400 already-resolved. P5 cross-duel fake init →
+  403. P6 replay of fabricated init → 403 again (no duplicate state). P7 stake without sig → 400
+  txSignature-required. P8 no token → 401. P9 resolve on OPEN uninitialized duel → 400
+  `not initialized on-chain; settlement refused`, status unchanged, receipt null → NO pseudo-settlement.
+- Before/after: positions 0→0, receipt sig unchanged (`NO_STATE_CHANGE=true`).
+- Replay-of-real-event idempotency stands on local proof (§35.F, same deployed code); not re-proven with
+  real funds in production by design.
+
+### 38.G — Reconciliation (GATE 12)
+
+- Final counts 52/13/12/12/13/34/4 — EXACT baseline match. Excursion explained: SIWS `/verify`
+  auto-creates placeholder users; my 3 probe wallets added 3 rows (55). All 3 verified zero-reference
+  (takes/comments/challenges/duels/positions) and deleted via guarded exact-wallet DELETE during a brief
+  stop (race-free); service restarted cleanly after. No genuine rows touched. `auth_nonces` net zero
+  (insert→delete lifecycle). No rollback occurred.
+- Unrelated services/dirs untouched: Caddy active since Sep 11 (never reloaded); only
+  `counter-backend.service` was stopped/restarted; no package installs, no firewall/OS/runtime changes.
+
+### 38.H — APK decision (GATE 13)
+
+- No APK rebuild in this phase. Existing APK (`.../app-release.apk`, SHA-256
+  `0AB0AA18…3344`) predates the type-only `b302208` fix; per authorization the next phase MUST rebuild
+  a fresh release APK from the final authoritative repo before physical Android UAT. Existing APK is
+  NOT claimed as final release candidate.
+
+### 38.I — Claim ledger for this phase
+
+- PROVEN IN PRODUCTION: existing Counter deployment upgraded in place; deployed files == `20faf9b`
+  blobs (hash-verified); DB backup created (hash recorded); migration succeeded; pre/post counts exact;
+  service restarted (active, port 8795, clean logs); program/mint/resolver equality via live
+  `chain-accounts`; strong non-default JWT active; new chain routes exist; fabricated init/stake/claim,
+  cross-duel, replay, missing-sig, unauthenticated, and uninitialized-settlement attempts all fail
+  closed; pseudo-settlement fallback absent (refusal observed, receipt null); existing social data
+  readable (takes/duels/receipts/assetlinks); rollback was not required (state retained).
+- STILL NOT PROVEN (unchanged, hardware-gated): real Android cold launch; MWA on hardware; wallet
+  cancel/reject UX; real in-app captain init / DepositStake / outside backer via MWA; resolver journey
+  via normal app; ClaimPayout / loser rejection / replay via Android UI; session restore after process
+  kill; in-app faucet on Android; receipt/deep-link/share on Android; complete normal-user Core Outcome.
+
+### 38.J — VPS paths changed (exhaustive)
+
+1. `/opt/counter/server/chain.js` (new), `db.js`, `index.js`, `package.json`, `resolvers/index.js`,
+   `routes/challenges.js`, `routes/duels.js`, `routes/faucet.js`, `test/backend-adversarial-tests.js`,
+   `test/chain-vectors.test.js` — all == `20faf9b` blobs. 2. `/opt/counter/server/config/counter.env`
+   (new, 600). 3. `/etc/systemd/system/counter-backend.service.d/counter-env.conf` (new).
+   4. `/opt/counter/backups/` (new dir): DB backup, code snapshot, working-tree patch.
+   5. `/opt/counter/server/data/counter.sqlite` — migrated in place (schema added, data preserved,
+   3 probe-fixture user rows removed). Nothing else on the VPS was created, modified, or deleted.
 
 
