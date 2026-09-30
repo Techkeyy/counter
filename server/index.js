@@ -18,7 +18,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+// Raised body cap for base64 avatar uploads (server enforces a 1.5 MB
+// decoded-file ceiling and magic-byte type check in server/profile.js).
+app.use(express.json({ limit: '3mb' }));
 
 // Request logging
 app.use((req, res, next) => {

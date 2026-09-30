@@ -1,8 +1,11 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db');
 const { requireAuth } = require('../auth');
 const { querySkrStakedAmount } = require('../skr');
+const profile = require('../profile');
 
 // GET /api/users/:wallet
 router.get('/:wallet', async (req, res) => {
@@ -63,23 +66,50 @@ router.get('/:wallet', async (req, res) => {
   });
 });
 
-// PUT /api/users/profile (Authenticated)
+// PUT /api/users/profile (Authenticated; own profile only — wallet comes
+// from the verified token, never the client body)
 router.put('/profile', requireAuth, (req, res) => {
   const wallet = req.userWallet;
-  const { handle, displayName, avatarUrl, bio } = req.body;
+  const { handle, displayName, bio } = req.body || {};
+  const result = profile.updateProfile(wallet, { handle, displayName, bio });
+  if (!result.ok) {
+    const status = result.code === 'HANDLE_TAKEN' ? 409 : 400;
+    return res.status(status).json({ error: result.error });
+  }
+  res.json({ user: result.user });
+});
 
-  execute(
-    `UPDATE users SET
-      handle = COALESCE(?, handle),
-      display_name = COALESCE(?, display_name),
-      avatar_url = COALESCE(?, avatar_url),
-      bio = COALESCE(?, bio)
-     WHERE wallet_address = ?`,
-    [handle, displayName, avatarUrl, bio, wallet]
-  );
+// POST /api/users/profile/avatar { dataUrl } (Authenticated; own profile only)
+router.post('/profile/avatar', requireAuth, (req, res) => {
+  const result = profile.setAvatar(req.userWallet, req.body && req.body.dataUrl);
+  if (!result.ok) {
+    const status = /smaller than/i.test(result.error || '') ? 413 : 400;
+    return res.status(status).json({ error: result.error });
+  }
+  res.json({ user: result.user });
+});
 
-  const updated = queryOne(`SELECT * FROM users WHERE wallet_address = ?`, [wallet]);
-  res.json({ user: updated });
+// DELETE /api/users/profile/avatar (Authenticated; own profile only)
+router.delete('/profile/avatar', requireAuth, (req, res) => {
+  const result = profile.removeAvatar(req.userWallet);
+  res.json({ user: result.user });
+});
+
+// GET /api/users/profile/avatar/:file (public read; strict filename gate)
+router.get('/profile/avatar/:file', (req, res) => {
+  const file = req.params.file;
+  if (!profile.isSafeAvatarFile(file)) {
+    return res.status(404).json({ error: 'Avatar not found' });
+  }
+  const full = path.join(profile.defaultUploadDir(), file);
+  if (!fs.existsSync(full)) {
+    return res.status(404).json({ error: 'Avatar not found' });
+  }
+  const ext = file.split('.').pop();
+  const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  res.setHeader('Content-Type', type);
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  fs.createReadStream(full).pipe(res);
 });
 
 // GET /api/users/:wallet/rivalry/:opponentWallet (Head-to-head rivalry derivation)
