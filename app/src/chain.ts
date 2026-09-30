@@ -68,6 +68,16 @@ function hexToBytes(hex: string): Buffer {
 }
 
 // Serializers — byte-identical to server/chain.js and the proven harness.
+// NOTE: `buffer@6.0.3` ships incorrect .d.ts types declaring
+// writeBigInt64LE/writeBigUInt64LE(value: number). Node runtime requires
+// bigint (verified). This helper preserves runtime bytes while satisfying tsc.
+function writeI64LE(buf: Buffer, value: bigint, offset: number): void {
+  (buf as unknown as { writeBigInt64LE(v: bigint, o: number): unknown }).writeBigInt64LE(value, offset);
+}
+
+function writeU64LE(buf: Buffer, value: bigint, offset: number): void {
+  (buf as unknown as { writeBigUInt64LE(v: bigint, o: number): unknown }).writeBigUInt64LE(value, offset);
+}
 export function serializeInitializeDuel(args: {
   duelIdHex: string;
   cutoffTs: number;
@@ -86,8 +96,8 @@ export function serializeInitializeDuel(args: {
   let o = 0;
   buffer.writeUInt8(0, o); o += 1;
   duelId.copy(buffer, o); o += 16;
-  buffer.writeBigInt64LE(BigInt(args.cutoffTs), o); o += 8;
-  buffer.writeBigInt64LE(BigInt(args.resolutionTs), o); o += 8;
+  writeI64LE(buffer, BigInt(args.cutoffTs), o); o += 8;
+  writeI64LE(buffer, BigInt(args.resolutionTs), o); o += 8;
   termsHash.copy(buffer, o); o += 32;
   new PublicKey(args.captainA).toBuffer().copy(buffer, o); o += 32;
   new PublicKey(args.captainB).toBuffer().copy(buffer, o); o += 32;
@@ -101,7 +111,7 @@ export function serializeDepositStake(side: 1 | 2, amountBase: number, positionB
   let o = 0;
   buffer.writeUInt8(1, o); o += 1;
   buffer.writeUInt8(side, o); o += 1;
-  buffer.writeBigUInt64LE(BigInt(amountBase), o); o += 8;
+  writeU64LE(buffer, BigInt(amountBase), o); o += 8;
   buffer.writeUInt8(positionBump, o); o += 1;
   return buffer;
 }
