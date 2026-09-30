@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — PHYSICAL ANDROID UAT IN PROGRESS`
+**Current Authoritative Status:** `BUILDING — UX V2 IMPLEMENTED / OWNER PHYSICAL UX REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `83f98b2` (+ this ledger: app-link alignment/UAT-artifact rebinding, commit pending at time of writing; packaged app source `83f98b2` — see §40.D)
-**Last Updated:** 2026-09-30T09:30:00Z
+**Authoritative Local Commit:** `7a1e5f4` (+ this ledger: UX V2 implementation + artifact, commit pending at time of writing; packaged app source `7a1e5f4` — see §41.D)
+**Last Updated:** 2026-09-30T15:30:00Z
 
 ---
 
@@ -1122,5 +1122,101 @@ fixed during the run; product code untouched by them.)
 - VPS changes this phase (exhaustive): `server/index.js` (applinks package tags) + one service restart.
 - Blockers: physical hardware (cold launch, MWA flows, faucet UX, deep-link tap-through on device,
   full Core Outcome); off-machine password backup still recommended.
+
+---
+
+## 41. UX V2 REARCHITECTURE — 2026-09-30 (Builder, Director-directed)
+
+> Previous UX pass REJECTED as card-heavy and hierarchy-poor. This is an
+> information-architecture rebuild, not polish. Reference study first
+> (`docs/ux-reference-map-v2.md`), then structure, then screens. Status:
+> **`BUILDING — UX V2 IMPLEMENTED / OWNER PHYSICAL UX REVIEW REQUIRED`**
+> (NOT accepted / UAT passed / RC / submission-ready). No secret in ledger/Git/logs/report.
+
+### 41.A — Activity failure root cause (Gate 11)
+
+- Hardware showed `JSON Parse error: Unexpected character: <`. App path called
+  `response.json()` unconditionally and rendered `err.message` verbatim.
+- Eliminated: Express error middleware returns JSON (code-verified);
+  `/api/*` routes return JSON when Node is up; Caddy has no HTML error wrap
+  (config read: plain `reverse_proxy`). Only HTML source in the chain is a
+  gateway 502/503 page while Node is unreachable — deploy restarts overlapped
+  the owner's physical sessions.
+- Fix (no VPS change): `request()` validates content-type/status before parsing
+  (server JSON `.error` preserved; non-JSON becomes coded reachability errors);
+  list screens render fixed friendly copy + offline variant; detail kept in logs.
+
+### 41.B — Structure changes
+
+- Header: wordmark + Devnet line + avatar only. Wallet pill, bell, and compose
+  button removed (wallet → Profile/Account; notifications → Activity; compose →
+  FAB). Avatar uses the wallet-derived identicon, no extra fetch.
+- Home: ONE chronological timeline, no tabs, no category strip, separator
+  dividers instead of cards, FAB composer (bottom-right, above nav).
+- Take thread: opinion first, reply rail continuity, secondary challenge row,
+  compact `DuelAttachment` (new shared component) instead of nested cards.
+- Duels: compact scan rows (participants/proposition/status/pool/deadline);
+  Open / Yours (real wallet match) / Resolved + real category discovery;
+  Arena destination removed (arena survives as data/filter, not a tab).
+- Duel detail: proposition → sides → state → pools → position → sticky bottom
+  CTA (Back A/B, Initialize, Claim, View receipt — only what can succeed) →
+  honest timeline from real fields → collapsed Details and proof → compact backers.
+- Activity: Today / Earlier grouped rows, fixed friendly errors, challenge rows
+  open the review sheet (COUNTEROFFER_RECEIVED spelling covered).
+- Receipt: Resolved → proposition → Winner → Pool → Participants → Resolution
+  date/source → collapsed proof (settlement tx only if genuine) → explorer +
+  share. Ticket chrome removed.
+- Profile: avatar/name/handle/bio (hidden when absent) → tappable counts row →
+  tabs → compact record → real per-opponent head-to-head → Account section
+  (wallet + real clipboard copy, arena, network, disconnect).
+- Wallet machine preserved; battery help stays post-failure only (per-app path
+  still UNVERIFIED, copy claims only what is proven).
+
+### 41.C — Honesty ledger (extends docs/ui-audit.md §9)
+
+- Removed: 11 emoji spots, fake Following/For-You tabs, synthesized feed
+  receipts, unconditional verified badges (now `isRealSignature`-gated),
+  hardcoded rivalry + dead Rematch, `{targetPriceUsd: 250}` criteria (now
+  per-category user-defined builders matching resolver contracts), "4x faster"
+  stat, wrong applinks package tags, proof UI for uninitialized duels,
+  always-shown Resolve, fake unread zero, bio fallback theater, fake copy
+  button (now `expo-clipboard`), silent reply failures, raw parser errors.
+- Challenge accept/decline/counter UI did not exist: new `ChallengeSheet`.
+- Backend test residue audited read-only in `docs/data-hygiene-audit.md`
+  (SEED/UAT/SYSTEM buckets, per-row references, deletion order). ZERO rows
+  deleted or modified. Owner physical testing added 1 real user row (52 → 53).
+- Final sweeps: emoji 0 · em/en dash 0 · tsc 0 · session 5/5 · vectors 11/11 ·
+  adversarial 8/8 (live oracle, fixtures cleaned). Dead components already
+  deleted (§37 work). `console.warn` retained (logcat field diagnosis, invisible).
+
+### 41.D — Fresh V2 artifact + binding (SAME rotated key)
+
+- Pre-build: packaged source `7a1e5f4` (pushed before build).
+- `./gradlew assembleRelease --no-daemon` → BUILD SUCCESSFUL (exit 0, detached log).
+- `app/android/app/build/outputs/apk/release/app-release.apk`: **62,056,992 bytes**,
+  SHA-256 **`F12D68BA74FBF947BC61178638FE8AD9AD879D056292AE8C2AC8F49593B45400`**,
+  package `app.counter.mobile`, versionCode `1`, versionName `1.0.0`,
+  signer cert `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827` (SAME key).
+- Embedded bundle (2,525,644 B): backend ✓, AXMB7 ✓, program ✓ (1× each);
+  absent: mock token, fallback wallet, obsolete mint, key/password literals,
+  JWT default, tunnels, any `counter.app` URL ✓. `localhost`×3 + `127.0.0.1`×1 =
+  same known library constants.
+- Merged manifest (`aapt dump xmltree` on the built APK): duel+receipt custom
+  hosts, production https `/d` + `/r` autoVerify, zero `counter.app` ✓.
+
+> This exact APK (SHA-256 `F12D68BA…5400`, cert `a11be643…d7827`, package
+> `app.counter.mobile`) was built from authoritative Git state `7a1e5f4` and is
+> the ONLY APK authorized for owner physical UX review. APKs `67F3BE83…` and
+> `0C0D79E9…` are SUPERSEDED. Any runtime-affecting app change invalidates it.
+
+### 41.E — Not done / blockers
+
+- Physical screenshots + review matrix (`docs/ux-v2-physical-review.md`): NO
+  DEVICE attached at build time — owner run must capture the 11 required shots.
+- Owner subjective UX acceptance pending; full Core Outcome UAT revalidation
+  from the beginning pending acceptance.
+- VPS changes this phase: NONE (read-only Caddy/DB inspection only).
+- Remaining: hardware (all UX + Core Outcome observations), off-machine
+  password backup still recommended.
 
 
