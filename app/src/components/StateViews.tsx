@@ -7,7 +7,7 @@ import { Icon, IconName } from './Icon';
 // offline variant instead of a generic error.
 export function looksOffline(message?: string | null): boolean {
   if (!message) return false;
-  return /network request failed|failed to fetch|offline|econn|socket|dns|unreachable|load failed|timeout/i.test(message);
+  return /NETWORK_UNREACHABLE|network request failed|failed to fetch|offline|econn|socket|dns|unreachable|load failed|timeout/i.test(message);
 }
 
 interface EmptyStateProps {
