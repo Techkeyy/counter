@@ -9,3 +9,5 @@ program/target/
 server/data/counter.sqlite
 # Release signing material that must never enter the repository
 app/android/app/release-signing.properties
+# Physical UAT evidence (local only, never committed)
+.uat/
