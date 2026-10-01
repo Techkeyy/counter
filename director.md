@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — FINAL PRODUCT MECHANICS IMPLEMENTED / DIRECTOR FREEZE REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — PROGRAM HARDENED / DIRECTOR FREEZE REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `4771d91` (+ this ledger: final product mechanics, commit pending; next APK binds fresh packaged source — see §44)
+**Authoritative Local Commit:** `3872057` (+ this ledger: program hardening, commit pending; next APK binds fresh packaged source — see §45) (+ this ledger: final product mechanics, commit pending; next APK binds fresh packaged source — see §44)
 **Last Updated:** 2026-10-01T06:45:00Z
 
 ---
@@ -1418,3 +1418,61 @@ gap caught one duel's rows; manually swept and re-verified).
 `ce1b4c9` profile backend · `74ea7df` resolution backend · `ea2e9a2`
 resolution app · `4771d91` boundaries/copy · pushed throughout, HEAD ==
 origin/master, clean tree.
+
+## 45. PROGRAM HARDENING BEFORE FREEZE — 2026-10-01 (Builder, Director-directed)
+
+> Backend-only settlement invariants were insufficient for terminal state and
+> timing. Both are now HARD ENFORCED on-chain via program upgrade (no
+> migration, no ABI change). No APK built in this phase. Status:
+> **`BUILDING — PROGRAM HARDENED / DIRECTOR FREEZE REVIEW REQUIRED`**.
+> No secret in ledger/Git/logs/report. No UAT/APK/RC claims.
+
+### 44.A — Gate 0 reconstruction (exact program facts)
+- Duel account carries `cutoff_ts` AND `resolution_ts` on-chain.
+- `DepositStake` already enforced cutoff on-chain (err 101); ResolveDuel never
+  read Clock; no terminal-state guard existed.
+- Deployed program `52Qgq…NmT`: BPFLoaderUpgradeable, executable; on-chain
+  upgrade authority `3Ztkj…jkv7` == local keypair file. Upgrade path real.
+
+### 44.B — Changes (minimal, upgrade-only)
+- `process_resolve_duel`: terminal guard (only AcceptingStakes/BackingClosed
+  may resolve → err 109) + Clock guard (`now >= resolution_ts` → err 110).
+- `server/chain.js`: error map +109/+110 (decoders only).
+- Gate 4 impact: SAME account layout, SAME instruction ABI, SAME PDA
+  derivation, SAME program ID, upgrade only → proceeded. DepositStake cutoff
+  left untouched (already HARD, re-proven, err 101).
+
+### 44.C — Upgrade (Gate 5)
+- `cargo build-sbf` clean (pre-existing warnings only) → `counter_escrow.so`.
+- Deployed to SAME program ID via upgrade authority:
+  tx `4DLJgXAruiisFNeDfUWjaGhLrHfSTGqmpM183QurGUW1UDTW311SJn1TYYgnKaFndgqhY8JGzQeMwN5ZenjShPmg`
+  (new slot 506182048, executable, authority unchanged).
+- Untouched: mint, PDAs, resolver authority, app UX, DB schema, SKR.
+
+### 44.D — Full economic re-proof (Gate 6, Devnet, real txs; prior proof superseded)
+- H1: pre-time resolve → 110, state unchanged; resolve at time ok; re-resolve
+  B/A/cancel → 109 ×3.
+- H2: post-cutoff deposit → 101; cancel after time ok; cancel → A/B resolve →
+  109 ×2; exact $1 principal refund; duplicate refund → 106.
+- H3: backend mutual match through NEW bytecode → settle ok, receipt cites
+  real settlement, backend refuses re-resolution.
+- (`probes/program-hardening-verify.js`, exit 0.)
+
+### 44.E — Claim ledger deltas (Gate 7)
+- Terminal-state immutability: HARD ENFORCED (program 109, adversarially
+  proven 4 ways + state/vault-rights unchanged).
+- Base resolution time: HARD ENFORCED (program 110, pre/post proven).
+- Backing cutoff: HARD ENFORCED (pre-existing 101, re-proven, untouched).
+- Mutual agreement capture: SOFT/BOUNDARY ENFORCED (unchanged; program does
+  NOT validate the two human signatures — stated, not claimed).
+- Known residual: no on-chain guard against resolving an already-terminal
+  duel is now closed; program still trusts backend for mutual-deadline length
+  (deadline not in on-chain state — documented boundary).
+
+### 44.F — Regression (Gate 8) + Git (Gate 9)
+- chain vectors 11/11 · resolution 14/14 · profile 8/8 · adversarial 8/8 ·
+  tsc 0 · sessions 5/5 · added-lines secret scan clean. Production health 200;
+  zero user/content rows affected (no prod duels exist; program change is
+  behavior-additive for open duels).
+- Commits: `3872057` program fix + this ledger; pushed, HEAD == origin/master,
+  clean tree. No APK (per directive); next freeze build rebinds.
