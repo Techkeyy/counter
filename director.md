@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — SOCIAL IDENTITY REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — REMEDIATED UAT APK READY / OWNER REINSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `28eb9e4` (+ this ledger: social identity remediation, commit pending; next APK binds fresh packaged source — see §47)
+**Authoritative Local Commit:** `b77289a` (+ this ledger: remediated UAT artifact, commit pending; packaged app source `b77289a` — see §48)
 **Last Updated:** 2026-10-01T06:45:00Z
 
 ---
@@ -1571,3 +1571,31 @@ no cards/casing changes beyond the divider.
 `c9c373b` identity remediation · `ea6d588` tests · `28eb9e4` tab focus
 refresh. Pushed throughout; HEAD == origin/master; clean tree.
 Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
+
+## 48. REMEDIATED UAT ARTIFACT — 2026-10-01 (Builder, rebuild-authorized)
+
+> Social-identity remediation (§47) rebuilt from frozen source `b77289a`
+> with the SAME rotated key. Status:
+> **`BUILDING — REMEDIATED UAT APK READY / OWNER REINSTALL REQUIRED`**.
+> No secret in ledger/Git/logs/report. No UAT/RC/submission claims.
+
+### 48.A — Freeze + regression (Gates 0, 2)
+- HEAD == origin/master == `b77289a`, clean tree at build time.
+- tsc 0 · sessions 5/5 · vectors 11/11 · resolution 14/14 · profile 12/12 ·
+  adversarial 8/8 · emoji/dash/fixture/mock/secret scans 0.
+
+### 48.B — Build + artifact (Gates 1-3)
+- `./gradlew assembleRelease --no-daemon` → BUILD SUCCESSFUL in 12m 22s,
+  exit 0 (detached log; secrets process-local only).
+- APK: **62,506,115 bytes**,
+  SHA-256 **`9E95FF7E66A50CE4B2E110133E87952E3F65439B4D6AD8D8FD16009005A11B5F`**,
+  package `app.counter.mobile` v1/1.0.0,
+  cert `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- Bundle (2,561,916 B): backend/mint/program 1× each; zero mock/secret hits;
+  localhost profile unchanged. Merged manifest: duel+receipt custom hosts,
+  production `/d`+`/r` autoVerify, zero `counter.app`. Live assetlinks 200
+  with package + current cert.
+
+> This exact APK (SHA-256 `9E95FF7E…B11B5F`, cert `a11be643…d7827`, package
+> `app.counter.mobile`) built from `b77289a` is the ONLY APK authorized for
+> owner reinstall and physical UAT. All previous hashes are SUPERSEDED.
