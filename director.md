@@ -1657,7 +1657,8 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
   12/12; Take identity/deletion suite passed; chain vectors 11/11;
   resolution boundaries passed; backend adversarial 8/8; edited backend
   syntax checks passed; added-line secret/mock scan 0.
-- Commit: `8717d21` (`fix(identity): verify canonical profiles and gate take deletion`).
+- Commits: `8717d21` (`fix(identity): verify canonical profiles and gate take deletion`)
+  and `065f57f` (`test(identity): preserve Duel references on Take delete`).
 
 ### 49.E — Explicit non-proofs and remaining gates
 - No production deployment or production readback was performed in this
