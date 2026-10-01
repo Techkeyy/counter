@@ -3,6 +3,11 @@ const router = express.Router();
 const crypto = require('crypto');
 const { queryAll, queryOne, execute } = require('../db');
 const { requireAuth } = require('../auth');
+const {
+  validateVerifiedTemplate,
+  validateResolutionMode,
+  validateFallbackMode,
+} = require('../resolution-templates');
 
 // POST /api/challenges (Propose Challenge on a Take)
 router.post('/', requireAuth, (req, res) => {
@@ -18,6 +23,9 @@ router.post('/', requireAuth, (req, res) => {
     stakeAmountUsd,
     cutoffTs,
     resolutionTs,
+    resolutionMode: resolutionModeRaw,
+    fallbackMode: fallbackModeRaw,
+    mutualDeadlineTs: mutualDeadlineRaw,
   } = req.body;
 
   // Accept both field names so the counterparty is never silently dropped.
@@ -31,13 +39,37 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Missing required challenge parameters' });
   }
 
+  // Settlement mode is part of the binding terms: validated now, stored
+  // explicitly, copied to the duel at accept time, never inferred.
+  const modeCheck = validateResolutionMode(resolutionModeRaw);
+  if (!modeCheck.ok) return res.status(400).json({ error: modeCheck.error });
+  const fallbackCheck = validateFallbackMode(fallbackModeRaw);
+  if (!fallbackCheck.ok) return res.status(400).json({ error: fallbackCheck.error });
+
+  // Verified resolution criteria are validated BEFORE money can enter. No
+  // silent oracle defaults: malformed templates are rejected here.
+  const templateCheck = validateVerifiedTemplate(category, sourceType, sourceConfig);
+  if (!templateCheck.ok) return res.status(400).json({ error: templateCheck.error });
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const finalCutoff = Number(cutoffTs) || nowSec + 3600;
+  const finalResolution = Number(resolutionTs) || nowSec + 7200;
+  let mutualDeadline = Number(mutualDeadlineRaw);
+  if (modeCheck.value === 'MUTUAL') {
+    if (!Number.isFinite(mutualDeadline) || mutualDeadline <= nowSec) {
+      mutualDeadline = finalResolution;
+    }
+  } else {
+    mutualDeadline = null;
+  }
+
   const id = `chal_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
   const configStr = typeof sourceConfig === 'string' ? sourceConfig : JSON.stringify(sourceConfig || {});
 
   execute(
-    `INSERT INTO challenges (id, take_id, challenger_wallet, creator_wallet, proposition_a, proposition_b, category, source_type, source_config, stake_amount_usd, cutoff_ts, resolution_ts, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROPOSED', ?)`,
+    `INSERT INTO challenges (id, take_id, challenger_wallet, creator_wallet, proposition_a, proposition_b, category, source_type, source_config, stake_amount_usd, cutoff_ts, resolution_ts, resolution_mode, fallback_mode, mutual_deadline_ts, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PROPOSED', ?)`,
     [
       id,
       takeId,
@@ -49,8 +81,11 @@ router.post('/', requireAuth, (req, res) => {
       sourceType || 'coingecko',
       configStr,
       Number(stakeAmountUsd),
-      Number(cutoffTs) || Math.floor(Date.now() / 1000) + 3600,
-      Number(resolutionTs) || Math.floor(Date.now() / 1000) + 7200,
+      finalCutoff,
+      finalResolution,
+      modeCheck.value,
+      fallbackCheck.value,
+      mutualDeadline,
       now,
     ]
   );
@@ -84,6 +119,14 @@ router.post('/:id/counter', requireAuth, (req, res) => {
 
   if (challenge.status !== 'PROPOSED' && challenge.status !== 'COUNTERED') {
     return res.status(400).json({ error: `Cannot counteroffer challenge in state: ${challenge.status}` });
+  }
+
+  // A renegotiated resolution template must re-validate; a malformed config
+  // can never slip in through the counter path.
+  if (sourceConfig !== undefined) {
+    const { validateVerifiedTemplate: validateTemplate } = require('../resolution-templates');
+    const templateCheck = validateTemplate(challenge.category, challenge.source_type, sourceConfig);
+    if (!templateCheck.ok) return res.status(400).json({ error: templateCheck.error });
   }
 
   const counterId = `cnt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -159,9 +202,10 @@ router.post('/:id/accept', requireAuth, (req, res) => {
     return res.status(400).json({ error: `Cannot accept challenge in state: ${challenge.status}` });
   }
 
-  // Generate 16-byte random on-chain duel ID and terms hash
+  // Generate 16-byte random on-chain duel ID and terms hash (the hash binds
+  // the full settlement terms: propositions, config, timing, AND mode).
   const onchainDuelId = crypto.randomBytes(16).toString('hex');
-  const termsString = `${challenge.proposition_a}|${challenge.proposition_b}|${challenge.source_config}|${challenge.cutoff_ts}`;
+  const termsString = `${challenge.proposition_a}|${challenge.proposition_b}|${challenge.source_config}|${challenge.cutoff_ts}|${challenge.resolution_mode || 'COUNTER_VERIFIED'}|${challenge.fallback_mode || 'REFUND'}|${challenge.mutual_deadline_ts || ''}`;
   const termsHash = crypto.createHash('sha256').update(termsString).digest('hex');
   const duelId = `duel_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const shareSlug = `d_${crypto.randomBytes(4).toString('hex')}`;
@@ -170,13 +214,14 @@ router.post('/:id/accept', requireAuth, (req, res) => {
   // Mark challenge accepted
   execute(`UPDATE challenges SET status = 'ACCEPTED' WHERE id = ?`, [challengeId]);
 
-  // Create Duel record in database
+  // Create Duel record in database (settlement terms copied verbatim from
+  // the mutually accepted challenge — mode, fallback, and deadline included).
   execute(
     `INSERT INTO duels (
       id, onchain_duel_id, challenge_id, take_id, captain_a_wallet, captain_b_wallet,
       side_a_total, side_b_total, terms_hash, proposition_a, proposition_b, category,
-      source_type, source_config, cutoff_ts, resolution_ts, status, winning_side, is_arena, share_slug, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTING_STAKES', 0, 0, ?, ?)`,
+      source_type, source_config, cutoff_ts, resolution_ts, resolution_mode, fallback_mode, mutual_deadline_ts, status, winning_side, is_arena, share_slug, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTING_STAKES', 0, 0, ?, ?)`,
     [
       duelId,
       onchainDuelId,
@@ -192,6 +237,9 @@ router.post('/:id/accept', requireAuth, (req, res) => {
       challenge.source_config,
       challenge.cutoff_ts,
       challenge.resolution_ts,
+      challenge.resolution_mode || 'COUNTER_VERIFIED',
+      challenge.fallback_mode || 'REFUND',
+      challenge.mutual_deadline_ts || null,
       shareSlug,
       now,
     ]

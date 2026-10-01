@@ -110,6 +110,11 @@ router.get('/:id', (req, res) => {
 
   const receipt = queryOne(`SELECT * FROM receipts WHERE duel_id = ?`, [duel.id]);
 
+  let mutualVotes = [];
+  try {
+    mutualVotes = queryAll(`SELECT * FROM mutual_votes WHERE duel_id = ? ORDER BY updated_at ASC`, [duel.id]);
+  } catch {}
+
   const sideA = Number(duel.side_a_total) || 0;
   const sideB = Number(duel.side_b_total) || 0;
   const total = sideA + sideB;
@@ -125,6 +130,7 @@ router.get('/:id', (req, res) => {
     },
     positions,
     receipt,
+    mutualVotes,
   });
 });
 
@@ -302,7 +308,8 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
   if (!duel) {
     return res.status(404).json({ error: 'Duel not found' });
   }
-  if (!String(duel.status || '').startsWith('RESOLVED')) {
+  // CANCELLED duels pay principal to every position (program-enforced refund).
+  if (!String(duel.status || '').startsWith('RESOLVED') && duel.status !== 'CANCELLED') {
     return res.status(400).json({ error: 'Duel is not settled yet' });
   }
 
@@ -345,6 +352,34 @@ router.post('/:id/resolve', requireAuth, async (req, res) => {
     return res.status(400).json({ error: result.error });
   }
   res.json({ success: true, resolution: result });
+});
+
+// POST /api/duels/:id/mutual-vote (Captain settlement attestation)
+// Body: { winnerSide: 1|2, signature } — signature must verify as
+// COUNTER_SETTLEMENT_V1 over (duel_id, winner_side) by the captain wallet.
+// Votes stay mutable until a matched pair settles; then they lock.
+router.post('/:id/mutual-vote', requireAuth, (req, res) => {
+  const duelId = req.params.id;
+  const userWallet = req.userWallet;
+  const { winnerSide, signature } = req.body || {};
+
+  const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+  if (!duel) {
+    return res.status(404).json({ error: 'Duel not found' });
+  }
+  if ((duel.resolution_mode || 'COUNTER_VERIFIED') !== 'MUTUAL') {
+    return res.status(400).json({ error: 'This duel does not settle by mutual agreement' });
+  }
+  if (!signature) {
+    return res.status(400).json({ error: 'A wallet-signed settlement attestation is required' });
+  }
+  const mutual = require('../mutual');
+  const result = mutual.recordVote(duel, userWallet, Number(winnerSide), signature);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.error });
+  }
+  const match = mutual.checkMatch(duel);
+  res.json({ success: true, votes: result.votes, match });
 });
 
 // POST /api/duels/:id/publish-arena (Verify Mainnet SKR stake and promote to Arena)

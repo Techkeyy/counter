@@ -192,6 +192,24 @@ async function getDb() {
   ensureColumn('duels', 'init_tx_signature', 'TEXT');
   ensureColumn('duels', 'chain_status', "TEXT DEFAULT 'UNINITIALIZED'");
   ensureColumn('positions', 'stake_tx_signature', 'TEXT');
+  // Settlement-mode columns (explicit duel terms; legacy rows default to the
+  // historical Counter Verified behavior).
+  ensureColumn('duels', 'resolution_mode', "TEXT DEFAULT 'COUNTER_VERIFIED'");
+  ensureColumn('duels', 'fallback_mode', "TEXT DEFAULT 'REFUND'");
+  ensureColumn('duels', 'mutual_deadline_ts', 'INTEGER');
+  ensureColumn('challenges', 'resolution_mode', "TEXT DEFAULT 'COUNTER_VERIFIED'");
+  ensureColumn('challenges', 'fallback_mode', "TEXT DEFAULT 'REFUND'");
+  ensureColumn('challenges', 'mutual_deadline_ts', 'INTEGER');
+  db.run(`CREATE TABLE IF NOT EXISTS mutual_votes (
+    duel_id TEXT,
+    captain_wallet TEXT,
+    winner_side INTEGER,
+    message TEXT,
+    signature TEXT,
+    created_at TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (duel_id, captain_wallet)
+  )`);
   saveDb();
   return db;
 }
