@@ -37,17 +37,17 @@ router.post('/', requireAuth, (req, res) => {
   const { topic, content, category } = req.body;
   const authorWallet = req.userWallet;
 
-  if (!content || !topic) {
-    return res.status(400).json({ error: 'topic and content are required' });
+  if (!topic || !String(topic).trim()) {
+    return res.status(400).json({ error: 'topic is required' });
   }
 
   const id = `take_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
 
   execute(
-    `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count)
-     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0)`,
-    [id, authorWallet, topic, content, category || 'crypto', now]
+    `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count, record_origin)
+     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0, 'USER')`,
+    [id, authorWallet, String(topic).trim(), String(content || '').trim(), category || 'crypto', now]
   );
 
   const take = queryOne(

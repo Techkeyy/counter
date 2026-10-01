@@ -277,6 +277,21 @@ function baseUnitsToUsd(base) {
   return Number(base) / 10 ** CUSD_DECIMALS;
 }
 
+// Read the connected wallet's complete cUSD balance from all token accounts
+// for the authoritative mint. This is a read-only chain fact; Counter never
+// holds or mirrors user funds in its own database.
+async function getCusdBalance(userWallet) {
+  const accounts = await getConnection().getParsedTokenAccountsByOwner(
+    new PublicKey(userWallet),
+    { mint: CUSD_MINT },
+  );
+  const totalBase = accounts.value.reduce((sum, account) => {
+    const amount = account.account?.data?.parsed?.info?.tokenAmount?.amount;
+    return amount ? sum + BigInt(amount) : sum;
+  }, 0n);
+  return baseUnitsToUsd(totalBase);
+}
+
 /** Decode a DuelAccount (196 bytes) into plain fields. */
 function decodeDuelAccount(data) {
   const buf = Buffer.from(data);
@@ -562,6 +577,7 @@ module.exports = {
   buildClaimPayoutIx,
   usdToBaseUnits,
   baseUnitsToUsd,
+  getCusdBalance,
   decodeDuelAccount,
   decodePositionAccount,
   fetchDuelOnChain,

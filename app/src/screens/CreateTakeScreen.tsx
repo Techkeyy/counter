@@ -36,11 +36,6 @@ export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
       setError('Please provide a short headline/topic for your take');
       return;
     }
-    if (!content.trim()) {
-      setError('Please write out your controversial take');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
@@ -80,27 +75,27 @@ export const CreateTakeScreen: React.FC<CreateTakeScreenProps> = ({
         ))}
       </View>
 
-      <Text style={styles.label}>Topic / Headline</Text>
+      <Text style={styles.label}>Your Take</Text>
       <TextInput
         style={styles.input}
         value={topic}
         onChangeText={setTopic}
-        placeholder="SOL will flip ETH in 2026"
+        placeholder="Arsenal wins the Premier League"
         placeholderTextColor={colors.textMuted}
-        accessibilityLabel="Topic headline"
+        accessibilityLabel="Your Take"
       />
 
-      <Text style={styles.label}>Your take</Text>
+      <Text style={styles.label}>Why? (optional)</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={content}
         onChangeText={setContent}
-        placeholder="State your conviction with clear conditions others can challenge."
+        placeholder="Squad depth and recent form give them the edge."
         placeholderTextColor={colors.textMuted}
         multiline
         numberOfLines={5}
         textAlignVertical="top"
-        accessibilityLabel="Take content"
+        accessibilityLabel="Why, optional reasoning"
       />
 
       <View style={styles.tipsBox}>

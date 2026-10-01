@@ -2,6 +2,22 @@ import * as SecureStore from 'expo-secure-store';
 import { api, setAuthSession } from './api';
 import type { WalletState } from './wallet';
 
+function hasRealProfileField(value?: unknown): boolean {
+  const text = String(value ?? '').replace(/^@+/, '').trim();
+  return text.length > 0 && !text.startsWith('user_');
+}
+
+// Canonical returning-user gate shared by cold restore and connect flow. The
+// backend's authenticated profile is authoritative; wallet ownership alone
+// never counts as a complete social identity.
+export function hasCompleteCounterProfile(user?: {
+  display_name?: unknown;
+  handle?: unknown;
+} | null): boolean {
+  if (!user) return false;
+  return hasRealProfileField(user.display_name) && hasRealProfileField(user.handle);
+}
+
 // Secure Counter session persistence.
 //
 // Authentication/session material (backend bearer token + wallet identity) is
@@ -114,8 +130,17 @@ interface AuthApi {
   setAuthSession(token: string, wallet: string): void;
   getUserProfile(wallet: string): Promise<{
     wallet_address: string;
+    display_name?: string;
+    handle?: string;
     is_arena_eligible?: number;
     skr_staked_amount?: number;
+    user?: {
+      wallet_address: string;
+      display_name?: string;
+      handle?: string;
+      is_arena_eligible?: number;
+      skr_staked_amount?: number;
+    };
   }>;
 }
 
@@ -133,7 +158,8 @@ export async function restoreSession(
   if (!record) return DISCONNECTED;
   try {
     authApi.setAuthSession(record.token, record.wallet);
-    const profile = await authApi.getUserProfile(record.wallet);
+    const response = await authApi.getUserProfile(record.wallet);
+    const profile = (response as any)?.user || response;
     if (!profile || profile.wallet_address !== record.wallet) {
       throw new Error('Profile wallet mismatch');
     }
@@ -143,6 +169,7 @@ export async function restoreSession(
       authToken: record.token,
       isArenaEligible: profile.is_arena_eligible === 1,
       skrStakedAmount: Number(profile.skr_staked_amount) || 0,
+      needsProfileSetup: !hasCompleteCounterProfile(profile),
     };
   } catch {
     await clearSession(storage);

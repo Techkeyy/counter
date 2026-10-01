@@ -190,7 +190,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
         />
 
         <Text style={styles.topicText}>{liveTake.topic}</Text>
-        <Text style={styles.contentText}>{liveTake.content}</Text>
+        {!!liveTake.content?.trim() && <Text style={styles.contentText}>Why: {liveTake.content}</Text>}
 
         <View style={styles.metaRow}>
           <Text style={styles.timestamp}>
@@ -398,10 +398,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   contentText: {
-    ...typography.body,
+    ...typography.bodyMuted,
     fontSize: 16,
     lineHeight: 24,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     marginBottom: spacing.md,
   },
   metaRow: {

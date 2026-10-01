@@ -102,8 +102,8 @@ async function seedDatabase() {
 
   for (const t of takes) {
     execute(
-      `INSERT OR REPLACE INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count)
-       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 12, 4, 1)`,
+      `INSERT OR REPLACE INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count, record_origin)
+       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 12, 4, 1, 'DEMO')`,
       [t.id, t.author, t.topic, t.content, t.category, t.created]
     );
   }

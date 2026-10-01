@@ -54,6 +54,7 @@ async function getDb() {
       likes_count INTEGER DEFAULT 0,
       comments_count INTEGER DEFAULT 0,
       duels_count INTEGER DEFAULT 0,
+      record_origin TEXT DEFAULT 'USER',
       FOREIGN KEY(author_wallet) REFERENCES users(wallet_address)
     );
 
@@ -136,6 +137,7 @@ async function getDb() {
       position_pda TEXT,
       claimed INTEGER DEFAULT 0,
       claim_tx TEXT,
+      payout_amount REAL,
       created_at TEXT
     );
 
@@ -193,6 +195,8 @@ async function getDb() {
   ensureColumn('duels', 'init_tx_signature', 'TEXT');
   ensureColumn('duels', 'chain_status', "TEXT DEFAULT 'UNINITIALIZED'");
   ensureColumn('positions', 'stake_tx_signature', 'TEXT');
+  ensureColumn('positions', 'payout_amount', 'REAL');
+  ensureColumn('takes', 'record_origin', "TEXT DEFAULT 'USER'");
   // Settlement-mode columns (explicit duel terms; legacy rows default to the
   // historical Counter Verified behavior).
   ensureColumn('duels', 'resolution_mode', "TEXT DEFAULT 'COUNTER_VERIFIED'");

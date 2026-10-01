@@ -76,7 +76,7 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   useEffect(() => {
     if (take) {
       setStep(1);
-      setSideATerms(take.content);
+      setSideATerms(take.topic);
       setSideBTerms('');
       setError(null);
     }
@@ -183,6 +183,12 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                       wallet: take.author_wallet,
                     })}
                   </Text>
+                </View>
+
+                <Text style={styles.label}>Original Take</Text>
+                <View style={styles.takeContext}>
+                  <Text style={styles.takeContextTitle}>{take.topic}</Text>
+                  {!!take.content?.trim() && <Text style={styles.takeContextReason}>Why: {take.content}</Text>}
                 </View>
 
                 <Text style={styles.label}>Side A states (their position)</Text>
@@ -530,6 +536,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center', borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.cardBorder,
   },
   readonlyText: { color: colors.brandPrimary, fontWeight: '700', fontSize: 14 },
+  takeContext: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+    marginBottom: spacing.sm,
+  },
+  takeContextTitle: { ...typography.h3, color: colors.textPrimary, fontSize: 16 },
+  takeContextReason: { ...typography.bodyMuted, color: colors.textSecondary, marginTop: 4 },
   input: {
     backgroundColor: colors.surfaceLight, color: colors.textPrimary,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: touchMin,

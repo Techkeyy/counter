@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Share,
 } from 'react-native';
-import { User, Receipt, Take, Duel } from '../types';
+import { User, Receipt, Take, Duel, Portfolio } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
@@ -17,6 +17,7 @@ import * as Clipboard from 'expo-clipboard';
 import { formatUserDisplayName, formatUserHandle, getAvatarUri, formatWalletShort, hasRealIdentity } from '../utils/identity';
 import { EmptyState, ErrorState } from '../components/StateViews';
 import { EditProfileSheet } from '../components/EditProfileSheet';
+import { PortfolioSummary } from '../components/PortfolioSummary';
 
 interface ProfileScreenProps {
   wallet: string | null;
@@ -57,6 +58,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
+  const [faucetLoading, setFaucetLoading] = useState(false);
+  const [faucetNotice, setFaucetNotice] = useState<string | null>(null);
 
   const loadProfile = async () => {
     if (!wallet) return;
@@ -79,6 +84,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       const duelsList = Array.isArray(allDuels) ? allDuels : [];
       setMyDuels(duelsList.filter((d) => d.captain_a_wallet === wallet || d.captain_b_wallet === wallet));
+
+      if (isOwn) {
+        try {
+          setPortfolio(await api.getPortfolio());
+          setPortfolioError(null);
+        } catch (portfolioErr: any) {
+          console.warn('Failed to load portfolio:', portfolioErr);
+          setPortfolio(null);
+          setPortfolioError('Portfolio is temporarily unavailable. No values are estimated.');
+        }
+      } else {
+        setPortfolio(null);
+        setPortfolioError(null);
+      }
     } catch (err: any) {
       console.warn('Failed to load profile:', err);
       setLoadError(err?.message || "Couldn't load this profile.");
@@ -101,6 +120,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSignal, wallet]);
+
+  const requestTestFunds = async () => {
+    if (faucetLoading) return;
+    setFaucetLoading(true);
+    setFaucetNotice(null);
+    try {
+      const result = await api.requestFaucet();
+      setFaucetNotice(`Added ${result.amount} Counter Test USD. Balance refreshed from Devnet.`);
+      await loadProfile();
+    } catch (err: any) {
+      setFaucetNotice(err?.message || 'Test funds are unavailable right now.');
+    } finally {
+      setFaucetLoading(false);
+    }
+  };
+
+  const openPortfolioDuel = async (duelId: string) => {
+    try {
+      const duel = await api.getDuel(duelId);
+      if (onSelectDuel) onSelectDuel(duel);
+    } catch {
+      setFaucetNotice('That position could not be opened right now.');
+    }
+  };
 
   if (!wallet) {
     return (
@@ -321,6 +364,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
       )}
 
+      {isOwn && portfolio && (
+        <PortfolioSummary
+          portfolio={portfolio}
+          onOpenDuel={openPortfolioDuel}
+          onRequestFaucet={requestTestFunds}
+          faucetLoading={faucetLoading}
+          faucetNotice={faucetNotice}
+        />
+      )}
+      {isOwn && portfolioError && !portfolio && (
+        <Text style={styles.portfolioError}>{portfolioError}</Text>
+      )}
+
       {/* 4. Content Tabs: Takes | Duels | Receipts */}
       <View style={styles.tabsBar}>
         <TouchableOpacity
@@ -393,6 +449,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 activeOpacity={0.8}
               >
                 <Text style={styles.itemTitle}>{t.topic || t.content}</Text>
+                {!!t.content?.trim() && <Text style={styles.itemReason}>Why: {t.content}</Text>}
                 <Text style={styles.itemDate}>{new Date(t.created_at).toLocaleDateString()}</Text>
               </TouchableOpacity>
             ))
@@ -650,6 +707,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
+  portfolioError: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 17,
+    marginBottom: spacing.md,
+  },
   cardHeaderTitle: {
     ...typography.captionBold,
     letterSpacing: 0.5,
@@ -789,6 +852,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
     marginRight: spacing.sm,
+  },
+  itemReason: {
+    ...typography.bodyMuted,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 3,
   },
   itemDate: {
     ...typography.caption,

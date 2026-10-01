@@ -29,6 +29,7 @@ import {
   saveSession,
   clearSession,
   DISCONNECTED,
+  hasCompleteCounterProfile,
 } from './src/session';
 import { api } from './src/api';
 import { Take, Duel, Receipt, Challenge } from './src/types';
@@ -76,7 +77,7 @@ export default function App() {
         if (cancelled) return;
         setWalletState(restored);
         setConnectionStatus(restored.connected ? 'CONNECTED' : 'IDLE');
-        setShowOnboarding(!restored.connected);
+        setShowOnboarding(!restored.connected || restored.needsProfileSetup === true);
       } catch {
         if (!cancelled) {
           setWalletState(DISCONNECTED);
@@ -153,9 +154,25 @@ export default function App() {
       } catch (err) {
         console.warn('[SESSION] persist failed:', (err as Error)?.message);
       }
-      setWalletState(state);
-      setConnectionStatus('CONNECTED');
-      setConnectionError(null);
+      try {
+        // Authentication creates a placeholder profile for new wallets. The
+        // canonical profile read—not the wallet address or cached session—is
+        // what decides whether setup is still required.
+        const response: any = await api.getUserProfile(state.publicKey);
+        const profile = response?.user || response;
+        const needsProfileSetup = !hasCompleteCounterProfile(profile);
+        setWalletState({ ...state, needsProfileSetup });
+        setConnectionStatus('CONNECTED');
+        setConnectionError(null);
+        setShowOnboarding(needsProfileSetup);
+        if (!needsProfileSetup) setFeedRefresh((n) => n + 1);
+      } catch (err: any) {
+        setWalletState({ ...state, needsProfileSetup: true });
+        setConnectionStatus('NETWORK_ERROR');
+        setConnectionError('Counter could not confirm this wallet profile. Retry to continue safely.');
+        setShowOnboarding(true);
+        console.warn('[PROFILE] canonical profile check failed:', err?.message);
+      }
     } else {
       await clearSession(SecureSessionStorage);
       setWalletState(DISCONNECTED);

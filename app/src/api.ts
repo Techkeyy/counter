@@ -1,4 +1,4 @@
-import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
+import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification, Portfolio } from './types';
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -123,10 +123,10 @@ export const api = {
     }
     return res;
   },
-  createTake: async (topic: string, content: string, category: string): Promise<Take> => {
+  createTake: async (topic: string, content: string | undefined, category: string): Promise<Take> => {
     const res = await request<any>(`/takes`, {
       method: 'POST',
-      body: JSON.stringify({ topic, content, category }),
+      body: JSON.stringify({ topic, content: content || '', category }),
     });
     return res?.take || res;
   },
@@ -298,6 +298,9 @@ export const api = {
   },
   getRivalry: async (wallet: string, opponentWallet: string) => {
     return request<Rivalry>(`/users/${wallet}/rivalry/${opponentWallet}`);
+  },
+  getPortfolio: async (): Promise<Portfolio> => {
+    return request<Portfolio>('/users/portfolio');
   },
   updateProfile: async (data: ProfileUpdateInput): Promise<User> => {
     const res = await request<any>(`/users/profile`, {

@@ -194,3 +194,33 @@ export interface ActivityNotification {
   is_read: number;
   created_at: string;
 }
+
+export interface PortfolioSummary {
+  available_balance: number;
+  active_in_duels: number;
+  claimable: number;
+  realized_pnl: number | null;
+  realized_pnl_available: boolean;
+  realized_pnl_note?: string | null;
+}
+
+export interface PortfolioPosition {
+  duel_id: string;
+  proposition_a: string;
+  proposition_b: string;
+  chosen_side: 1 | 2;
+  stake_amount: number;
+  expected_payout: number;
+  payout_amount: number | null;
+  status: DuelStatus;
+  claim_state: 'OPEN' | 'CLAIMABLE' | 'CLAIMED' | 'LOST';
+  claimed: boolean;
+  created_at: string;
+}
+
+export interface Portfolio {
+  currency: 'Counter Test USD';
+  devnet: boolean;
+  summary: PortfolioSummary;
+  positions: PortfolioPosition[];
+}

@@ -6,6 +6,33 @@ const { queryAll, queryOne, execute } = require('../db');
 const { requireAuth } = require('../auth');
 const { querySkrStakedAmount } = require('../skr');
 const profile = require('../profile');
+const { getCusdBalance } = require('../chain');
+const { buildPortfolio } = require('../portfolio');
+
+// GET /api/users/portfolio (Authenticated; always the token wallet)
+// Portfolio is a read-only view over chain balance plus verified Counter
+// position/receipt facts. The wallet is never accepted from the URL or body.
+router.get('/portfolio', requireAuth, async (req, res) => {
+  const wallet = req.userWallet;
+  try {
+    const positions = queryAll(
+      `SELECT p.duel_id, p.user_wallet, p.side, p.stake_amount, p.claimed,
+              p.claim_tx, p.payout_amount, p.created_at,
+              d.proposition_a, d.proposition_b, d.side_a_total, d.side_b_total,
+              d.status, d.winning_side
+       FROM positions p
+       INNER JOIN duels d ON d.id = p.duel_id
+       WHERE p.user_wallet = ?
+       ORDER BY p.created_at DESC`,
+      [wallet]
+    );
+    const balance = await getCusdBalance(wallet);
+    res.json(buildPortfolio({ balance, positions }));
+  } catch (error) {
+    console.error('[PORTFOLIO] read failed:', error);
+    res.status(503).json({ error: 'Portfolio balance is temporarily unavailable.' });
+  }
+});
 
 // GET /api/users/:wallet
 router.get('/:wallet', async (req, res) => {

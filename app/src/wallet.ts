@@ -16,6 +16,7 @@ export interface WalletState {
   authToken: string | null;
   isArenaEligible: boolean;
   skrStakedAmount: number;
+  needsProfileSetup?: boolean;
 }
 
 // Explicit connection lifecycle (Gate 8). Failures never silently return to
@@ -65,6 +66,7 @@ const DISCONNECTED_STATE: WalletState = {
   authToken: null,
   isArenaEligible: false,
   skrStakedAmount: 0,
+  needsProfileSetup: true,
 };
 
 // Local MWA handshake budget. The wallet app opens over a local socket; if it

@@ -72,6 +72,8 @@ async function main() {
   assert.strictEqual(st.publicKey, WALLET);
   assert.strictEqual(st.isArenaEligible, true);
   assert.strictEqual(st.skrStakedAmount, 12.5);
+  assert.strictEqual(session.hasCompleteCounterProfile({ display_name: 'Tester', handle: '@tester' }), true, 'complete canonical profile skips setup');
+  assert.strictEqual(session.hasCompleteCounterProfile({ display_name: 'user_abcd_efgh', handle: 'user_abcd_efgh' }), false, 'placeholder profile requires setup');
   ok('valid stored session -> same profile restored');
 
   // 3. Malformed stored session -> cleared + disconnected, never synthesized.

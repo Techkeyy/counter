@@ -325,8 +325,12 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
     }
     const posId = `pos_${duelId}_${userWallet}`;
     execute(
-      `UPDATE positions SET claimed = 1, claim_tx = ? WHERE id = ?`,
-      [txSignature, posId]
+      `UPDATE positions SET claimed = 1, claim_tx = ?, payout_amount = ? WHERE id = ?`,
+      [
+        txSignature,
+        verified.payoutBase !== null ? chain.baseUnitsToUsd(verified.payoutBase) : null,
+        posId,
+      ]
     );
     const receipt = queryOne(`SELECT * FROM receipts WHERE duel_id = ?`, [duelId]);
     res.json({

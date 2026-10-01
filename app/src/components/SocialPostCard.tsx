@@ -89,7 +89,7 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
           onPress={onOpenAuthorProfile ? () => onOpenAuthorProfile(take.author_wallet) : undefined}
         />
         <Text style={styles.topic}>{take.topic}</Text>
-        <Text style={styles.content}>{take.content}</Text>
+        {!!take.content?.trim() && <Text style={styles.content}>Why: {take.content}</Text>}
       </TouchableOpacity>
 
       {type !== 'TAKE' && duel && (
@@ -150,12 +150,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  topic: { ...typography.h3, color: colors.textPrimary, fontSize: 15, marginBottom: 2, marginLeft: 52 },
+  topic: { ...typography.h2, color: colors.textPrimary, fontSize: 17, lineHeight: 23, marginBottom: 4, marginLeft: 52 },
   content: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontSize: 15,
-    lineHeight: 22,
+    ...typography.bodyMuted,
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: spacing.sm,
     marginLeft: 52,
   },

@@ -165,8 +165,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     if (!visible) {
       submittedRef.current = false;
       setSavePhase(null);
+      setStep(1);
     }
   }, [visible]);
+
+  // Wallet authorization is the first-run boundary. Once a new or incomplete
+  // wallet is authenticated, move directly to profile setup; a complete
+  // returning profile is closed by App before this screen needs to advance.
+  useEffect(() => {
+    if (visible && wallet && step === 1 && connectionStatus === 'CONNECTED') {
+      setStep(2);
+    }
+  }, [visible, wallet, step, connectionStatus]);
 
   const pickPhoto = async () => {
     try {
@@ -219,6 +229,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <Text style={styles.lead}>
                 A social network where conversations become financially accountable.
               </Text>
+              <Text style={styles.returningCopy}>
+                Returning users continue with their existing Counter profile.
+              </Text>
               <View style={styles.devnetRow}>
                 <Text style={styles.devnetText}>Test build on Solana Devnet</Text>
               </View>
@@ -255,12 +268,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
               <TouchableOpacity
                 style={styles.primaryButton}
-                onPress={() => setStep(2)}
+                onPress={() => (wallet ? setStep(2) : onConnectWallet())}
                 activeOpacity={0.8}
-                accessibilityLabel="Get started"
+                accessibilityLabel={wallet ? 'Set up your Counter profile' : 'Connect wallet'}
                 accessibilityRole="button"
               >
-                <Text style={styles.primaryButtonText}>Get started</Text>
+                <Text style={styles.primaryButtonText}>{wallet ? 'Set up your Counter profile' : 'Connect wallet'}</Text>
                 <Icon name="arrow-right" size={16} color="#000000" />
               </TouchableOpacity>
             </View>
@@ -421,6 +434,7 @@ const styles = StyleSheet.create({
   },
   title: { ...typography.h2, color: colors.textPrimary, marginBottom: spacing.xs, textAlign: 'center' },
   lead: { ...typography.bodyMuted, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
+  returningCopy: { ...typography.bodyMuted, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
   devnetRow: {
     backgroundColor: colors.surfaceLight,
     paddingHorizontal: spacing.md,

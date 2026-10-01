@@ -83,6 +83,14 @@ export function hasRealIdentity(user?: UserIdentityInput | null): boolean {
   return hasRealField(user.display_name) || hasRealField(user.name) || hasRealField(user.handle);
 }
 
+// The backend creates a placeholder row at wallet authentication time. A
+// returning user is complete only when both canonical social fields are real;
+// wallet ownership alone never skips profile setup.
+export function hasCompleteCounterProfile(user?: UserIdentityInput | null): boolean {
+  if (!user) return false;
+  return hasRealField(user.display_name || user.name) && hasRealField(user.handle);
+}
+
 export function formatUserDisplayName(user?: UserIdentityInput | null): string {
   if (!user) return INCOMPLETE_PROFILE_NAME;
   const displayName = user.display_name?.trim();
