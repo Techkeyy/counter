@@ -180,6 +180,16 @@ async function run() {
     assert(r.status === 400 && /Duel/.test(r.data.error), 'formed Duel blocks deletion with plain message');
     const stillThere = queryOne(`SELECT status FROM takes WHERE id = ?`, [takeId3]);
     assert(stillThere && stillThere.status === 'ACTIVE', 'take row intact');
+    const duelRow = queryOne(`SELECT id FROM duels WHERE id = ?`, [r.data?.duel?.id || tracked.duels[tracked.duels.length - 1]]);
+    assert(duelRow, 'formed Duel reference survives rejected delete');
+    const positionId = `pos_delete_${Date.now()}`;
+    execute(
+      `INSERT INTO positions (id, duel_id, user_wallet, side, stake_amount, claimed, created_at) VALUES (?, ?, ?, 1, 5, 0, ?)`,
+      [positionId, tracked.duels[tracked.duels.length - 1], A.wallet, new Date().toISOString()]
+    );
+    r = await api('DELETE', `/api/takes/${takeId3}`, A.token);
+    assert(r.status === 400 && /Duel/.test(r.data.error), 'staked Duel also blocks deletion');
+    assert(queryOne(`SELECT id FROM positions WHERE id = ?`, [positionId]), 'stake reference survives rejected delete');
     ok('formed Duel blocks deletion; proof rows intact');
 
     // 5. author identity join still resolves on remaining rows
