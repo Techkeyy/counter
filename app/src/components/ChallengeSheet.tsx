@@ -150,6 +150,14 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
                 {describeCriteria(challenge.source_type || challenge.category, challenge.source_config)}
               </Text>
             </View>
+            <View style={styles.factsBox}>
+              <Text style={styles.factLabel}>Settlement</Text>
+              <Text style={styles.factValue}>
+                {(challenge.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL'
+                  ? `Settle together. If no agreement, ${(challenge.fallback_mode || 'REFUND') === 'REFUND' ? 'everyone is refunded' : 'Counter Verified decides'}.`
+                  : 'Counter Verified by the criteria above.'}
+              </Text>
+            </View>
 
             {mode === 'COUNTER' ? (
               <>

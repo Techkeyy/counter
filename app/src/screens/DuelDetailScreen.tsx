@@ -9,7 +9,7 @@ import {
   Share,
 } from 'react-native';
 import { PublicKey } from '@solana/web3.js';
-import { Duel, Position } from '../types';
+import { Duel, Position, MutualVote } from '../types';
 import { BackModal } from '../components/BackModal';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api, PRODUCTION_WEB_URL } from '../api';
@@ -21,6 +21,8 @@ import {
   buildVaultAtaCreateIxIfNeeded,
   buildClaimPayoutIx,
   mwaSignSendConfirm,
+  mwaSignMessage,
+  settlementMessage,
 } from '../chain';
 import { describeCriteria, formatDeadline } from '../utils/criteria';
 import { formatUserDisplayName, formatRelativeTime, isRealSignature } from '../utils/identity';
@@ -30,6 +32,8 @@ interface DuelDetailScreenProps {
   userWallet: string | null;
   onBack: () => void;
   onViewReceipt: (receiptId: string) => void;
+  isArenaEligible?: boolean;
+  skrStakedAmount?: number;
 }
 
 export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
@@ -37,9 +41,12 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   userWallet,
   onBack,
   onViewReceipt,
+  isArenaEligible,
+  skrStakedAmount,
 }) => {
   const [duel, setDuel] = useState<Duel | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [mutualVotes, setMutualVotes] = useState<MutualVote[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [initializing, setInitializing] = useState(false);
@@ -47,6 +54,9 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showProof, setShowProof] = useState(false);
+  const [voting, setVoting] = useState(false);
+  const [publishingArena, setPublishingArena] = useState(false);
+  const [arenaSkR, setArenaSkr] = useState<number | null>(null);
 
   const [backModalVisible, setBackModalVisible] = useState(false);
   const [backSide, setBackSide] = useState<1 | 2>(1);
@@ -56,6 +66,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const data = await api.getDuel(duelId);
       setDuel(data);
       setPositions(data.positions || []);
+      setMutualVotes(Array.isArray((data as any).mutualVotes) ? (data as any).mutualVotes : []);
       setLoadError(null);
     } catch (err: any) {
       setLoadError(err?.message || 'Duel not found');
@@ -142,6 +153,72 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     loadDuelData();
   }, [duelId]);
 
+  const handleVote = async (side: 1 | 2) => {
+    if (!userWallet || !duel) {
+      setMessage('Connect a captain wallet to confirm a result.');
+      return;
+    }
+    setVoting(true);
+    setMessage(null);
+    try {
+      setMessage('Sign the result in your wallet.');
+      const signature = await mwaSignMessage(
+        settlementMessage(duel.id, side, Number(duel.resolution_ts) || 0),
+        userWallet
+      );
+      setMessage('Recording your confirmation.');
+      const res = await api.postMutualVote(duel.id, side, signature);
+      if (res.match?.matched) {
+        setMessage(`Both captains agree: Side ${res.match.winnerSide === 1 ? 'A' : 'B'}. Settle when ready.`);
+      } else {
+        setMessage('Confirmation recorded. Waiting for the other captain.');
+      }
+      await loadDuelData();
+    } catch (err: any) {
+      setMessage(`Confirmation failed: ${err.message}`);
+    } finally {
+      setVoting(false);
+    }
+  };
+
+  const handlePublishArena = async () => {
+    if (!userWallet) {
+      setMessage('Connect a wallet first.');
+      return;
+    }
+    setPublishingArena(true);
+    setMessage(null);
+    try {
+      const res = await api.publishArena(duelId);
+      setArenaSkr(typeof res.skrStake === 'number' ? res.skrStake : null);
+      setMessage('Published to Seeker Arena.');
+      await loadDuelData();
+    } catch (err: any) {
+      setMessage(err?.message || 'Arena publish failed.');
+    } finally {
+      setPublishingArena(false);
+    }
+  };
+
+  const handleRecheckArena = async () => {
+    if (!userWallet) return;
+    setPublishingArena(true);
+    try {
+      const profile: any = await api.getUserProfile(userWallet);
+      const u = profile?.user || profile;
+      setArenaSkr(Number(u?.skr_staked_amount) || 0);
+      setMessage(
+        Number(u?.skr_staked_amount) > 0
+          ? `Verified: ${u.skr_staked_amount} SKR staked on Mainnet.`
+          : 'No active SKR stake found. Stake in your Seeker wallet first.'
+      );
+    } catch (err: any) {
+      setMessage(err?.message || 'Could not recheck stake.');
+    } finally {
+      setPublishingArena(false);
+    }
+  };
+
   const handleResolve = async () => {
     setResolving(true);
     setMessage(null);
@@ -223,6 +300,22 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     handle: duel.captain_b_handle,
     wallet: duel.captain_b_wallet,
   });
+  const resolutionMode = duel.resolution_mode || 'COUNTER_VERIFIED';
+  const isMutual = resolutionMode === 'MUTUAL';
+  const myVote = userWallet
+    ? mutualVotes.find((v) => v.captain_wallet === userWallet)
+    : undefined;
+  const otherVote = userWallet
+    ? mutualVotes.find((v) => v.captain_wallet !== userWallet)
+    : mutualVotes[0];
+  const votesMatch =
+    mutualVotes.length >= 2 &&
+    mutualVotes.every((v) => Number(v.winner_side) === Number(mutualVotes[0].winner_side));
+  const votingOpen =
+    !isResolved &&
+    isInitialized &&
+    Date.now() / 1000 >= Number(duel.resolution_ts || 0);
+  const effectiveSkr = arenaSkR !== null && arenaSkR !== undefined ? arenaSkR : skrStakedAmount || 0;
 
   const timeline: { label: string; detail: string }[] = [
     { label: 'Duel formed', detail: formatRelativeTime(duel.created_at) },
@@ -315,6 +408,79 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         <Text style={styles.criteriaText}>
           {describeCriteria(duel.source_type || duel.category, duel.source_config)}
         </Text>
+        <View style={styles.modeRow}>
+          <Icon
+            name={isMutual ? 'users' : 'shield-check'}
+            size={16}
+            color={isMutual ? colors.brandSecondary : colors.success}
+          />
+          <Text style={styles.modeText}>
+            {isMutual
+              ? `Settle together. If no agreement${duel.mutual_deadline_ts ? ` by ${formatDeadline(duel.mutual_deadline_ts)}` : ''}, ${(duel.fallback_mode || 'REFUND') === 'REFUND' ? 'everyone is refunded' : 'Counter Verified decides'}.`
+              : 'Counter Verified by the rule above.'}
+          </Text>
+        </View>
+
+        {isMutual && !isResolved && (
+          <View style={styles.mutualBox}>
+            <Text style={styles.mutualTitle}>Captain confirmations</Text>
+            {myVote ? (
+              <Text style={styles.mutualLine}>
+                You say Side {Number(myVote.winner_side) === 1 ? 'A' : 'B'} won.
+              </Text>
+            ) : null}
+            {otherVote ? (
+              <Text style={styles.mutualLine}>
+                {otherVote.captain_wallet === duel.captain_a_wallet ? nameA : nameB} says Side{' '}
+                {Number(otherVote.winner_side) === 1 ? 'A' : 'B'} won.
+              </Text>
+            ) : (
+              <Text style={styles.mutualLine}>Awaiting the other captain.</Text>
+            )}
+            {votesMatch ? (
+              <Text style={styles.mutualMatch}>
+                Both sides agree. This result becomes final once settled on Solana.
+              </Text>
+            ) : null}
+            {isCaptain && isInitialized && votingOpen && (
+              <View style={styles.voteRow}>
+                {([1, 2] as const).map((side) => (
+                  <TouchableOpacity
+                    key={side}
+                    style={styles.voteBtn}
+                    onPress={() => handleVote(side)}
+                    disabled={voting}
+                    activeOpacity={0.85}
+                    accessibilityLabel={
+                      side === 1
+                        ? `Agree, ${nameA} won`
+                        : `Agree, ${nameB} won`
+                    }
+                    accessibilityRole="button"
+                  >
+                    {voting ? (
+                      <ActivityIndicator color="#000000" />
+                    ) : (
+                      <Text style={styles.voteBtnText}>
+                        {side === 1 ? `${nameA} won` : `${nameB} won`}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {isCaptain && isInitialized && !votingOpen && (
+              <Text style={styles.mutualNote}>
+                Confirmations open at resolution time. You can disagree freely until then.
+              </Text>
+            )}
+            {!isCaptain && (
+              <Text style={styles.mutualNote}>
+                Only the two captains confirm. Backers watch the outcome here.
+              </Text>
+            )}
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>Timeline</Text>
         {timeline.map((t) => (
@@ -345,6 +511,55 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
             <ProofRow label="Resolution source" value={`${duel.source_type || duel.category} deterministic oracle`} />
           </View>
         )}
+
+        <Text style={styles.sectionTitle}>Seeker Arena</Text>
+        <View style={styles.arenaBox}>
+          <View style={styles.arenaRow}>
+            <Icon
+              name="trophy"
+              size={16}
+              color={duel.is_arena ? colors.arenaBadge : colors.textMuted}
+            />
+            <Text style={styles.arenaText}>
+              {duel.is_arena
+                ? 'Published in Seeker Arena.'
+                : effectiveSkr > 0
+                  ? `Your ${effectiveSkr} staked SKR unlocks Arena publishing.`
+                  : 'Arena publishing needs active SKR staked on Mainnet.'}
+            </Text>
+          </View>
+          {isCaptain && !duel.is_arena && (
+            <View style={styles.arenaActions}>
+              <TouchableOpacity
+                style={styles.arenaBtn}
+                onPress={handlePublishArena}
+                disabled={publishingArena}
+                activeOpacity={0.85}
+                accessibilityLabel="Publish duel to Seeker Arena"
+                accessibilityRole="button"
+              >
+                {publishingArena ? (
+                  <ActivityIndicator color="#000000" />
+                ) : (
+                  <Text style={styles.arenaBtnText}>Publish to Seeker Arena</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.arenaRecheck}
+                onPress={handleRecheckArena}
+                disabled={publishingArena}
+                activeOpacity={0.8}
+                accessibilityLabel="Recheck SKR stake"
+                accessibilityRole="button"
+              >
+                <Text style={styles.arenaRecheckText}>Recheck stake</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <Text style={styles.arenaNote}>
+            SKR grants access and reputation only. It never changes odds, winners, or stakes. Stake in your Seeker wallet.
+          </Text>
+        </View>
 
         <Text style={styles.sectionTitle}>Backers ({positions.length})</Text>
         {positions.length === 0 ? (
@@ -526,6 +741,46 @@ const styles = StyleSheet.create({
   messageText: { color: colors.textPrimary, fontSize: 13, lineHeight: 19 },
   sectionTitle: { ...typography.captionBold, color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },
   criteriaText: { ...typography.body, color: colors.textPrimary, fontSize: 14, lineHeight: 21, marginBottom: spacing.sm },
+  modeRow: {
+    flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start',
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1, borderColor: colors.cardBorder,
+  },
+  modeText: { flex: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  mutualBox: {
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1, borderColor: colors.cardBorder,
+  },
+  mutualTitle: { ...typography.captionBold, color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  mutualLine: { ...typography.body, color: colors.textPrimary, fontSize: 14, marginBottom: 2 },
+  mutualMatch: { ...typography.bodyBold, color: colors.success, fontSize: 13, lineHeight: 19 },
+  mutualNote: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  voteRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  voteBtn: {
+    flex: 1, minHeight: touchMin + 4, backgroundColor: colors.brandPrimary,
+    borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  voteBtnText: { ...typography.bodyBold, color: '#000000', fontSize: 13, textAlign: 'center' },
+  arenaBox: {
+    backgroundColor: colors.surface, borderRadius: borderRadius.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1, borderColor: colors.cardBorder,
+  },
+  arenaRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start', marginBottom: spacing.sm },
+  arenaText: { flex: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  arenaActions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  arenaBtn: {
+    flex: 1, minHeight: touchMin, backgroundColor: colors.brandPrimary,
+    borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  arenaBtnText: { ...typography.bodyBold, color: '#000000', fontSize: 13 },
+  arenaRecheck: { minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.md },
+  arenaRecheckText: { color: colors.brandPrimary, fontWeight: '700', fontSize: 13 },
+  arenaNote: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   timelineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
   timelineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brandPrimary },
   timelineLabel: { ...typography.body, color: colors.textPrimary, fontSize: 14, flex: 1 },

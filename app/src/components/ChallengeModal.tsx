@@ -9,7 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Take, Category } from '../types';
+import { Take, Category, ResolutionMode, FallbackMode } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { api } from '../api';
@@ -35,6 +35,11 @@ const CUTOFF_PRESETS = [
   { label: '3 days', seconds: 3 * 24 * 3600 },
   { label: '7 days', seconds: 7 * 24 * 3600 },
 ];
+const AGREEMENT_WINDOWS = [
+  { label: '12 hours', seconds: 12 * 3600 },
+  { label: '24 hours', seconds: 24 * 3600 },
+  { label: '48 hours', seconds: 48 * 3600 },
+];
 const OPERATORS: CryptoOperator[] = ['>=', '<='];
 
 export const ChallengeModal: React.FC<ChallengeModalProps> = ({
@@ -48,6 +53,9 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   const [sideATerms, setSideATerms] = useState('');
   const [sideBTerms, setSideBTerms] = useState('');
   const [cutoffSeconds, setCutoffSeconds] = useState(CUTOFF_PRESETS[0].seconds);
+  const [resolutionMode, setResolutionMode] = useState<ResolutionMode>('COUNTER_VERIFIED');
+  const [fallbackMode, setFallbackMode] = useState<FallbackMode>('REFUND');
+  const [agreementSeconds, setAgreementSeconds] = useState(AGREEMENT_WINDOWS[1].seconds);
   // Crypto decider
   const [assetId, setAssetId] = useState<string>('solana');
   const [operator, setOperator] = useState<CryptoOperator>('>=');
@@ -126,6 +134,10 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
         resolutionTs,
         sourceType: category,
         sourceConfig: buildSourceConfig(),
+        resolutionMode,
+        fallbackMode,
+        mutualDeadlineTs:
+          resolutionMode === 'MUTUAL' ? resolutionTs + agreementSeconds : null,
       });
       setLoading(false);
       onChallengeCreated();
@@ -338,6 +350,73 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                   ))}
                 </View>
 
+                <Text style={styles.label}>How this settles</Text>
+                <TouchableOpacity
+                  style={[styles.modeRow, resolutionMode === 'COUNTER_VERIFIED' && styles.modeRowActive]}
+                  onPress={() => setResolutionMode('COUNTER_VERIFIED')}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Settle by Counter Verified"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: resolutionMode === 'COUNTER_VERIFIED' }}
+                >
+                  <View style={styles.modeTextCol}>
+                    <Text style={styles.modeTitle}>Counter Verified (recommended)</Text>
+                    <Text style={styles.modeDesc}>
+                      An objective data feed decides using the criteria above.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modeRow, resolutionMode === 'MUTUAL' && styles.modeRowActive]}
+                  onPress={() => setResolutionMode('MUTUAL')}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Settle together by mutual agreement"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: resolutionMode === 'MUTUAL' }}
+                >
+                  <View style={styles.modeTextCol}>
+                    <Text style={styles.modeTitle}>Settle together</Text>
+                    <Text style={styles.modeDesc}>
+                      Both captains confirm the winner in-app after resolution time.
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {resolutionMode === 'MUTUAL' && (
+                  <>
+                    <Text style={styles.label}>If no agreement</Text>
+                    <View style={styles.chipRow}>
+                      {(['REFUND', 'COUNTER_VERIFIED'] as FallbackMode[]).map((fb) => (
+                        <TouchableOpacity
+                          key={fb}
+                          style={[styles.chip, fallbackMode === fb && styles.chipActive]}
+                          onPress={() => setFallbackMode(fb)}
+                          accessibilityLabel={fb === 'REFUND' ? 'Fallback: refund everyone' : 'Fallback: Counter Verified'}
+                        >
+                          <Text style={[styles.chipText, fallbackMode === fb && styles.chipTextActive]}>
+                            {fb === 'REFUND' ? 'Refund everyone' : 'Counter Verified'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={styles.label}>Agreement window after resolution time</Text>
+                    <View style={styles.chipRow}>
+                      {AGREEMENT_WINDOWS.map((w) => (
+                        <TouchableOpacity
+                          key={w.label}
+                          style={[styles.chip, agreementSeconds === w.seconds && styles.chipActive]}
+                          onPress={() => setAgreementSeconds(w.seconds)}
+                          accessibilityLabel={`Agreement window ${w.label}`}
+                        >
+                          <Text style={[styles.chipText, agreementSeconds === w.seconds && styles.chipTextActive]}>
+                            {w.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+
                 <TouchableOpacity
                   style={styles.primaryButton}
                   onPress={() => {
@@ -369,6 +448,14 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                 <View style={styles.reviewBox}>
                   <Text style={styles.reviewLabel}>Decided by</Text>
                   <Text style={styles.reviewText}>{criteriaSummary}</Text>
+                </View>
+                <View style={styles.reviewBox}>
+                  <Text style={styles.reviewLabel}>Settlement</Text>
+                  <Text style={styles.reviewText}>
+                    {resolutionMode === 'MUTUAL'
+                      ? `Settle together. If no agreement, ${fallbackMode === 'REFUND' ? 'everyone is refunded' : 'Counter Verified decides'}.`
+                      : 'Counter Verified by the criteria above.'}
+                  </Text>
                 </View>
                 <View style={styles.reviewRow}>
                   <View style={styles.reviewHalf}>
@@ -460,6 +547,22 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: colors.brandPrimary, fontWeight: '700' },
   note: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  modeRowActive: {
+    borderColor: colors.brandPrimary,
+  },
+  modeTextCol: { flex: 1 },
+  modeTitle: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 14 },
+  modeDesc: { ...typography.bodyMuted, color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
   primaryButton: {
     flexDirection: 'row', minHeight: touchMin + 4, backgroundColor: colors.brandPrimary,
     borderRadius: borderRadius.full, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.md,

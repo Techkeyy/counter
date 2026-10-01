@@ -33,16 +33,19 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   const verified = isRealSignature(receipt.onchain_signature);
   const [showProof, setShowProof] = useState(false);
 
-  // Participant names come from the real duel record, never wallets.
+  // Participant names + settlement mode come from the real duel record.
   const [captainAName, setCaptainAName] = useState<string | null>(null);
   const [captainBName, setCaptainBName] = useState<string | null>(null);
+  const [duelMode, setDuelMode] = useState<string>('COUNTER_VERIFIED');
+  const [confirmations, setConfirmations] = useState<any[]>([]);
   useEffect(() => {
     let cancelled = false;
     setCaptainAName(null);
     setCaptainBName(null);
+    setConfirmations([]);
     api
       .getDuel(receipt.duel_id)
-      .then((duel) => {
+      .then((duel: any) => {
         if (cancelled || !duel) return;
         setCaptainAName(
           formatUserDisplayName({
@@ -58,6 +61,8 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
             wallet: receipt.captain_b_wallet,
           })
         );
+        setDuelMode(duel.resolution_mode || 'COUNTER_VERIFIED');
+        if (Array.isArray(duel.mutualVotes)) setConfirmations(duel.mutualVotes);
       })
       .catch(() => {});
     return () => {
@@ -138,6 +143,12 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
 
         <Text style={styles.sectionTitle}>Resolution</Text>
         <View style={styles.personRow}>
+          <Text style={styles.personSide}>Method</Text>
+          <Text style={styles.personWallet}>
+            {duelMode === 'MUTUAL' ? 'Settled together' : 'Counter Verified'}
+          </Text>
+        </View>
+        <View style={styles.personRow}>
           <Text style={styles.personSide}>Date</Text>
           <Text style={styles.personWallet}>
             {new Date(receipt.created_at).toLocaleDateString([], {
@@ -165,7 +176,41 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         {showProof && (
           verified ? (
             <>
-              <TouchableOpacity
+        {duelMode === 'MUTUAL' && confirmations.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Confirmed by</Text>
+            {confirmations.map((c: any) => {
+              const who =
+                c.captain_wallet === receipt.captain_a_wallet
+                  ? captainAName
+                  : c.captain_wallet === receipt.captain_b_wallet
+                    ? captainBName
+                    : null;
+              return (
+                <View key={`${c.captain_wallet}`} style={styles.personRow}>
+                  <Text style={styles.personSide}>
+                    {(who && who !== 'Counter user' ? who : 'A captain') +
+                      ` · Side ${Number(c.winner_side) === 1 ? 'A' : 'B'}`}
+                  </Text>
+                  <Text style={styles.personWallet}>
+                    {new Date(c.updated_at || c.created_at).toLocaleString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+              );
+            })}
+            <Text style={styles.confirmNote}>
+              Each confirmation is wallet-signed and stored with its signature. The
+              settlement transaction below is the on-chain record.
+            </Text>
+          </>
+        )}
+
+        <TouchableOpacity
                 style={styles.signatureBtn}
                 onPress={handleOpenExplorer}
                 activeOpacity={0.8}
@@ -334,9 +379,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   personWallet: {
-    ...typography.mono,
+    ...typography.bodyBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 14,
+  },
+  confirmNote: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: spacing.sm,
   },
   proofToggle: {
     flexDirection: 'row',

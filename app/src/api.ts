@@ -150,6 +150,9 @@ export const api = {
     resolutionTs: number;
     sourceType: string;
     sourceConfig: any;
+    resolutionMode?: string;
+    fallbackMode?: string;
+    mutualDeadlineTs?: number | null;
   }) => {
     // Server contract uses `creatorWallet` (Captain A / take author).
     // Send both keys so the challenge counterparty is never silently dropped
@@ -194,13 +197,14 @@ export const api = {
     if (res && Array.isArray(res.duels)) return res.duels;
     return [];
   },
-  getDuel: async (id: string): Promise<Duel & { positions: any[]; myPosition?: any }> => {
+  getDuel: async (id: string): Promise<Duel & { positions: any[]; myPosition?: any; mutualVotes?: any[] }> => {
     const res = await request<any>(`/duels/${id}`);
     if (res && res.duel) {
       return {
         ...res.duel,
         positions: Array.isArray(res.positions) ? res.positions : [],
         myPosition: res.myPosition || null,
+        mutualVotes: Array.isArray(res.mutualVotes) ? res.mutualVotes : [],
       };
     }
     return res;
@@ -236,6 +240,20 @@ export const api = {
     return request<any>(`/duels/${duelId}/resolve`, {
       method: 'POST',
     });
+  },
+  publishArena: async (duelId: string) => {
+    return request<{ success: boolean; isArena: number; skrStake: number }>(`/duels/${duelId}/publish-arena`, {
+      method: 'POST',
+    });
+  },
+  postMutualVote: async (duelId: string, winnerSide: 1 | 2, signature: string) => {
+    return request<{ success: boolean; votes: any[]; match: { matched: boolean; winnerSide: number; state?: string } }>(
+      `/duels/${duelId}/mutual-vote`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ winnerSide, signature }),
+      }
+    );
   },
 
   // Receipts

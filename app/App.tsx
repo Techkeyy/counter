@@ -215,6 +215,8 @@ export default function App() {
             userWallet={walletState.publicKey}
             onBack={() => setSelectedDuelId(null)}
             onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
+            isArenaEligible={walletState.isArenaEligible}
+            skrStakedAmount={walletState.skrStakedAmount}
           />
         ) : selectedTake ? (
           <TakeDetailScreen

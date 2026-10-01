@@ -73,6 +73,7 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
     const poolB = Number(duel.side_b_total) || 0;
     const total = poolA + poolB;
     const resolved = duel.status.startsWith('RESOLVED');
+    const modeLabel = (duel.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL' ? ' · Settle together' : '';
     const nameA = formatUserDisplayName({
       display_name: duel.captain_a_name,
       handle: duel.captain_a_handle,
@@ -108,6 +109,7 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
               : duel.chain_status === 'INITIALIZED'
                 ? 'Live on-chain'
                 : 'Forming'}
+            {modeLabel}
           </Text>
           <Text style={styles.time}>
             {resolved

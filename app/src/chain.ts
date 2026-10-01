@@ -251,3 +251,40 @@ export async function mwaSignSendConfirm(
   }
   return signature;
 }
+
+/**
+ * Canonical bilateral-settlement attestation text. Must stay byte-identical
+ * to server/mutual.js settlementMessage: the server reconstructs it and
+ * verifies the ed25519 signature against the captain wallet.
+ */
+export function settlementMessage(duelId: string, winnerSide: 1 | 2, resolutionAt: number): string {
+  return `COUNTER_SETTLEMENT_V1|duel_id=${duelId}|winner_side=${winnerSide}|mode=MUTUAL|at=${resolutionAt}`;
+}
+
+/**
+ * Wallet-sign an arbitrary UTF-8 attestation through MWA (same primitive as
+ * SIWS). Used for bilateral settlement votes: the server reconstructs the
+ * exact expected message and verifies the ed25519 signature. Rejection
+ * surfaces as an error; nothing is fabricated.
+ */
+export async function mwaSignMessage(message: string, walletBase58: string): Promise<string> {
+  const walletAddressB64 = Buffer.from(new PublicKey(walletBase58).toBytes()).toString('base64');
+  const payload = Uint8Array.from(Buffer.from(message, 'utf-8'));
+  const out = await transact(async (wallet) => {
+    await wallet.authorize({
+      cluster: 'devnet',
+      identity: {
+        name: 'Counter Mobile',
+        uri: 'https://counter.103-195-188-198.sslip.io',
+        icon: 'favicon.ico',
+      },
+    });
+    const results = await wallet.signMessages({
+      addresses: [walletAddressB64],
+      payloads: [payload],
+    });
+    return results[0] as Uint8Array;
+  });
+  const bs58 = require('bs58').default || require('bs58');
+  return bs58.encode(Buffer.from(out));
+}

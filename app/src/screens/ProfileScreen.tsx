@@ -180,7 +180,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {isArenaEligible && (
             <View style={styles.arenaQualifiedBadge}>
               <Icon name="shield-check" size={13} color={colors.arenaBadge} />
-              <Text style={styles.arenaQualifiedText}>Arena Verified</Text>
+              <Text style={styles.arenaQualifiedText}>Seeker Arena</Text>
             </View>
           )}
         </View>

@@ -1,12 +1,25 @@
 export type Category = 'CRYPTO' | 'SPORTS' | 'WEATHER' | 'POLITICS' | 'CULTURE';
 
-export type DuelStatus = 
-  | 'ACCEPTING_STAKES' 
-  | 'CUTOFF_REACHED' 
-  | 'SETTLEMENT_PENDING' 
-  | 'RESOLVED_SIDE_A' 
-  | 'RESOLVED_SIDE_B' 
+export type DuelStatus =
+  | 'ACCEPTING_STAKES'
+  | 'CUTOFF_REACHED'
+  | 'SETTLEMENT_PENDING'
+  | 'RESOLVED_SIDE_A'
+  | 'RESOLVED_SIDE_B'
   | 'CANCELLED';
+
+export type ResolutionMode = 'COUNTER_VERIFIED' | 'MUTUAL';
+export type FallbackMode = 'REFUND' | 'COUNTER_VERIFIED';
+
+export interface MutualVote {
+  duel_id: string;
+  captain_wallet: string;
+  winner_side: number;
+  message: string;
+  signature: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface User {
   wallet_address: string;
@@ -63,6 +76,9 @@ export interface Challenge {
   resolution_ts: number;
   status: 'PROPOSED' | 'ACCEPTED' | 'DECLINED' | 'COUNTERED';
   created_at: string;
+  resolution_mode?: ResolutionMode;
+  fallback_mode?: FallbackMode;
+  mutual_deadline_ts?: number | null;
 }
 
 export interface Counteroffer {
@@ -106,6 +122,9 @@ export interface Duel {
   resolution_ts: number;
   status: DuelStatus;
   winning_side: number;
+  resolution_mode?: ResolutionMode;
+  fallback_mode?: FallbackMode;
+  mutual_deadline_ts?: number | null;
   resolution_data?: string;
   resolution_tx?: string;
   // Canonical chain binding (see server/chain.js + app/src/chain.ts).
