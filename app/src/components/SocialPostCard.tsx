@@ -1,14 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import { Take, Duel, Receipt } from '../types';
 import { colors, typography, spacing, touchMin } from '../theme';
 import { Icon } from './Icon';
+import { IdentityHeader } from './IdentityHeader';
 import { DuelAttachment, DUEL_SHARE_LINK } from './DuelAttachment';
 import {
   formatUserDisplayName,
   formatUserHandle,
-  getAvatarUri,
-  formatRelativeTime,
 } from '../utils/identity';
 
 export interface FeedItem {
@@ -24,9 +23,10 @@ interface SocialPostCardProps {
   onPressTake: (take: Take) => void;
   onPressDuel: (duel: Duel) => void;
   onChallengePress?: (take: Take) => void;
+  onOpenAuthorProfile?: (wallet: string | null) => void;
 }
 
-// Timeline row: avatar, identity, text, inline actions. No card chrome;
+// Timeline row: shared identity header, text, inline actions. No card chrome;
 // separation comes from the list divider. Duel state rides as one compact
 // attachment so scrolling keeps a stable rhythm.
 export const SocialPostCard: React.FC<SocialPostCardProps> = ({
@@ -34,6 +34,7 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
   onPressTake,
   onPressDuel,
   onChallengePress,
+  onOpenAuthorProfile,
 }) => {
   const { type, take, duel } = item;
 
@@ -46,7 +47,6 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
     handle: take.author_handle,
     wallet: take.author_wallet,
   });
-  const avatarUri = getAvatarUri(take.author_avatar, take.author_wallet);
 
   const shareTake = async () => {
     try {
@@ -79,19 +79,15 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
         activeOpacity={0.9}
         accessibilityLabel={`Open take by ${authorDisplayName}`}
       >
-        <View style={styles.header}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          <View style={styles.identity}>
-            <Text style={styles.displayName} numberOfLines={1}>
-              {authorDisplayName}
-            </Text>
-            <Text style={styles.meta} numberOfLines={1}>
-              {authorHandle ? `${authorHandle} · ` : ''}
-              {formatRelativeTime(take.created_at)}
-              {take.category ? ` · ${take.category.toLowerCase()}` : ''}
-            </Text>
-          </View>
-        </View>
+        <IdentityHeader
+          displayName={take.author_name}
+          handle={take.author_handle}
+          wallet={take.author_wallet}
+          avatarUrl={take.author_avatar}
+          timestamp={take.created_at}
+          category={take.category}
+          onPress={onOpenAuthorProfile ? () => onOpenAuthorProfile(take.author_wallet) : undefined}
+        />
         <Text style={styles.topic}>{take.topic}</Text>
         <Text style={styles.content}>{take.content}</Text>
       </TouchableOpacity>
@@ -154,21 +150,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-    minHeight: touchMin,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceLight,
-  },
-  identity: { flex: 1, marginLeft: spacing.sm },
-  displayName: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 15 },
-  meta: { ...typography.caption, color: colors.textMuted, fontSize: 12, marginTop: 1 },
   topic: { ...typography.h3, color: colors.textPrimary, fontSize: 15, marginBottom: 2, marginLeft: 52 },
   content: {
     ...typography.body,

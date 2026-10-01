@@ -15,8 +15,10 @@ interface FeedScreenProps {
   onChallengePress?: (take: Take) => void;
   onCreateTakePress?: () => void;
   onOpenProfile?: () => void;
+  onOpenAuthorProfile?: (wallet: string | null) => void;
   userWallet?: string | null;
   refreshSignal?: number;
+  focusSignal?: number;
 }
 
 // One timeline, chronological. Category strip filters on the real backend
@@ -27,8 +29,10 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   onChallengePress,
   onCreateTakePress,
   onOpenProfile,
+  onOpenAuthorProfile,
   userWallet,
   refreshSignal,
+  focusSignal,
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
@@ -78,6 +82,17 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
       loadData();
     }
   }, [refreshSignal, loadData]);
+
+  // Tabs stay mounted for scroll preservation; reload when the tab regains
+  // focus so returning Home never shows a stale timeline.
+  const lastFocusRef = React.useRef(focusSignal);
+  useEffect(() => {
+    if (focusSignal !== undefined && focusSignal !== lastFocusRef.current) {
+      lastFocusRef.current = focusSignal;
+      setRefreshing(true);
+      loadData();
+    }
+  }, [focusSignal, loadData]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -174,6 +189,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
               onPressTake={onSelectTake}
               onPressDuel={onSelectDuel}
               onChallengePress={onChallengePress}
+              onOpenAuthorProfile={onOpenAuthorProfile}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -249,9 +265,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   separator: {
-    height: 1,
-    backgroundColor: colors.cardBorder,
-    marginLeft: 68,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
   },
   listContent: {
     paddingBottom: 96,

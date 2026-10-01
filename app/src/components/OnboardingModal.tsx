@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Image,
+  ScrollView,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { ConnectionHelp } from './ConnectionHelp';
 import { WalletConnectionStatus } from '../wallet';
 import { api } from '../api';
+import { getAvatarUri } from '../utils/identity';
 
 interface OnboardingModalProps {
   visible: boolean;
@@ -58,41 +62,140 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [step, setStep] = useState<1 | 2>(1);
   const [displayName, setDisplayName] = useState('');
   const [handle, setHandle] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
+  const [avatarMime, setAvatarMime] = useState<string>('image/jpeg');
   const [saving, setSaving] = useState(false);
+  const [savePhase, setSavePhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const submittedRef = useRef(false);
 
   const busy = BUSY_LABEL[connectionStatus] !== undefined;
   const failed = isFailure(connectionStatus);
 
-  const handleSaveProfile = async () => {
-    if (!wallet) {
-      setError('Connect your wallet first.');
-      return;
-    }
-    if (!displayName.trim()) {
+  // Canonical persist: draft -> authenticated PUT -> avatar upload ->
+  // fresh GET verify -> session state -> close. Never closes on silent loss.
+  const persistDraft = async () => {
+    if (!wallet || saving) return;
+    const name = displayName.trim();
+    if (!name) {
       setError('Enter a display name.');
       return;
     }
+    setSaving(true);
+    setError(null);
     try {
-      setSaving(true);
-      setError(null);
+      setSavePhase('Saving your profile.');
       await api.updateProfile({
-        display_name: displayName.trim(),
-        handle: handle.trim().replace(/^@/, ''),
+        display_name: name,
+        handle: handle.trim(),
+        bio: bio.trim(),
       });
+      if (avatarBase64) {
+        setSavePhase('Uploading your photo.');
+        try {
+          await api.uploadAvatar(`data:${avatarMime};base64,${avatarBase64}`);
+        } catch (avatarErr: any) {
+          // Textual profile saved; photo did not. Say so exactly, stay open.
+          setError(
+            `Profile text saved, but the photo upload failed (${avatarErr?.message || 'upload error'}). You can retry or finish without a photo.`
+          );
+          setSavePhase(null);
+          setSaving(false);
+          return;
+        }
+      }
+      setSavePhase('Confirming your profile.');
+      const fresh: any = await api.getUserProfile(wallet);
+      const u = fresh?.user || fresh;
+      const mismatch =
+        !u ||
+        (u.display_name || '').trim() !== name ||
+        (handle.trim() && (u.handle || '').toLowerCase() !== handle.trim().replace(/^@/, '').toLowerCase());
+      if (mismatch) {
+        setError('Saved, but the confirmed profile looks different. Retry to make sure.');
+        setSavePhase(null);
+        setSaving(false);
+        return;
+      }
       if (onProfileUpdated) onProfileUpdated();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Could not save profile.');
+      setError(err?.message || 'Could not save profile.');
     } finally {
+      setSavePhase(null);
       setSaving(false);
     }
+  };
+
+  // Auto-submit the draft once authentication lands. The modal stays open
+  // (App no longer dismisses it on connect) until persistence is verified.
+  useEffect(() => {
+    if (
+      visible &&
+      step === 2 &&
+      wallet &&
+      !busy &&
+      !failed &&
+      !submittedRef.current &&
+      displayName.trim()
+    ) {
+      submittedRef.current = true;
+      persistDraft();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, step, wallet, busy, failed]);
+
+  useEffect(() => {
+    if (!visible) {
+      submittedRef.current = false;
+      setSavePhase(null);
+    }
+  }, [visible]);
+
+  const pickPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setError('Photo access was denied. Allow access to choose a profile picture.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        setError('Could not read that photo. Try another one.');
+        return;
+      }
+      const lower = (asset.uri || '').toLowerCase();
+      setAvatarMime(
+        lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+      );
+      setAvatarPreview(asset.uri);
+      setAvatarBase64(asset.base64);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.message || 'Could not open the photo picker.');
+    }
+  };
+
+  const handleManualSave = () => {
+    submittedRef.current = true;
+    persistDraft();
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
         <View style={styles.container}>
+          <ScrollView showsVerticalScrollIndicator={false}>
           {step === 1 ? (
             <View style={styles.stepContent}>
               <View style={styles.iconCircle}>
@@ -151,7 +254,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <View style={styles.stepContent}>
               <Text style={styles.title}>Set up your profile</Text>
               <Text style={styles.lead}>
-                Choose how others see you when your takes get challenged.
+                This becomes your Counter identity. It saves only after your wallet connects.
               </Text>
 
               {error && (
@@ -159,6 +262,25 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
+
+              <TouchableOpacity
+                style={styles.avatarRow}
+                onPress={pickPhoto}
+                activeOpacity={0.8}
+                accessibilityLabel={avatarPreview ? 'Change profile photo' : 'Choose profile photo'}
+                accessibilityRole="button"
+              >
+                <Image
+                  source={{ uri: avatarPreview || getAvatarUri(null, wallet) }}
+                  style={styles.avatar}
+                />
+                <View style={styles.avatarTextCol}>
+                  <Text style={styles.avatarAction}>
+                    {avatarPreview ? 'Change photo' : 'Choose photo (optional)'}
+                  </Text>
+                  <Text style={styles.avatarHint}>Square crop. Stored on Counter, shown everywhere.</Text>
+                </View>
+              </TouchableOpacity>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Display name</Text>
@@ -185,6 +307,19 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 />
               </View>
 
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Bio (optional)</Text>
+                <TextInput
+                  style={[styles.input, styles.bioInput]}
+                  placeholder="A line about you"
+                  placeholderTextColor={colors.textMuted}
+                  value={bio}
+                  onChangeText={setBio}
+                  multiline
+                  accessibilityLabel="Bio"
+                />
+              </View>
+
               {busy ? (
                 <View style={styles.statusBox}>
                   <ActivityIndicator size="large" color={colors.brandPrimary} />
@@ -193,6 +328,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 </View>
               ) : failed ? (
                 <ConnectionHelp status={connectionStatus} detail={connectionError} onRetry={onConnectWallet} />
+              ) : saving ? (
+                <View style={styles.statusBox}>
+                  <ActivityIndicator size="large" color={colors.brandPrimary} />
+                  <Text style={styles.statusTitle}>{savePhase || 'Saving your profile.'}</Text>
+                  <Text style={styles.statusBody}>Do not close yet. Your words and photo are being stored.</Text>
+                </View>
               ) : !wallet ? (
                 <TouchableOpacity
                   style={[styles.primaryButton, { backgroundColor: colors.brandSecondary }]}
@@ -209,20 +350,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               ) : (
                 <TouchableOpacity
                   style={styles.primaryButton}
-                  onPress={handleSaveProfile}
-                  disabled={saving}
+                  onPress={handleManualSave}
                   activeOpacity={0.8}
-                  accessibilityLabel="Finish setup"
+                  accessibilityLabel="Save profile and finish"
                   accessibilityRole="button"
                 >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#000000" />
-                  ) : (
-                    <>
-                      <Text style={styles.primaryButtonText}>Finish setup</Text>
-                      <Icon name="check" size={16} color="#000000" />
-                    </>
-                  )}
+                  <Text style={styles.primaryButtonText}>Save and finish</Text>
+                  <Icon name="check" size={16} color="#000000" />
                 </TouchableOpacity>
               )}
 
@@ -237,6 +371,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </TouchableOpacity>
             </View>
           )}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -253,6 +388,7 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '100%',
+    maxHeight: '92%',
     backgroundColor: colors.card,
     borderRadius: borderRadius.xl,
     padding: spacing.xl,
@@ -304,6 +440,23 @@ const styles = StyleSheet.create({
   primaryButtonText: { ...typography.bodyBold, color: '#000000' },
   skipButton: { marginTop: spacing.sm, minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.lg },
   skipText: { ...typography.caption, color: colors.textMuted, fontSize: 13 },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    width: '100%',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    minHeight: touchMin + 24,
+  },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surfaceHighlight },
+  avatarTextCol: { flex: 1 },
+  avatarAction: { ...typography.bodyBold, color: colors.brandPrimary, fontSize: 14 },
+  avatarHint: { ...typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: 2, lineHeight: 16 },
   inputGroup: { width: '100%', marginBottom: spacing.md },
   label: { ...typography.captionBold, color: colors.textSecondary, marginBottom: spacing.xs, fontSize: 13 },
   input: {
@@ -316,6 +469,7 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     fontSize: 15,
   },
+  bioInput: { minHeight: 76, paddingVertical: spacing.sm, textAlignVertical: 'top' },
   errorBox: {
     backgroundColor: 'rgba(255, 71, 87, 0.1)',
     borderRadius: borderRadius.sm,

@@ -20,21 +20,32 @@ import { EditProfileSheet } from '../components/EditProfileSheet';
 
 interface ProfileScreenProps {
   wallet: string | null;
+  ownWallet?: string | null;
+  onBack?: () => void;
   onDisconnect: () => void;
   onSelectTake?: (take: Take) => void;
   onSelectDuel?: (duel: Duel) => void;
   onSelectReceipt?: (receipt: Receipt) => void;
+  onProfileSaved?: () => void;
+  focusSignal?: number;
 }
 
 type ProfileTab = 'TAKES' | 'DUELS' | 'RECEIPTS';
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   wallet,
+  ownWallet,
+  onBack,
   onDisconnect,
   onSelectTake,
   onSelectDuel,
   onSelectReceipt,
+  onProfileSaved,
+  focusSignal,
 }) => {
+  // Other people's profiles are read-only: no edit, no completion nudge,
+  // no disconnect. Ownership is wallet equality, never a name/handle.
+  const isOwn = !!wallet && !!ownWallet && wallet === ownWallet;
   const [user, setUser] = useState<User | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -45,6 +56,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [savedNotice, setSavedNotice] = useState(false);
 
   const loadProfile = async () => {
     if (!wallet) return;
@@ -78,6 +90,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   useEffect(() => {
     loadProfile();
   }, [wallet]);
+
+  // Tabs stay mounted for scroll preservation; reload when regaining focus.
+  const lastFocusRef = React.useRef(focusSignal);
+  useEffect(() => {
+    if (focusSignal !== undefined && focusSignal !== lastFocusRef.current) {
+      lastFocusRef.current = focusSignal;
+      setLoading(true);
+      loadProfile();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSignal, wallet]);
 
   if (!wallet) {
     return (
@@ -172,6 +195,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {onBack && (
+        <View style={styles.backRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={onBack}
+            activeOpacity={0.8}
+            accessibilityLabel="Back"
+            accessibilityRole="button"
+          >
+            <Icon name="chevron-left" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      )}
       {/* 1. Person First Header */}
       <View style={styles.profileHeader}>
         <Image source={{ uri: avatarUri }} style={styles.avatar} />
@@ -186,18 +222,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         </View>
         {handle ? <Text style={styles.handle}>{handle}</Text> : null}
         {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
-        <TouchableOpacity
-          style={styles.editBtn}
-          onPress={() => setEditing(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Edit profile"
-          accessibilityRole="button"
-        >
-          <Text style={styles.editBtnText}>Edit profile</Text>
-        </TouchableOpacity>
+        {isOwn && (
+          <TouchableOpacity
+            style={styles.editBtn}
+            onPress={() => setEditing(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Edit profile"
+            accessibilityRole="button"
+          >
+            <Text style={styles.editBtnText}>Edit profile</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {!profileComplete && (
+      {isOwn && !profileComplete && (
         <View style={styles.completeCard}>
           <View style={styles.completeTextCol}>
             <Text style={styles.completeTitle}>Finish your profile</Text>
@@ -387,26 +425,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       <View style={styles.accountCard}>
         <Text style={styles.cardHeaderTitle}>Account</Text>
 
-        <View style={styles.accountRow}>
-          <Text style={styles.accountKey}>Wallet Address</Text>
-          <View style={styles.walletCopyRow}>
-            <Text style={styles.accountValMono}>{formatWalletShort(wallet)}</Text>
-            <TouchableOpacity
-              onPress={async () => {
-                if (wallet) {
-                  await Clipboard.setStringAsync(wallet);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }
-              }}
-              style={styles.copyBtn}
-              accessibilityLabel="Copy wallet address"
-              accessibilityRole="button"
-            >
-              <Icon name={copied ? 'check' : 'copy'} size={16} color={copied ? colors.brandPrimary : colors.textSecondary} />
-            </TouchableOpacity>
+        {isOwn && (
+          <View style={styles.accountRow}>
+            <Text style={styles.accountKey}>Wallet Address</Text>
+            <View style={styles.walletCopyRow}>
+              <Text style={styles.accountValMono}>{formatWalletShort(wallet)}</Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (wallet) {
+                    await Clipboard.setStringAsync(wallet);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }
+                }}
+                style={styles.copyBtn}
+                accessibilityLabel="Copy wallet address"
+                accessibilityRole="button"
+              >
+                <Icon name={copied ? 'check' : 'copy'} size={16} color={copied ? colors.brandPrimary : colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.accountRow}>
           <Text style={styles.accountKey}>Arena Eligibility</Text>
@@ -420,28 +460,44 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <Text style={styles.accountVal}>Solana Devnet · test cUSD</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.disconnectBtn}
-          onPress={onDisconnect}
-          activeOpacity={0.8}
-          accessibilityLabel="Disconnect wallet"
-          accessibilityRole="button"
-        >
-          <Text style={styles.disconnectText}>Disconnect wallet</Text>
-        </TouchableOpacity>
+        {isOwn && (
+          <TouchableOpacity
+            style={styles.disconnectBtn}
+            onPress={onDisconnect}
+            activeOpacity={0.8}
+            accessibilityLabel="Disconnect wallet"
+            accessibilityRole="button"
+          >
+            <Text style={styles.disconnectText}>Disconnect wallet</Text>
+          </TouchableOpacity>
+        )}
+        {isOwn && (
+          <Text style={styles.ownNote}>Signed in as this account on this device.</Text>
+        )}
       </View>
 
-      <EditProfileSheet
-        user={user}
-        wallet={wallet}
-        visible={editing}
-        onClose={() => setEditing(false)}
-        onSaved={() => {
-          setEditing(false);
-          setLoading(true);
-          loadProfile();
-        }}
-      />
+      {isOwn && (
+        <EditProfileSheet
+          user={user}
+          wallet={wallet}
+          visible={editing}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            setLoading(true);
+            setSavedNotice(true);
+            setTimeout(() => setSavedNotice(false), 4000);
+            loadProfile();
+            if (onProfileSaved) onProfileSaved();
+          }}
+        />
+      )}
+      {savedNotice && (
+        <View style={styles.savedBanner}>
+          <Icon name="check" size={14} color={colors.success} />
+          <Text style={styles.savedBannerText}>Profile saved everywhere.</Text>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -672,6 +728,17 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '600',
   },
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  backBtn: {
+    minHeight: touchMin,
+    minWidth: touchMin,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
   tabsBar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -799,5 +866,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.danger,
+  },
+  ownNote: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  savedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.success,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  savedBannerText: {
+    ...typography.captionBold,
+    color: colors.success,
+    fontSize: 13,
   },
 });

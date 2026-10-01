@@ -6,6 +6,8 @@ export const colors = {
   surfaceHighlight: '#2A3040',
   card: '#181B24',
   cardBorder: '#262B3A',
+  // Hairline timeline separators (full-bleed, low contrast, no cards).
+  divider: '#2A3040',
 
   // Brand: one strong electric accent
   brandPrimary: '#14F195',

@@ -56,11 +56,14 @@ export default function App() {
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [feedRefresh, setFeedRefresh] = useState(0);
+  const [tabFocus, setTabFocus] = useState(0);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
   const [reviewChallenge, setReviewChallenge] = useState<Challenge | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  // Other-user profile viewing (overlay; own profile lives on the tab).
+  const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
 
   // Restore the securely stored session on cold start. The stored token is
   // validated against the backend; invalid/expired sessions are cleared and
@@ -133,6 +136,8 @@ export default function App() {
   const handleConnectWallet = async () => {
     // Failures never silently return to idle: the outcome status stays
     // visible (with retry/help) until the user succeeds or dismisses.
+    // On success the onboarding sheet stays open: it persists the typed
+    // profile draft itself and closes only after verified save.
     setConnectionError(null);
     setConnectionStatus('CONNECTING');
     const outcome = await connectAndAuthenticate((stage) => {
@@ -151,7 +156,6 @@ export default function App() {
       setWalletState(state);
       setConnectionStatus('CONNECTED');
       setConnectionError(null);
-      setShowOnboarding(false);
     } else {
       await clearSession(SecureSessionStorage);
       setWalletState(DISCONNECTED);
@@ -174,12 +178,19 @@ export default function App() {
     setSelectedReceipt(null);
     setShowComposer(false);
     setReviewChallenge(null);
+    setViewProfileWallet(null);
     setLinkNotice(null);
+  };
+
+  const openAuthorProfile = (w: string | null) => {
+    if (w) setViewProfileWallet(w);
   };
 
   const openTab = (tab: Tab) => {
     clearDetailViews();
     setCurrentTab(tab);
+    setTabFocus((n) => n + 1);
+    if (tab === 'HOME') setFeedRefresh((n) => n + 1);
   };
 
   return (
@@ -200,93 +211,127 @@ export default function App() {
             </TouchableOpacity>
           </View>
         ) : null}
-        {showComposer ? (
-          <CreateTakeScreen
-            onSuccess={() => {
-              setShowComposer(false);
-              setCurrentTab('HOME');
-              setFeedRefresh((n) => n + 1);
-            }}
-            onCancel={() => setShowComposer(false)}
-          />
-        ) : selectedDuelId ? (
-          <DuelDetailScreen
-            duelId={selectedDuelId}
-            userWallet={walletState.publicKey}
-            onBack={() => setSelectedDuelId(null)}
-            onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
-            isArenaEligible={walletState.isArenaEligible}
-            skrStakedAmount={walletState.skrStakedAmount}
-          />
-        ) : selectedTake ? (
-          <TakeDetailScreen
-            take={selectedTake}
-            onBack={() => setSelectedTake(null)}
-            onSelectDuel={(duel) => {
+        {/* Tabs stay mounted (display none) so scroll position and loaded
+            content survive detail navigation. */}
+        <View style={[styles.fill, currentTab === 'HOME' ? null : styles.hidden]}>
+          <FeedScreen
+            onSelectTake={(take: Take) => setSelectedTake(take)}
+            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onChallengePress={(take: Take) => setChallengeTargetTake(take)}
+            onCreateTakePress={() => {
               clearDetailViews();
-              setSelectedDuelId(duel.id);
+              setShowComposer(true);
             }}
-            onChallengeTake={(take) => setChallengeTargetTake(take)}
+            onOpenProfile={() => openTab('PROFILE')}
+            onOpenAuthorProfile={openAuthorProfile}
             userWallet={walletState.publicKey}
+            refreshSignal={feedRefresh}
+            focusSignal={tabFocus}
           />
-        ) : selectedReceipt ? (
-          <ReceiptScreen
-            receipt={selectedReceipt}
-            onBack={() => setSelectedReceipt(null)}
-            onViewDuel={(duelId) => {
-              clearDetailViews();
-              setSelectedDuelId(duelId);
+        </View>
+        <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
+          <DuelsScreen
+            userWallet={walletState.publicKey}
+            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            focusSignal={tabFocus}
+          />
+        </View>
+        <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
+          <ActivityScreen
+            onSelectNotification={(notif) => {
+              if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
+                setSelectedDuelId(notif.target_id.replace('receipt_', ''));
+              }
             }}
+            onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
+            focusSignal={tabFocus}
           />
-        ) : (
-          <>
-            {currentTab === 'HOME' && (
-              <FeedScreen
-                onSelectTake={(take: Take) => setSelectedTake(take)}
-                onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
-                onChallengePress={(take: Take) => setChallengeTargetTake(take)}
-                onCreateTakePress={() => {
-                  clearDetailViews();
-                  setShowComposer(true);
-                }}
-                onOpenProfile={() => openTab('PROFILE')}
-                userWallet={walletState.publicKey}
-                refreshSignal={feedRefresh}
-              />
-            )}
-
-            {currentTab === 'DUELS' && (
-              <DuelsScreen
-                userWallet={walletState.publicKey}
-                onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
-              />
-            )}
-
-            {currentTab === 'ACTIVITY' && (
-              <ActivityScreen
-                onSelectNotification={(notif) => {
-                  if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
-                    setSelectedDuelId(notif.target_id.replace('receipt_', ''));
-                  }
-                }}
-                onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
-              />
-            )}
-
-            {currentTab === 'PROFILE' && (
-              <ProfileScreen
-                wallet={walletState.publicKey}
-                onDisconnect={handleDisconnectWallet}
-                onSelectTake={(take: Take) => setSelectedTake(take)}
-                onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
-                onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
-              />
-            )}
-          </>
+        </View>
+        <View style={[styles.fill, currentTab === 'PROFILE' ? null : styles.hidden]}>
+          <ProfileScreen
+            wallet={walletState.publicKey}
+            ownWallet={walletState.publicKey}
+            onDisconnect={handleDisconnectWallet}
+            onSelectTake={(take: Take) => setSelectedTake(take)}
+            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
+            onProfileSaved={() => setFeedRefresh((n) => n + 1)}
+            focusSignal={tabFocus}
+          />
+        </View>
+        {showComposer && (
+          <View style={styles.overlay}>
+            <CreateTakeScreen
+              onSuccess={() => {
+                setShowComposer(false);
+                setCurrentTab('HOME');
+                setFeedRefresh((n) => n + 1);
+              }}
+              onCancel={() => setShowComposer(false)}
+            />
+          </View>
+        )}
+        {selectedTake && (
+          <View style={styles.overlay}>
+            <TakeDetailScreen
+              take={selectedTake}
+              onBack={() => setSelectedTake(null)}
+              onSelectDuel={(duel) => {
+                clearDetailViews();
+                setSelectedDuelId(duel.id);
+              }}
+              onChallengeTake={(take) => setChallengeTargetTake(take)}
+              onOpenAuthorProfile={openAuthorProfile}
+              userWallet={walletState.publicKey}
+            />
+          </View>
+        )}
+        {selectedDuelId && (
+          <View style={styles.overlay}>
+            <DuelDetailScreen
+              duelId={selectedDuelId}
+              userWallet={walletState.publicKey}
+              onBack={() => setSelectedDuelId(null)}
+              onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
+              isArenaEligible={walletState.isArenaEligible}
+              skrStakedAmount={walletState.skrStakedAmount}
+            />
+          </View>
+        )}
+        {selectedReceipt && (
+          <View style={styles.overlay}>
+            <ReceiptScreen
+              receipt={selectedReceipt}
+              onBack={() => setSelectedReceipt(null)}
+              onViewDuel={(duelId) => {
+                clearDetailViews();
+                setSelectedDuelId(duelId);
+              }}
+            />
+          </View>
+        )}
+        {viewProfileWallet && (
+          <View style={styles.overlay}>
+            <ProfileScreen
+              wallet={viewProfileWallet}
+              ownWallet={walletState.publicKey}
+              onBack={() => setViewProfileWallet(null)}
+              onDisconnect={handleDisconnectWallet}
+              onSelectTake={(take: Take) => {
+                clearDetailViews();
+                setSelectedTake(take);
+              }}
+              onSelectDuel={(duel: Duel) => {
+                clearDetailViews();
+                setSelectedDuelId(duel.id);
+              }}
+              onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
+            />
+          </View>
         )}
       </View>
 
-      {currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && (
+      {currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && !viewProfileWallet && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => {
@@ -317,6 +362,7 @@ export default function App() {
         onClose={() => setReviewChallenge(null)}
         onDecided={(duel) => {
           setReviewChallenge(null);
+          setTabFocus((n) => n + 1);
           if (duel) {
             clearDetailViews();
             setSelectedDuelId(duel.id);
@@ -331,6 +377,7 @@ export default function App() {
         connectionStatus={connectionStatus}
         connectionError={connectionError}
         onConnectWallet={handleConnectWallet}
+        onProfileUpdated={() => setFeedRefresh((n) => n + 1)}
       />
 
       <View style={styles.tabBar}>
@@ -369,6 +416,19 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  // Tab panes stay mounted so scroll position survives detail navigation;
+  // hidden panes keep state but paint nothing.
+  fill: {
+    flex: 1,
+  },
+  hidden: {
+    display: 'none',
+  },
+  // Detail views overlay the tabs without unmounting them.
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.background,
   },
   fab: {
     position: 'absolute',

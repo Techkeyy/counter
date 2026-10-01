@@ -16,6 +16,7 @@ import { Take, Comment, Duel } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { api } from '../api';
 import { Icon } from '../components/Icon';
+import { IdentityHeader } from '../components/IdentityHeader';
 import { DuelAttachment } from '../components/DuelAttachment';
 import {
   formatUserDisplayName,
@@ -28,6 +29,7 @@ interface TakeDetailScreenProps {
   onBack: () => void;
   onSelectDuel: (duel: Duel) => void;
   onChallengeTake: (take: Take) => void;
+  onOpenAuthorProfile?: (wallet: string | null) => void;
   userWallet?: string | null;
 }
 
@@ -36,6 +38,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   onBack,
   onSelectDuel,
   onChallengeTake,
+  onOpenAuthorProfile,
   userWallet,
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -44,15 +47,20 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   const [replyText, setReplyText] = useState('');
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Live take header: refetched on every thread load so a profile edit
+  // (name/handle/avatar) reflects here without recreating the Take.
+  const [liveTake, setLiveTake] = useState<Take>(take);
 
   const loadThread = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.getTake(take.id);
+      const res: any = await api.getTake(take.id);
       if (res) {
-        setComments(Array.isArray(res.comments) ? res.comments : []);
-        setDuels(Array.isArray(res.duels) ? res.duels : []);
+        const { comments: c, duels: d, ...takeFields } = res;
+        if (takeFields && takeFields.id) setLiveTake(takeFields as Take);
+        setComments(Array.isArray(c) ? c : []);
+        setDuels(Array.isArray(d) ? d : []);
       }
     } catch (err: any) {
       console.warn('Failed to load take thread:', err);
@@ -63,6 +71,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   };
 
   useEffect(() => {
+    setLiveTake(take);
     loadThread();
   }, [take.id]);
 
@@ -93,15 +102,14 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   };
 
   const authorDisplayName = formatUserDisplayName({
-    display_name: take.author_name,
-    handle: take.author_handle,
-    wallet: take.author_wallet,
+    display_name: liveTake.author_name,
+    handle: liveTake.author_handle,
+    wallet: liveTake.author_wallet,
   });
   const authorHandle = formatUserHandle({
-    handle: take.author_handle,
-    wallet: take.author_wallet,
+    handle: liveTake.author_handle,
+    wallet: liveTake.author_wallet,
   });
-  const avatarUri = getAvatarUri(take.author_avatar, take.author_wallet);
 
   return (
     <KeyboardAvoidingView
@@ -121,21 +129,22 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {/* Conversation head: the opinion first */}
-        <View style={styles.mainAuthorRow}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          <View style={styles.mainAuthorInfo}>
-            <Text style={styles.displayName}>{authorDisplayName}</Text>
-            {authorHandle ? <Text style={styles.handle}>{authorHandle}</Text> : null}
-          </View>
-        </View>
+        <IdentityHeader
+          displayName={liveTake.author_name}
+          handle={liveTake.author_handle}
+          wallet={liveTake.author_wallet}
+          avatarUrl={liveTake.author_avatar}
+          timestamp={liveTake.created_at}
+          onPress={onOpenAuthorProfile ? () => onOpenAuthorProfile(liveTake.author_wallet) : undefined}
+        />
 
-        <Text style={styles.topicText}>{take.topic}</Text>
-        <Text style={styles.contentText}>{take.content}</Text>
+        <Text style={styles.topicText}>{liveTake.topic}</Text>
+        <Text style={styles.contentText}>{liveTake.content}</Text>
 
         <View style={styles.metaRow}>
           <Text style={styles.timestamp}>
-            {new Date(take.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ·{' '}
-            {new Date(take.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+            {new Date(liveTake.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ·{' '}
+            {new Date(liveTake.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
           </Text>
           <TouchableOpacity
             onPress={handleShare}
@@ -150,7 +159,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
         {/* Secondary context action: challenge the opinion, not the money */}
         <TouchableOpacity
           style={styles.challengeRow}
-          onPress={() => onChallengeTake(take)}
+          onPress={() => onChallengeTake(liveTake)}
           activeOpacity={0.8}
           accessibilityLabel="Challenge this take to a 1v1 duel"
           accessibilityRole="button"
@@ -199,24 +208,30 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
               <View key={comment.id} style={styles.commentItem}>
                 <View style={styles.railCol}>
                   <Image
-                    source={{ uri: getAvatarUri(null, comment.author_wallet) }}
+                    source={{ uri: getAvatarUri(comment.author_avatar, comment.author_wallet) }}
                     style={styles.commentAvatar}
                   />
                   <View style={styles.rail} />
                 </View>
                 <View style={styles.commentBody}>
-                  <View style={styles.commentHeader}>
-                    <Text style={styles.commentAuthor}>
-                      {formatUserDisplayName({
-                        display_name: comment.author_name,
-                        handle: comment.author_handle,
-                        wallet: comment.author_wallet,
-                      })}
-                    </Text>
-                    <Text style={styles.commentTime}>
-                      {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
+                  <TouchableOpacity
+                    onPress={onOpenAuthorProfile ? () => onOpenAuthorProfile(comment.author_wallet) : undefined}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Open comment author profile"
+                  >
+                    <View style={styles.commentHeader}>
+                      <Text style={styles.commentAuthor}>
+                        {formatUserDisplayName({
+                          display_name: comment.author_name,
+                          handle: comment.author_handle,
+                          wallet: comment.author_wallet,
+                        })}
+                      </Text>
+                      <Text style={styles.commentTime}>
+                        {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                   <Text style={styles.commentText}>{comment.content}</Text>
                 </View>
               </View>

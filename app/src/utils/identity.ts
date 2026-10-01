@@ -1,3 +1,5 @@
+import { PRODUCTION_WEB_URL } from '../api';
+
 /**
  * Identity Utilities
  * Provides human-friendly display name, handle, avatar fallback, and wallet formatting.
@@ -62,6 +64,11 @@ export function formatUserHandle(user?: UserIdentityInput | null): string | null
 export function getAvatarUri(avatarUrl?: string | null, seed?: string | null): string {
   if (avatarUrl && avatarUrl.startsWith('http')) {
     return avatarUrl;
+  }
+  // Server-stored avatars are same-host relative paths (/api/...). A relative
+  // reference is a REAL persisted avatar and must resolve, never fall back.
+  if (avatarUrl && avatarUrl.startsWith('/')) {
+    return `${PRODUCTION_WEB_URL}${avatarUrl}`;
   }
   const effectiveSeed = seed || avatarUrl || 'counter-contender';
   return `https://api.dicebear.com/7.x/identicon/png?seed=${encodeURIComponent(effectiveSeed)}&backgroundColor=15171e`;
