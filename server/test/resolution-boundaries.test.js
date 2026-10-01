@@ -196,11 +196,15 @@ async function run() {
 
     // 12. SKR rule: zero stake denied; dead-RPC deterministic false
     const skr = require('../skr');
+    assert(skr.isStakeEligible(0) === false, 'zero SKR denied');
+    assert(skr.isStakeEligible(0.000001) === true, 'dust active stake eligible (any active stake)');
+    assert(skr.isStakeEligible(150) === true, 'real stake eligible');
+    assert(skr.isStakeEligible(NaN) === false, 'non-numeric denied');
     process.env.MAINNET_RPC = 'http://127.0.0.1:9';
     const z = await skr.querySkrStakedAmount(A.wallet);
     assert(z.isEligible === false && z.stakedAmountSkr === 0, 'unreachable/zero stake denies eligibility');
     delete process.env.MAINNET_RPC;
-    ok('zero/no SKR correctly denied under the rule');
+    ok('Seeker Arena rule: any active stake eligible, zero/none denied');
 
     // 13. reseed guard: no rows added when takes exist
     const seed = require('../seed');

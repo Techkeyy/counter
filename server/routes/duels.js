@@ -401,7 +401,7 @@ router.post('/:id/publish-arena', requireAuth, async (req, res) => {
   const skrRes = await querySkrStakedAmount(userWallet);
   if (!skrRes.isEligible) {
     return res.status(403).json({
-      error: 'Arena requires active SKR staking (> 0 SKR) on Solana Mainnet',
+      error: 'Seeker Arena requires active SKR staking (> 0 SKR) on Solana Mainnet',
       skrStake: skrRes.stakedAmountSkr,
       userStakePda: skrRes.userStakePda,
     });

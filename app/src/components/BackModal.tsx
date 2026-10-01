@@ -75,7 +75,7 @@ export const BackModal: React.FC<BackModalProps> = ({
     }
     setFunding(true);
     setError(null);
-    setStatus('Requesting Devnet test cUSD…');
+    setStatus('Requesting Counter Test USD from the Devnet faucet.');
     try {
       const res = await api.requestFaucet();
       if (res.tokenMint !== CUSD_MINT.toBase58()) {
@@ -101,7 +101,7 @@ export const BackModal: React.FC<BackModalProps> = ({
           `Faucet tx ${res.txSignature.slice(0, 8)}… confirmed but the balance refresh failed. Check the explorer link, then retry.`
         );
       }
-      setStatus(`Funded $${refreshed.toFixed(2)} Devnet test cUSD (no monetary value). You can deposit now.`);
+      setStatus(`Funded $${refreshed.toFixed(2)} Counter Test USD (Devnet, no monetary value). You can deposit now.`);
       setNeedsFunding(false);
     } catch (err: any) {
       const msg: string = err?.message || 'Faucet request failed';
@@ -159,8 +159,8 @@ export const BackModal: React.FC<BackModalProps> = ({
         setNeedsFunding(true);
         throw new Error(
           userAtaExists
-            ? `Insufficient test cUSD (have $${have}, need $${stakeUsd}). Use “Get test cUSD” below, then retry.`
-            : `No test cUSD yet (need $${stakeUsd}). Use “Get test cUSD” below, then retry.`
+            ? `Insufficient Counter Test USD (have $${have}, need $${stakeUsd}). Use the faucet button below, then retry.`
+            : `No Counter Test USD yet (need $${stakeUsd}). Use the faucet button below, then retry.`
         );
       }
       setNeedsFunding(false);
@@ -267,7 +267,7 @@ export const BackModal: React.FC<BackModalProps> = ({
               {funding ? (
                 <ActivityIndicator color="#000" />
               ) : (
-                <Text style={styles.faucetBtnText}>Get test cUSD (Devnet · no cash value)</Text>
+                <Text style={styles.faucetBtnText}>Get Counter Test USD (Devnet, no cash value)</Text>
               )}
             </TouchableOpacity>
           )}

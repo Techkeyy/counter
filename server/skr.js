@@ -7,6 +7,13 @@ const SKR_PROGRAM_ID = new PublicKey('SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94B
 const STAKE_CONFIG_PDA = new PublicKey('4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw');
 const GUARDIAN_POOL_PDA = new PublicKey('DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr');
 
+// Seeker Arena access rule (single definition): ANY active Mainnet stake
+// (> 0 SKR) verified against the official staking program. SKR grants access
+// and reputation only: never odds, winners, or custody.
+function isStakeEligible(stakedAmountSkr) {
+  return Number(stakedAmountSkr) > 0;
+}
+
 function deriveUserStakePda(userWalletPubkey) {
   const [userStakePda, bump] = PublicKey.findProgramAddressSync(
     [
@@ -50,7 +57,7 @@ async function querySkrStakedAmount(walletAddressString) {
     }
 
     const stakedAmountSkr = Number(shares) / 1e6; // SKR 6 decimals
-    const isEligible = stakedAmountSkr > 0;
+    const isEligible = isStakeEligible(stakedAmountSkr);
 
     return {
       wallet: walletAddressString,
@@ -73,4 +80,5 @@ async function querySkrStakedAmount(walletAddressString) {
 module.exports = {
   deriveUserStakePda,
   querySkrStakedAmount,
+  isStakeEligible,
 };
