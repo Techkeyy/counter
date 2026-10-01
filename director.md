@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — FINAL REMEDIATED UAT APK READY / OWNER INSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — SOCIAL UX / RETURNING USER / PORTFOLIO REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, clean and equal to `origin/master` after the accepted source and production-proof ledger commits  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `79164f9` (source/backend remediation; production alignment proof is recorded below)
-**Last Updated:** 2026-10-01T17:50:40Z
+**Authoritative Local Commit:** `7ff8845d64e00a316e8bf1660725f7ff67a58306` (product-polish remediation; production alignment and readback are recorded in §51)
+**Last Updated:** 2026-10-01T22:35:00Z
 
 ---
 
@@ -1803,3 +1803,157 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
 - Exactly one fresh APK is ready for owner installation:
   `app-release.apk` with SHA-256
   `65b19566a20a946f853c383d32fa8d47f8cc71dd96dc6630a3cb4d925ac825b0`.
+
+## 51. FINAL PRODUCT POLISH REMEDIATION — 2026-10-01
+
+> Physical UAT was deliberately interrupted for the locked social UX,
+> returning-user, disposable-content, and read-only portfolio pass. The
+> installed APK `65b19566...825b0` is superseded for final acceptance. No APK
+> was built in this phase, no Solana program/economics/resolution mechanics
+> changed, and economic UAT was not continued.
+
+### 51.A — Reconstruction and interrupted-UAT evidence
+
+- Starting `HEAD == origin/master == 6ce16717d38f0f46f31ee59f30b86909a63a11e2`;
+  starting worktree clean.
+- Interrupted physical-UAT evidence was preserved at the Git-ignored path
+  `app/android/app/build/uat-evidence-20261001/logcat.txt` (2,714,748 bytes).
+- The exact Samsung session had installed the authorized APK before this pass:
+  serial `R38M10L6J9V`, model `SM-G975U`, package `app.counter.mobile`,
+  version `1.0.0`, certificate
+  `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- No rebuild, reinstall, source reset, or physical/economic UAT was performed
+  after the product-polish handoff.
+
+### 51.B — Take versus reasoning UX
+
+- Composer now maps `topic` to **Your Take** with placeholder
+  `Arsenal wins the Premier League`.
+- `content` is now optional reasoning, labeled **Why? (optional)** with
+  placeholder `Squad depth and recent form give them the edge.`.
+- The backend accepts a topic-only Take and stores empty reasoning as an
+  empty string; existing rows remain compatible.
+- Home feed, Take detail, Profile Takes, and Challenge context render the Take
+  as the larger/bolder proposition. Non-empty reasoning is smaller/lighter and
+  prefixed `Why:`. Empty reasoning is omitted. Existing category, timestamps,
+  Challenge action, and divider rhythm remain intact.
+- Challenge Side A now starts from the actual Take/topic, not the optional
+  reasoning field.
+
+### 51.C — Returning-user flow and canonical detection
+
+- `app/src/session.ts` exports the single canonical gate
+  `hasCompleteCounterProfile`: the authenticated profile must contain both a
+  real `display_name` and real `handle`; generated `user_...` placeholders do
+  not count.
+- Cold session restore reads the canonical profile and returns
+  `needsProfileSetup`; complete profiles enter Counter directly, while new or
+  incomplete wallets remain in profile setup.
+- Successful wallet authentication now performs a fresh canonical profile
+  read before deciding whether to close onboarding. No wallet address, cache,
+  or fabricated social identity can skip setup.
+- Onboarding copy now leads with `Connect wallet` and tells returning users
+  they continue with their existing Counter profile. New/incomplete users are
+  moved directly to `Set up your Counter profile` after wallet recognition.
+- Session regression covers complete-profile bypass and placeholder-profile
+  setup; all 5 session cases pass.
+
+### 51.D — Exact disposable production cleanup
+
+- Before mutation, production DB backup was created and verified:
+  `/opt/counter/backups/counter-product-polish-pre-cleanup-20261001222817.sqlite`;
+  `184320` bytes;
+  SHA-256 `88c47722180304f04112edda9f4cf323875dd3345378eb506dd030e0cfcb7bf7`.
+- Pre-cleanup counts: `users=6, takes=6, comments=1, challenges=3,
+  duels=0, positions=0, receipts=0`.
+- Exact provenance target identified by known verification markers and
+  `record_origin`: Take
+  `take_1790868977458_86c67821`, wallet
+  `DiQ6puu8oTjP4XSc3RYJevLYEpVwTFSUxDG4dRyPm8iK`, topic
+  `Identity readback 1790868977406_55852`, content
+  `Disposable production identity readback.`, labeled probe profile
+  `uat_0868977406` / `UAT Disposable 1790868977406_55852`.
+- Cleanup action was exactly one soft-delete: target status `ACTIVE → DELETED`.
+  No pending challenge was attached (`0` cancelled); no user row, genuine
+  Take, comment, Duel, position, or receipt was removed. Existing deleted
+  probe Takes and the already-cancelled probe challenge remain for auditability.
+- Post-readback: health `200/ok`; visible feed Takes `2`; probe-visible rows
+  `0`; genuine owner `iszee23` rows visible `2`; target detail `404`; DB counts
+  remained `users=6, takes=6, comments=1, challenges=3, duels=0, positions=0,
+  receipts=0`; target row remains present with `status=DELETED`.
+
+### 51.E — Portfolio / positions architecture
+
+- Added authenticated `GET /api/users/portfolio`; it derives the wallet only
+  from the verified bearer token and returns no public wallet-parameter variant.
+- `server/chain.js:getCusdBalance` reads the connected wallet's complete
+  balance from authoritative Devnet cUSD token accounts for the fixed mint.
+- `server/portfolio.js` aggregates existing verified `positions` joined to
+  `duels`; no custodial balance, deposit account, duplicate economic table, or
+  new bottom-nav tab was introduced.
+- `ProfileScreen` renders a compact `PortfolioSummary` with Open, Claimable,
+  and History views, `Get test funds` through the existing faucet path, and
+  explicit `Counter Test USD · Devnet · no cash value` copy. Position rows open
+  their existing Duel detail; claim execution remains the normal wallet path.
+- Definitions are deterministic:
+  - **Available balance:** sum of the connected wallet's actual cUSD token
+    accounts for the authoritative mint.
+  - **Active in Duels:** sum of verified position principal for unresolved
+    duels only.
+  - **Claimable:** unresolved-in-DB positions are excluded; resolved winners
+    use the accepted integer program formula `stake + floor(stake × opposing
+    pool / winning pool)` and cancelled positions return principal.
+  - **Realized P&L:** recorded chain-observed payout amount minus stake for
+    claimed positions. `positions.payout_amount` is populated only after a
+    verified claim transaction; legacy claimed rows without it show an honest
+    unavailable value instead of a guess.
+- Added `positions.payout_amount` as a compatibility column; no new table or
+  program/economic mechanic was introduced.
+
+### 51.F — Backend deployment/readback and changed files
+
+- Only these Counter backend files were deployed to `/opt/counter/server`:
+  `db.js`, `chain.js`, `portfolio.js`, `seed.js`, `routes/users.js`,
+  `routes/takes.js`, and `routes/duels.js`.
+- Local/VPS hashes matched for every deployed file. Only
+  `counter-backend.service` was stopped/restarted; Caddy, program, mint,
+  signing infrastructure, and unrelated services were untouched.
+- Post-deploy health was `200/ok`; the portfolio route is private and returned
+  `401` without authentication.
+- Mobile files changed are `App.tsx`, `session.ts`, `api.ts`, `types.ts`,
+  `OnboardingModal.tsx`, `CreateTakeScreen.tsx`, `SocialPostCard.tsx`,
+  `TakeDetailScreen.tsx`, `ChallengeModal.tsx`, `ProfileScreen.tsx`,
+  `PortfolioSummary.tsx`, `wallet.ts`, and the identity/session test coverage.
+
+### 51.G — Focused and full regression
+
+- TypeScript no-emit: passed, exit `0`.
+- Session persistence: `5/5`.
+- Profile boundaries: passed.
+- Take identity/deletion: passed.
+- Chain vectors: `11/11`.
+- Resolution boundaries: passed; unavailable external-oracle outcomes remain
+  honest and were not converted to fake success.
+- Backend adversarial: `8/8`.
+- New portfolio tests: passed, including integer payout formula, active vs
+  claimable/history separation, and no guessed P&L for legacy claims.
+- Backend syntax checks: passed.
+- New-code secret/mock scan: `0` hits. A pre-existing JWT fallback literal
+  remains in `server/auth.js` and was not altered in this locked product pass;
+  production uses its configured JWT secret. It is recorded here rather than
+  reported as a false zero.
+
+### 51.H — Commits and release boundary
+
+- Source commit: `7ff8845d64e00a316e8bf1660725f7ff67a58306`
+  (`feat(product): clarify takes and add read-only portfolio`).
+- The attempted push to `origin/master` was not authorized by the external
+  write boundary, so `origin/master` remains at
+  `6ce16717d38f0f46f31ee59f30b86909a63a11e2` until the owner explicitly
+  authorizes that repository push.
+- No APK was built. The installed APK
+  `65b19566a20a946f853c383d32fa8d47f8cc71dd96dc6630a3cb4d925ac825b0` is
+  superseded for final acceptance.
+- Target status: **`BUILDING — SOCIAL UX / RETURNING USER / PORTFOLIO REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`**.
+- Not claimed: physical UAT passed, Core Outcome passed, RC, ready, or
+  submission ready.
