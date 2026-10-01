@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — IDENTITY BOUNDARY + TAKE DELETION REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — IDENTITY/DELETE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`, clean with local source-only commits ahead of `origin/master`; not pushed  
+**Repository State:** On branch `master`, clean and equal to `origin/master` after the accepted source and production-proof ledger commits  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `8717d21` (source/backend remediation; this ledger entry follows)
-**Last Updated:** 2026-10-01T13:00:00Z
+**Authoritative Local Commit:** `79164f9` (source/backend remediation; production alignment proof is recorded below)
+**Last Updated:** 2026-10-01T15:40:00Z
 
 ---
 
@@ -1660,11 +1660,56 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
 - Commits: `8717d21` (`fix(identity): verify canonical profiles and gate take deletion`)
   and `065f57f` (`test(identity): preserve Duel references on Take delete`).
 
-### 49.E — Explicit non-proofs and remaining gates
-- No production deployment or production readback was performed in this
-  phase. The production backend still requires a Director-authorized deploy
-  and readback of the source changes before the identity claim can become
-  PROVEN.
-- The source is not a release candidate and physical Android acceptance is
-  still required on a fresh rebuild. Economic, Solana-program, mint,
-  resolver, and resolution mechanics were not changed.
+### 49.E — Production alignment proof (Director gates 0–7)
+- **Gate 0 / source delivery:** The accepted five-commit range
+  `8717d21..79164f9` was pushed to `origin/master`. Final local proof is
+  `HEAD == origin/master == 79164f9f67eacc3a8de1efc88e8ba2e6eb497f8a` and
+  `git status --porcelain` is empty.
+- **Gate 1 / rollback:** Before deployment, the live database was copied to
+  `/opt/counter/backups/counter-identity-delete-20261001152000.sqlite`.
+  Backup and pre-deploy live bytes were `184320`; backup SHA-256 was
+  `aea01fad5110731c80aef59111766ea80fe76c056e687da7af80405b23e37e5a`.
+  The backup was opened successfully with the installed SQL.js runtime.
+  Pre-deploy counts were `users=1, takes=2, comments=1, challenges=1,
+  duels=0, positions=0, receipts=0`.
+- **Gate 2 / scoped deploy:** Only `/opt/counter/server/db.js`,
+  `/opt/counter/server/routes/takes.js`, and
+  `/opt/counter/server/routes/challenges.js` were aligned to local source;
+  no app files, program/mint configuration, Caddy, unrelated services, or
+  seed path were changed. Only `counter-backend.service` was restarted.
+  The pre-existing dirty production checkout was not cleaned or reset.
+- **Gate 3 / runtime:** `counter-backend.service` is `active` on
+  `PORT=8795`; `/api/health` returned `status=ok`. Runtime configuration
+  still uses program `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`, Devnet
+  cUSD mint `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC`, and database
+  `/opt/counter/server/data/counter.sqlite`. Final counts were
+  `users=6, takes=6, comments=1, challenges=3, duels=0, positions=0,
+  receipts=0`; the delta is disposable authenticated probe data, not seed
+  reseeding, and no Duel was formed.
+- **Gates 4–6 / production readback:** Two fresh authenticated disposable
+  wallets verified profile PUT/GET equality for `display_name`, normalized
+  `handle`, and `bio`; the same canonical name/handle appeared in feed and
+  detail with the unchanged Take ID. A non-author delete returned `403`; an
+  author delete returned `200`; the Take disappeared from feed and detail
+  returned `404`. A pending challenge was atomically cancelled on Take
+  deletion and hidden from both actionable inboxes. No accepted challenge,
+  formed Duel, staking, program, mint, or settlement action was performed.
+- **Gate 7 / exact source match:** Final production SHA-256 values were
+  `db.js=b332657679f5aadf4cd2faf3f0268c9b20341550da2a512f4a81677cba246a33`,
+  `routes/takes.js=1ecf2adc30c0305c15bbe4f5c46af9ceb16acf0dca18320a0c5ad24c7f39161b`,
+  and
+  `routes/challenges.js=80f1161d23610c2dcad3c7d1027fe1697e48f11a6bdbc34d3cb40d563073a8fe`,
+  exactly matching local source.
+- The production probe left two disposable authenticated users and their
+  audit-preserving test rows in place because there is no safe user-delete
+  endpoint. They are explicitly labeled by generated wallets/handles and
+  include soft-deleted probe Takes plus cancelled pending challenges; no
+  production owner profile was mutated.
+
+### 49.F — Release boundary after production alignment
+- The source/backend remediation is now production-aligned and the identity /
+  deletion claim is PROVEN within the exercised boundaries. A fresh APK build
+  is authorized; APK build, install, and physical Android acceptance were not
+  performed in this phase and remain the next release gates.
+- Economic, Solana-program, mint, resolver, and settlement mechanics were not
+  changed by this remediation or deployment.
