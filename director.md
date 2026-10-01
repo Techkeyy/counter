@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — PROGRAM HARDENED / DIRECTOR FREEZE REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — FINAL UAT APK READY / OWNER INSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `3872057` (+ this ledger: program hardening, commit pending; next APK binds fresh packaged source — see §45)
+**Authoritative Local Commit:** `0b5255a` (+ this ledger: freeze UAT artifact, commit pending; packaged app source `0b5255a` — see §46) (+ this ledger: program hardening, commit pending; next APK binds fresh packaged source — see §45)
 **Last Updated:** 2026-10-01T06:45:00Z
 
 ---
@@ -1476,3 +1476,41 @@ origin/master, clean tree.
   behavior-additive for open duels).
 - Commits: `3872057` program fix + this ledger; pushed, HEAD == origin/master,
   clean tree. No APK (per directive); next freeze build rebinds.
+
+## 46. FREEZE UAT ARTIFACT — 2026-10-01 (Builder, freeze-authorized)
+
+> Frozen source `0b5255a`, production aligned, regression green, one release
+> APK built with the SAME rotated key. Status:
+> **`BUILDING — FINAL UAT APK READY / OWNER INSTALL REQUIRED`**.
+> No secret in ledger/Git/logs/report. No UAT/RC/submission claims.
+
+### 46.A — Freeze + production alignment (Gates 0-1)
+- HEAD == origin/master == `0b5255a`, clean tree at build time.
+- Production: health 200 (program exact); `server/chain.js` with 109/110
+  mappings deployed via proven single-file method (hash-verified, loads OK);
+  ONLY `counter-backend` restarted (clean boot, no reseed); mutual-vote and
+  avatar routes live; owner take/comment/challenge preserved and readable;
+  mode columns present; no synthetic resurrection. Caddy/unrelated untouched.
+
+### 46.B — Final regression (Gate 2, frozen source)
+- tsc 0 · sessions 5/5 · vectors 11/11 · resolution 14/14 · profile 8/8 ·
+  adversarial 8/8 · emoji 0 · dashes 0 · fixture/mock/secret scans 0.
+  No test production rows (suites are local + self-cleaning).
+
+### 46.C — Build incident + artifact (Gates 3-5)
+- First attempt failed on a STALE Gradle transforms-cache lock
+  (`Could not move temporary workspace`, environmental — no source cause).
+  Removed only the stale entry, rebuilt: BUILD SUCCESSFUL, exit 0.
+- APK `app/android/app/build/outputs/apk/release/app-release.apk`:
+  **62,502,435 bytes**,
+  SHA-256 **`EB158FE5E183AC75F65DD48C88958E7E2476DEBDF078AE5CA74F73767CE446A5`**,
+  package `app.counter.mobile` v1/1.0.0,
+  cert `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- Bundle (2,554,708 B): backend/mint/program 1× each; zero mock/secret hits;
+  localhost profile unchanged. Merged manifest: duel+receipt custom hosts,
+  production `/d`+`/r` autoVerify, zero `counter.app`. Live assetlinks 200
+  with package + current cert.
+
+> This exact APK (SHA-256 `EB158FE5…46A5`, cert `a11be643…d7827`, package
+> `app.counter.mobile`) built from `0b5255a` is the ONLY APK authorized for
+> owner install and physical UAT. All previous hashes are SUPERSEDED.
