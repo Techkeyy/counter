@@ -11,7 +11,7 @@ const path = require('path');
 const nacl = require('tweetnacl');
 const bs58Module = require('bs58');
 const bs58 = bs58Module.default || bs58Module;
-const { getDb, queryOne, execute, saveDb } = require('../db');
+const { getDb, queryAll, queryOne, execute, saveDb } = require('../db');
 const auth = require('../auth');
 const profile = require('../profile');
 
@@ -112,6 +112,87 @@ async function run() {
     const reread = queryOne(`SELECT display_name FROM users WHERE wallet_address = ?`, [walletA]);
     assert(reread && reread.display_name === 'Ada Persisted', 'profile persists through saveDb + reread');
     ok('profile persists after backend save + reread');
+
+    // 11. onboarding sequence: draft fields persist through canonical writes,
+    // canonical reread matches, avatar included
+    profile.updateProfile(walletA, { displayName: 'Onboard Ori', handle: 'onboardori', bio: 'Fresh contender.' });
+    r = profile.setAvatar(walletA, TINY_PNG, tmpDir);
+    assert(r.ok, 'onboarding avatar upload succeeds');
+    const canon = queryOne(`SELECT display_name, handle, bio, avatar_url FROM users WHERE wallet_address = ?`, [walletA]);
+    assert(
+      canon.display_name === 'Onboard Ori' &&
+      canon.handle === 'onboardori' &&
+      canon.bio === 'Fresh contender.' &&
+      canon.avatar_url.startsWith('/api/users/profile/avatar/'),
+      'canonical reread matches name, handle, bio, avatar'
+    );
+    ok('onboarding sequence persists name, handle, bio, avatar with matching reread');
+
+    // 12. interrupted onboarding resumes safely: partial writes persist, rest applies later
+    const walletC = mkWallet();
+    wallets.push(walletC);
+    profile.updateProfile(walletC, { displayName: 'Half Done' });
+    let partial = queryOne(`SELECT display_name, handle FROM users WHERE wallet_address = ?`, [walletC]);
+    assert(partial.display_name === 'Half Done', 'partial draft persists');
+    r = profile.updateProfile(walletC, { handle: 'halfdone', bio: 'Back to finish.' });
+    assert(r.ok, 'resumed write applies');
+    partial = queryOne(`SELECT display_name, handle, bio FROM users WHERE wallet_address = ?`, [walletC]);
+    assert(partial.display_name === 'Half Done' && partial.handle === 'halfdone' && partial.bio === 'Back to finish.', 'resumed onboarding completes safely');
+    ok('interrupted onboarding resumes safely');
+
+    // 13. identity propagation: Take created as Name A reads as Name B after edit
+    const takeId = `take_pt_${Date.now()}`;
+    execute(
+      `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count)
+       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0)`,
+      [takeId, walletA, 'Propagation topic', 'Propagation content', 'CRYPTO', new Date().toISOString()]
+    );
+    const commId = `comm_pt_${Date.now()}`;
+    execute(
+      `INSERT INTO comments (id, take_id, author_wallet, content, created_at) VALUES (?, ?, ?, ?, ?)`,
+      [commId, takeId, walletA, 'Propagation reply', new Date().toISOString()]
+    );
+    profile.updateProfile(walletA, { displayName: 'Renamed Rita', handle: 'renamedrita' });
+    const takeRow = queryOne(
+      `SELECT t.*, u.handle, u.display_name, u.avatar_url FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address WHERE t.id = ?`,
+      [takeId]
+    );
+    assert(takeRow.display_name === 'Renamed Rita' && takeRow.handle === 'renamedrita', 'same Take reads new identity');
+    assert(takeRow.id === takeId, 'content id unchanged');
+    const commRow = queryOne(
+      `SELECT c.*, u.handle, u.display_name FROM comments c LEFT JOIN users u ON c.author_wallet = u.wallet_address WHERE c.id = ?`,
+      [commId]
+    );
+    assert(commRow.display_name === 'Renamed Rita', 'comment reads new identity');
+    const avRow = queryOne(
+      `SELECT u.avatar_url FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address WHERE t.id = ?`,
+      [takeId]
+    );
+    assert(avRow.avatar_url && avRow.avatar_url.startsWith('/api/users/profile/avatar/'), 'avatar propagates to content reads');
+    execute(`DELETE FROM comments WHERE id = ?`, [commId]);
+    execute(`DELETE FROM takes WHERE id = ?`, [takeId]);
+    ok('Take + comment resolve current identity; ownership/id unchanged');
+
+    // 14. forged client author name cannot alter rendered identity: the takes
+    // table carries NO identity columns at all, so there is nothing to forge.
+    const takeCols = queryAll(`PRAGMA table_info(takes)`, []).map((c) => c.name);
+    assert(
+      !takeCols.includes('author_name') && !takeCols.includes('author_handle') && !takeCols.includes('author_avatar'),
+      'takes carry no author-controlled identity columns'
+    );
+    const evilTake = `take_pt_evil_${Date.now()}`;
+    execute(
+      `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count)
+       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0)`,
+      [evilTake, walletB, 'Evil topic', 'Evil content', 'CRYPTO', new Date().toISOString()]
+    );
+    const evilRow = queryOne(
+      `SELECT t.*, u.handle, u.display_name FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address WHERE t.id = ?`,
+      [evilTake]
+    );
+    assert(evilRow.display_name !== 'Mallory' && evilRow.handle !== 'mallory', 'no client-supplied name leaks into reads');
+    execute(`DELETE FROM takes WHERE id = ?`, [evilTake]);
+    ok('forged author names cannot alter rendered identity');
 
     console.log('\nAll profile boundary tests passed.');
   } finally {
