@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — REMEDIATED UAT APK READY / OWNER REINSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — IDENTITY BOUNDARY + TAKE DELETION REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `b77289a` (+ this ledger: remediated UAT artifact, commit pending; packaged app source `b77289a` — see §48)
-**Last Updated:** 2026-10-01T06:45:00Z
+**Authoritative Local Commit:** `8717d21` (source/backend remediation; this ledger entry follows)
+**Last Updated:** 2026-10-01T13:00:00Z
 
 ---
 
@@ -1599,3 +1599,71 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
 > This exact APK (SHA-256 `9E95FF7E…B11B5F`, cert `a11be643…d7827`, package
 > `app.counter.mobile`) built from `b77289a` is the ONLY APK authorized for
 > owner reinstall and physical UAT. All previous hashes are SUPERSEDED.
+
+## 49. IDENTITY BOUNDARY + TAKE DELETION REMEDIATION — 2026-10-01 (Builder, source/backend only)
+
+> Physical UAT exposed a canonical identity mismatch after the §48 artifact.
+> This phase reconstructs and repairs the source/backend boundary. Status:
+> **`BUILDING — IDENTITY BOUNDARY + TAKE DELETION REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`**.
+> No APK was built, installed, deployed, or used for physical UAT.
+
+### 49.A — Starting state and partial-work decisions
+- Starting HEAD and `origin/master`: `c08580b`; five uncommitted app files
+  were present. The previous committed identity/deletion work was audited,
+  not discarded.
+- KEEP: the canonical `author_*` read contract, live Take detail refresh,
+  shared identity header, soft-delete status model, and restrained overflow
+  action.
+- REWORK: client profile writes that used `display_name` against the server's
+  `displayName` contract; profile verification that omitted bio and treated
+  avatar URL spelling as identity; and deletion writes that were not one DB
+  transaction. No product work was reverted.
+
+### 49.B — Confirmed root causes
+1. Onboarding and Edit Profile sent `{ display_name, handle, bio }`, while
+   `PUT /api/users/profile` destructured `displayName`. The server therefore
+   left the display name unchanged; the fresh GET correctly triggered the
+   visible confirmation mismatch.
+2. The superseded APK's app rendered `author_name`, `author_handle`, and
+   `author_avatar`, while the backend response in the packaged source era
+   returned unaliased `display_name`, `handle`, and `avatar_url`. The Profile
+   endpoint returned direct user fields, so Profile looked correct while Home
+   rendered the incomplete-profile fallback. The current Take, comment, and
+   Duel joins now expose the canonical aliases.
+
+### 49.C — Mechanism and boundaries after remediation
+- Profile writes now use one typed client contract, then verify canonical
+  display name, normalized handle, trimmed bio, and avatar presence from a
+  fresh authoritative GET before closing onboarding or Edit Profile.
+- Relative `/api/users/profile/avatar/...` and absolute avatar references are
+  compared by persisted presence, so URL spelling cannot create a false
+  mismatch. Existing avatar replacement/removal behavior remains covered.
+- Takes retain only stable `author_wallet`; feed, detail, comments, Duel
+  surfaces, and Profile lists resolve current mutable identity from `users`.
+  Bio remains Profile-only and is not added to Take rows.
+- Take deletion is authenticated and author-only, soft-deletes the Take,
+  atomically marks pending `PROPOSED`/`COUNTERED` challenges `CANCELLED`,
+  hides deleted rows from normal reads, and refuses deletion for any Duel or
+  accepted challenge—even when a formed Duel has no stake yet. Historical
+  challenge/Duel/proof rows are preserved.
+
+### 49.D — Source/backend proof
+- Focused identity/deletion HTTP proof covers PUT/GET semantic equality,
+  handle normalization, bio persistence, feed/detail/comment current-name
+  propagation with unchanged Take ID, forged author-field immunity, author
+  deletion, non-author 403, pending cancellation and inbox hiding, formed
+  Duel refusal, and proof-row preservation.
+- Local regression: TypeScript 0; session persistence 5/5; profile boundaries
+  12/12; Take identity/deletion suite passed; chain vectors 11/11;
+  resolution boundaries passed; backend adversarial 8/8; edited backend
+  syntax checks passed; added-line secret/mock scan 0.
+- Commit: `8717d21` (`fix(identity): verify canonical profiles and gate take deletion`).
+
+### 49.E — Explicit non-proofs and remaining gates
+- No production deployment or production readback was performed in this
+  phase. The production backend still requires a Director-authorized deploy
+  and readback of the source changes before the identity claim can become
+  PROVEN.
+- The source is not a release candidate and physical Android acceptance is
+  still required on a fresh rebuild. Economic, Solana-program, mint,
+  resolver, and resolution mechanics were not changed.
