@@ -7,7 +7,7 @@
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `0b5255a` (+ this ledger: freeze UAT artifact, commit pending; packaged app source `0b5255a` — see §46) (+ this ledger: program hardening, commit pending; next APK binds fresh packaged source — see §45)
+**Authoritative Local Commit:** `0b5255a` (+ this ledger: freeze UAT artifact, commit pending; packaged app source `0b5255a` — see §46)
 **Last Updated:** 2026-10-01T06:45:00Z
 
 ---
