@@ -334,6 +334,23 @@ fn process_resolve_duel(
         return Err(ProgramError::Custom(104)); // UnauthorizedResolver
     }
 
+    // Terminal-state invariant (HARD): a duel that reached ResolvedSideA,
+    // ResolvedSideB, or Cancelled can never change state again. Only open
+    // duels (AcceptingStakes / BackingClosed) may resolve.
+    if duel.status != DuelStatus::AcceptingStakes && duel.status != DuelStatus::BackingClosed {
+        msg!("Duel is already in a terminal state");
+        return Err(ProgramError::Custom(109)); // AlreadyResolved
+    }
+
+    // Resolution-timing invariant (HARD): no resolution before the agreed
+    // on-chain resolution timestamp. Backend mutual-deadline policy may add
+    // further delay, never less.
+    let clock = Clock::get()?;
+    if clock.unix_timestamp < duel.resolution_ts {
+        msg!("Resolution attempted before agreed resolution time");
+        return Err(ProgramError::Custom(110)); // TooEarly
+    }
+
     match winning_side {
         1 => duel.status = DuelStatus::ResolvedSideA,
         2 => duel.status = DuelStatus::ResolvedSideB,

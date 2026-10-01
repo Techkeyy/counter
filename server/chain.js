@@ -57,6 +57,8 @@ const PROGRAM_ERROR = {
   AlreadyClaimed: 106,
   InvalidPositionSide: 107,
   NotClaimable: 108,
+  AlreadyResolved: 109,
+  TooEarly: 110,
 };
 
 let connection = null;
