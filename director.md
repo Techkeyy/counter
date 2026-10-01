@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — IDENTITY/DELETE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`
+**Current Authoritative Status:** `BUILDING — FINAL REMEDIATED UAT APK READY / OWNER INSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, clean and equal to `origin/master` after the accepted source and production-proof ledger commits  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
 **Authoritative Local Commit:** `79164f9` (source/backend remediation; production alignment proof is recorded below)
-**Last Updated:** 2026-10-01T15:40:00Z
+**Last Updated:** 2026-10-01T17:50:40Z
 
 ---
 
@@ -1713,3 +1713,93 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
   performed in this phase and remain the next release gates.
 - Economic, Solana-program, mint, resolver, and settlement mechanics were not
   changed by this remediation or deployment.
+
+## 50. FINAL REMEDIATED UAT APK — 2026-10-01
+
+> Fresh release artifact built from the production-aligned remediation source.
+> Status: **`BUILDING — FINAL REMEDIATED UAT APK READY / OWNER INSTALL REQUIRED`**.
+> Installation and physical UAT remain intentionally blocked until the owner
+> performs them.
+
+### 50.A — Freeze and regression gates
+- Packaged-source commit: `f53c190fc5a3139d38ddd72d9615e50a0a335226`.
+- At freeze: `HEAD == origin/master == f53c190fc5a3139d38ddd72d9615e50a0a335226`;
+  worktree clean.
+- TypeScript no-emit: exit `0`.
+- Session persistence: `5/5`.
+- Profile boundaries: `12/12`.
+- Take identity/deletion suite: passed.
+- Chain vectors: `11/11`.
+- Resolution boundaries: passed, with external-oracle behavior left honest.
+- Backend adversarial suite: `8/8`.
+- Actual source secret/mock/key-literal scan: `0` hits. The only broad-scan
+  matches were expected signing configuration names (`COUNTER_RELEASE_*` and
+  debug-only `androiddebugkey`), not credential values.
+
+### 50.B — Build and artifact identity
+- Existing DPAPI helper reused:
+  `C:\Users\HomePC\AppData\Local\Temp\opencode\vault-lib.ps1`.
+- Existing vault material reused in memory only:
+  `C:\Users\HomePC\.counter-secrets\counter-release.keystore` and
+  `counter-release-password.dpapi`. No key was regenerated, no plaintext
+  secret was written to disk, and temporary signing environment variables were
+  cleared after the build.
+- Keystore alias: `counter`.
+- Pre-build public certificate validation matched exactly:
+  `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- Command: `assembleRelease --no-daemon` from `app/android`.
+- Result: **`BUILD SUCCESSFUL in 18m`**, Gradle exit `0`.
+- APK: `C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk`.
+- Exact bytes: `62507055`.
+- SHA-256: `65b19566a20a946f853c383d32fa8d47f8cc71dd96dc6630a3cb4d925ac825b0`.
+- Package/version: `app.counter.mobile`, versionCode `1`, versionName `1.0.0`.
+- APK signing certificate SHA-256:
+  `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- Previous artifact `9e95ff7e66a50ce4b2e110133e87952e3f65439b4d6ad8d8fd16009005a11b5f`
+  is superseded by this fresh artifact. No other APK was authorized for
+  installation.
+
+### 50.C — Artifact contains the identity/delete remediation
+- Packaged `assets/index.android.bundle` was extracted from the APK and
+  inspected directly; bundle size was `2,564,628` bytes.
+- Bundle evidence present: `displayName` profile payload marker together with
+  `/users/profile`; `deleteTake`; `DELETE` plus `/takes/`; the user-facing
+  `Delete this Take?` confirmation; and canonical `author_name`,
+  `author_handle`, and `author_avatar` markers.
+- This proof is from the extracted APK bundle, not only from source inspection.
+
+### 50.D — Embedded production configuration and forbidden-marker scan
+- Packaged bundle contains exactly one occurrence each of the expected stable
+  backend, escrow program, and cUSD mint markers:
+  `https://counter.103-195-188-198.sslip.io/api`,
+  `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`, and
+  `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC`.
+- Absent from the packaged bundle: obsolete mint prefix `3Ztkj`, any
+  `counter.app` URL, `mock_dev_session_token`, `counter123` fallback-wallet
+  marker, the JWT fallback secret, `ngrok`, `trycloudflare`, and
+  `localtunnel`.
+- The bundle contains four generic `localhost` strings at the known Metro
+  `localhost:8080` constant and one `127.0.0.1` value in the Solana web3
+  cluster enum; it contains no application-owned localhost backend such as
+  `http://localhost:8795`.
+
+### 50.E — App Links and live asset association
+- APK manifest preserves `counter://duel/:id` and `counter://receipt/:id`.
+- APK manifest preserves HTTPS App Links:
+  `https://counter.103-195-188-198.sslip.io/d/...` and
+  `https://counter.103-195-188-198.sslip.io/r/...`.
+- Both HTTPS filters retain `android:autoVerify=true`.
+- Live `https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json`
+  returned HTTP `200`, names package `app.counter.mobile`, and includes the
+  current certificate fingerprint.
+
+### 50.F — Source-to-artifact binding and release boundary
+- The APK was built from frozen source commit `f53c190...` before this
+  docs-only ledger update. After the ledger commit, the required binding check
+  is `git diff f53c190fc5a3139d38ddd72d9615e50a0a335226 HEAD -- app/ server/ program/`
+  and must remain empty.
+- No runtime source changes were made for the artifact ledger. No APK was
+  installed, no device was connected, and no physical UAT was performed.
+- Exactly one fresh APK is ready for owner installation:
+  `app-release.apk` with SHA-256
+  `65b19566a20a946f853c383d32fa8d47f8cc71dd96dc6630a3cb4d925ac825b0`.
