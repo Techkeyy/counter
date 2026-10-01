@@ -28,11 +28,12 @@ const CATEGORIES: CategoryFilter[] = ALL_CATEGORIES;
 interface DuelsScreenProps {
   userWallet: string | null;
   onSelectDuel: (duel: Duel) => void;
+  focusSignal?: number;
 }
 
 // Scan-first financial list: compact rows (participants, proposition, status,
 // pool, deadline). Category discovery lives here on the real backend param.
-export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDuel }) => {
+export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDuel, focusSignal }) => {
   const [duels, setDuels] = useState<Duel[]>([]);
   const [filter, setFilter] = useState<DuelFilter>('OPEN');
   const [category, setCategory] = useState<CategoryFilter>('ALL');
@@ -60,6 +61,17 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
   useEffect(() => {
     loadDuels();
   }, [loadDuels]);
+
+  // Tabs stay mounted; reload when regaining focus.
+  const lastFocusRef = React.useRef(focusSignal);
+  useEffect(() => {
+    if (focusSignal !== undefined && focusSignal !== lastFocusRef.current) {
+      lastFocusRef.current = focusSignal;
+      setRefreshing(true);
+      loadDuels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSignal]);
 
   const visible = duels.filter((d) => {
     const resolved = d.status.startsWith('RESOLVED') || d.status === 'CANCELLED';

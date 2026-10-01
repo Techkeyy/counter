@@ -17,6 +17,7 @@ import { EmptyState, ErrorState } from '../components/StateViews';
 interface ActivityScreenProps {
   onSelectNotification: (notif: ActivityNotification) => void;
   onOpenChallenge: (challenge: Challenge) => void;
+  focusSignal?: number;
 }
 
 type FilterTab = 'ALL' | 'ACTION_REQUIRED';
@@ -26,6 +27,7 @@ const ACTIONABLE = ['CHALLENGE_RECEIVED', 'COUNTEROFFER', 'COUNTEROFFER_RECEIVED
 export const ActivityScreen: React.FC<ActivityScreenProps> = ({
   onSelectNotification,
   onOpenChallenge,
+  focusSignal,
 }) => {
   const [activities, setActivities] = useState<ActivityNotification[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -53,6 +55,17 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
   useEffect(() => {
     loadActivities();
   }, []);
+
+  // Tabs stay mounted; reload when regaining focus.
+  const lastFocusRef = React.useRef(focusSignal);
+  useEffect(() => {
+    if (focusSignal !== undefined && focusSignal !== lastFocusRef.current) {
+      lastFocusRef.current = focusSignal;
+      setRefreshing(true);
+      loadActivities();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSignal]);
 
   const onRefresh = () => {
     setRefreshing(true);
