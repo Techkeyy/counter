@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — FINAL UAT APK READY / OWNER INSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — SOCIAL IDENTITY REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `0b5255a` (+ this ledger: freeze UAT artifact, commit pending; packaged app source `0b5255a` — see §46)
+**Authoritative Local Commit:** `28eb9e4` (+ this ledger: social identity remediation, commit pending; next APK binds fresh packaged source — see §47)
 **Last Updated:** 2026-10-01T06:45:00Z
 
 ---
@@ -1514,3 +1514,60 @@ origin/master, clean tree.
 > This exact APK (SHA-256 `EB158FE5…46A5`, cert `a11be643…d7827`, package
 > `app.counter.mobile`) built from `0b5255a` is the ONLY APK authorized for
 > owner install and physical UAT. All previous hashes are SUPERSEDED.
+
+## 47. SOCIAL IDENTITY PERSISTENCE REMEDIATION — 2026-10-01 (Builder)
+
+> Physical UAT halted on four real defects; all four fixed at their diagnosed
+> roots. Status after this phase:
+> **`BUILDING — SOCIAL IDENTITY REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`**.
+> No APK built (per directive); installed `EB158FE5…` is SUPERSEDED by the
+> runtime changes herein. No secret in ledger/Git/logs/report.
+
+### 47.A — Root causes (all confirmed in source, none guessed)
+1. Onboarding identity lost: `App.handleConnectWallet` dismissed the sheet on
+   connect success BEFORE the typed draft was ever PUT. The Finish button only
+   existed for already-connected wallets.
+2. Avatar never displayed: `getAvatarUri` resolved ONLY `http*` URLs, so the
+   server's real relative avatar paths (`/api/users/profile/avatar/…`) always
+   fell back to identicons — even when upload succeeded.
+3. Stale Take identity: `TakeDetailScreen` rendered the navigation-time take
+   object; `loadThread` never refreshed the header (backend JOINs were already
+   live). Feed rows refresh on remount; detail headers did not.
+4. Feed separators: inset 1px `cardBorder` strip, near-invisible on device.
+
+### 47.B — Canonical profile architecture after fix
+- Single write path: draft (onboarding or Edit sheet) → authenticated PUT →
+  avatar upload → fresh GET verify → session/UI refresh → close. Modal stays
+  open through connect; auto-submits a non-empty draft; handle-taken and
+  partial (text-ok/photo-failed) failures stay visible with retry; Skip is the
+  only explicit abandon path.
+- `getAvatarUri` resolves relative server paths against the production host;
+  random server filenames make replacement cache-safe; old files reclaimed.
+- Detail headers read live fetches (`liveTake` state); tabs stay mounted
+  (display:none) so scroll survives, with focus-triggered refetch on return;
+  challenge decisions and profile saves bump refresh signals.
+- Author identity taps open that person's read-only profile (own edit/
+  disconnect gated by wallet equality). Incomplete profiles render the
+  designed `Counter user` state; wallets appear only in Account/proof/tx
+  contexts. Server activity copy verified wallet-free.
+
+### 47.C — Feed polish implemented
+Full-bleed hairline dividers (`divider` token), shared `IdentityHeader`
+(avatar · name · @handle · time) on feed/thread/comments, 48dp targets kept,
+skeleton/empty/error/offline states intact, save-confirmation notice,
+no cards/casing changes beyond the divider.
+
+### 47.D — Tests/proofs
+- New: onboarding sequence (name/handle/bio/avatar + reread match),
+  interrupted-resume, Take/comment propagation with unchanged IDs, schema
+  proof that takes carry no forgeable identity columns.
+- Full suite green: profile 12/12 · tsc 0 · sessions 5/5 · vectors 11/11 ·
+  resolution 14/14 · adversarial 8/8 · emoji/dash/fixture scans 0.
+- No backend changes were needed (PUT/verify/avatar endpoints already
+  deployed and live-probed); production untouched this phase: health 200,
+  owner take/comment/challenge intact, schema complete, no reseed.
+
+### 47.E — Commits + closure
+`c9c373b` identity remediation · `ea6d588` tests · `28eb9e4` tab focus
+refresh. Pushed throughout; HEAD == origin/master; clean tree.
+Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
