@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — SOCIAL EXPERIENCE CLEAN / OWNER PRE-UAT REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — FINAL PRODUCT MECHANICS IMPLEMENTED / DIRECTOR FREEZE REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
 **Repository State:** On branch `master`, in sync with `origin/master`  
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `fe597cd` (+ this ledger: social-experience clean + final artifact, commit pending at time of writing; packaged app source `fe597cd` — see §43)
-**Last Updated:** 2026-09-30T21:00:00Z
+**Authoritative Local Commit:** `4771d91` (+ this ledger: final product mechanics, commit pending; next APK binds fresh packaged source — see §44)
+**Last Updated:** 2026-10-01T06:45:00Z
 
 ---
 
@@ -1286,3 +1286,135 @@ fixed during the run; product code untouched by them.)
 - Bundle (2,527,628 B): backend/mint/program 1x each; zero mock/secret hits; localhost profile unchanged. Manifest: duel+receipt hosts, prod `/d`+`/r` autoVerify, zero `counter.app`.
 
 > This exact APK (SHA-256 `86D18D7F…76C`, cert `a11be643…d7827`, package `app.counter.mobile`) built from `fe597cd` is the ONLY APK authorized for owner pre-UAT review. APK `74DD9792…` is SUPERSEDED. No device was attached; install + screenshots + Core Outcome UAT await the owner run.
+
+## 44. FINAL PRODUCT MECHANICS — 2026-10-01 (Builder, batched pre-freeze)
+
+> All remaining material product changes batched before the next APK (profile
+> ownership, resolution modes, mutual settlement, verified templates, Seeker
+> Arena rule, asset finding). No APK built in this phase; APK `86D18D7F`
+> is SUPERSEDED by the runtime changes herein. Status:
+> **`BUILDING — FINAL PRODUCT MECHANICS IMPLEMENTED / DIRECTOR FREEZE REVIEW REQUIRED`**.
+> No secret in ledger/Git/logs/report. No UAT/RC claims.
+
+### 44.A — Profile ownership (Phase A, kept + verified)
+Prior-turn implementation stands: validated PUT (name/handle/bio, 409 on
+case-insensitive conflict), avatar upload/remove (magic-byte, 1.5MB cap, no
+SVG), owner-only auth binding, completion UX, global propagation via live
+server joins. Live production probes (10/10): own update, dup/case-dup 409,
+bad-handle/name 400s, forged token 401, avatar lifecycle + serving + removal,
+SVG reject, persisted reread. Probe fixtures removed (guarded exact-wallet
+delete, counts restored).
+
+### 44.B — Resolution modes (Phase B)
+`resolution_mode` (COUNTER_VERIFIED|MUTUAL), `fallback_mode`
+(REFUND|COUNTER_VERIFIED), `mutual_deadline_ts` persisted on challenges AND
+duels (idempotent migration; legacy rows default VERIFIED/REFUND). Mode is set
+at propose, copied verbatim at accept, never inferred. Terms hash now binds
+propositions + config + timing + mode.
+
+### 44.C — Counter Verified templates (Phase C)
+`server/resolution-templates.js`: strict per-category contracts
+(crypto asset/operator/price, sports event/teams/side, weather coords/city/
+condition/threshold; other categories require an explicit crypto decider).
+Malformed templates rejected at propose AND counter time (8/8 negative cases
+in suite). No silent oracle defaults at the boundary (resolver-internal
+fallbacks retained only as dead-safe defaults, unreachable with validated rows).
+
+### 44.D — Mutual settlement (Phases D-F) + program audit (Phase G)
+- Program audit (full `lib.rs` read): ResolveDuel side=3 sets Cancelled (ONLY
+  resolver-authority signer, err 104 otherwise); ClaimPayout on Cancelled pays
+  EXACT principal per position (vault-PDA-signed, program-enforced); double
+  claim blocked (106); signer/PDA binding blocks theft (105). Gaps honestly
+  noted: NO on-chain terminal-state guard (re-resolve possible on-chain;
+  backend refuses), NO timing checks on-chain (backend enforces). NO program
+  change required: full refund lifecycle is executable today. NO fake DB refund.
+- Votes: `mutual_votes` table, ed25519 `COUNTER_SETTLEMENT_V1` attestations
+  (MWA signMessages, same primitive as SIWS) verified server-side against the
+  captain wallet, duel-bound, mutable until matched then locked by resolved
+  status. One captain alone / non-captain / cross-duel / bad-side / premature /
+  post-settlement votes all fail closed (suite-proven).
+- Deadlock: pre-deadline DISPUTED/awaiting fail closed; past deadline executes
+  the LOCKED fallback: REFUND via real Cancel tx, or the locked verified
+  template. Losers cannot trap funds past the deadline.
+- Devnet proof (`probes/mutual-refund-lifecycle-verify.js`, exit 0, real txs
+  through real routes+verifiers): REFUND duel (disputed, deadline passed) →
+  on-chain Cancel → exact $2/$1 principal claims → dup rejected (program 106)
+  → re-resolve rejected; MATCH duel (agreed) → on-chain Side A → exact $3
+  parimutuel → loser rejected (program 107). Probe also caught a real bug
+  (wrong relative require that would have crashed production resolves) — fixed
+  before deploy. Local fixture sweep verified zero leftovers afterwards.
+
+### 44.E — Receipt evidence (Phase H)
+Receipts carry mode + rule + observed + source; MUTUAL receipts list agreed
+result, per-captain confirmations with timestamps, and note signatures live
+under proof. App renders method/winner/pool/participants/resolution/proof in
+that order; verified badges stay real-sig-gated.
+
+### 44.F — Seeker Arena / SKR (Phase I)
+- Rule unified: ANY active Mainnet stake (>0 SKR) = eligible
+  (`isStakeEligible`, single definition; prior `>=100` appears nowhere in
+  repo/docs — no inconsistency remained to fix). Official staking program ID
+  matches Solana Mobile (`SKRskrmt…94BZ`).
+- UI: "Seeker Arena" naming, duel-detail publish flow with live recheck
+  (`getUserProfile` re-queries Mainnet), explicit failure states, SKR-never-
+  touches-odds/winners/custody copy. Fake-DB-flag unlock impossible by
+  construction (route always live-queries); zero-stake denial tested via
+  dead-RPC determinism.
+- In-app SKR staking: NOT implemented (kill-gate). No official reusable MWA
+  pattern exists; staking lives in Seed Vault Wallet / stake.solanamobile.com
+  as an external prerequisite. Documented, not faked.
+
+### 44.G — Settlement asset kill-gate (Phase J): KEEP AXMB7
+- Official Devnet USDC: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (6
+  decimals, same as cUSD), permissionless faucet at faucet.circle.com.
+- Program is token-agnostic (per-duel mint stored; init takes any mint
+  account): NO redeploy needed either way.
+- Migration would still cost: server faucet cannot mint USDC (Circle holds
+  authority) → in-app one-tap funding dies, replaced by manual external
+  faucet runs; `chain.js` mint threading rework; FULL economic re-proof
+  (init/stake/resolve/claim exactness) invalidated and redone.
+- Decision: KEEP AXMB7 for hackathon UAT. Funding touchpoints now read
+  "Counter Test USD (Devnet, no cash value)"; compact `cUSD` unit kept for
+  amount displays (distinct from USDC). Production intent: USDC. No mint
+  touched, no silent change.
+
+### 44.H — Claim ledger deltas (Phase K)
+- Verified resolution: SOFT ENFORCED (deterministic oracle + backend
+  verification + real tx; chain-truth via program).
+- Mutual settlement: SOFT ENFORCED for agreement capture (ed25519, server-
+  verified) + HARD for fund movement (program vault authority); explicitly
+  NOT on-chain-enforced for the agreement itself (no program change).
+- Deadlock fallback: BOUNDARY ENFORCED (config locked pre-staking; deadline
+  + fallback executed by authority key only after expiry).
+- Refund: HARD ENFORCED (program Cancel + principal claims, chain-proven
+  exact + replay-safe).
+- Seeker Arena: SOFT ENFORCED (live Mainnet query per publish; rule unit-tested).
+- Asset: OBSERVATIONAL (test mint by design; USDC intent documented).
+- Profile: SOFT ENFORCED (auth-bound, validated, live-probed 10/10).
+
+### 44.I — Tests (Phase L)
+`resolution-boundaries` 14/14 (template/mode negatives, counterparty gates,
+term copy, post-accept lock, vote matrix, wrong-duel/side/captain, single-
+captain fail-closed, dispute, convergence, verified-mode refusal, fabricated
+claim, cancel vector, SKR rule, seed guard) + `profile-boundaries` 8/8 +
+vectors 11/11 + adversarial 8/8 + tsc 0 + sessions 5/5 + emoji/dash/secret/
+mock sweeps 0. Local fixture sweeps verified zero leftovers (one probe-cleanup
+gap caught one duel's rows; manually swept and re-verified).
+
+### 44.J — Production alignment (frozen-state deploy)
+- Backup `counter-pre-mechanics-20261001.sqlite` (184320 B, hash-verified).
+- Deployed 10 server files == `4771d91` blobs (db, challenges, duels,
+  resolvers, mutual/new, templates/new, skr, profile, users routes, index);
+  loads OK; no new npm deps (tweetnacl/bs58/crypto pre-existing).
+- Migration verified live (mode columns present); owner rows preserved
+  (take/comment/challenge intact and readable); health 200; mutual-vote route
+  present (401 unauthenticated, not 404). Caddy/unrelated untouched.
+- VPS changes this phase: 10 files, 3 backups, restarts of ONLY
+  `counter-backend`, probe-minted test tokens to throwaways (faucet-pattern,
+  no user impact).
+
+### 44.K — Commits (no squash)
+`58041e2` taxonomy/identity · `e413170` seed guard · `3836cd5` profile app ·
+`ce1b4c9` profile backend · `74ea7df` resolution backend · `ea2e9a2`
+resolution app · `4771d91` boundaries/copy · pushed throughout, HEAD ==
+origin/master, clean tree.
