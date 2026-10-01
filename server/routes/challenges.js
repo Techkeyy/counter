@@ -39,6 +39,11 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Missing required challenge parameters' });
   }
 
+  const sourceTake = queryOne(`SELECT id, status FROM takes WHERE id = ?`, [takeId]);
+  if (!sourceTake || sourceTake.status === 'DELETED') {
+    return res.status(400).json({ error: 'Challenges can only target a live Take' });
+  }
+
   // Settlement mode is part of the binding terms: validated now, stored
   // explicitly, copied to the duel at accept time, never inferred.
   const modeCheck = validateResolutionMode(resolutionModeRaw);
