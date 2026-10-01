@@ -282,6 +282,10 @@ export default function App() {
               }}
               onChallengeTake={(take) => setChallengeTargetTake(take)}
               onOpenAuthorProfile={openAuthorProfile}
+              onTakeDeleted={() => {
+                clearDetailViews();
+                setFeedRefresh((n) => n + 1);
+              }}
               userWallet={walletState.publicKey}
             />
           </View>

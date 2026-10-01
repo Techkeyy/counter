@@ -72,12 +72,22 @@ async function run() {
   require('../index.js');
   await new Promise((r) => setTimeout(r, 2500));
 
-  const tracked = { challenges: [], duels: [], users: [], votes: [] };
+  const tracked = { challenges: [], duels: [], takes: [], users: [], votes: [] };
   try {
     const A = await siwsAuth();
     const B = await siwsAuth();
     const C = await siwsAuth();
     tracked.users.push(A.wallet, B.wallet, C.wallet);
+
+    // The live-Take boundary is authoritative: all valid challenge cases need
+    // a real source Take rather than the old placeholder ID.
+    let takeRes = await api('POST', '/api/takes', A.token, {
+      topic: 'Resolution probe', content: 'Resolution probe Take', category: 'CRYPTO',
+    });
+    assert(takeRes.status === 201 && takeRes.data.take, 'probe Take creates');
+    const probeTakeId = takeRes.data.take.id;
+    tracked.takes.push(probeTakeId);
+    VALID_CRYPTO.takeId = probeTakeId;
 
     // 1. template validation at propose time
     let r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, sourceConfig: { operator: '>=' } });
@@ -229,6 +239,11 @@ async function run() {
         execute(`DELETE FROM challenges WHERE id = ?`, [id]);
         execute(`DELETE FROM activity WHERE target_id = ?`, [id]);
       } catch {}
+    }
+    for (const id of tracked.takes) {
+      try { execute(`DELETE FROM comments WHERE take_id = ?`, [id]); } catch {}
+      try { execute(`DELETE FROM takes WHERE id = ?`, [id]); } catch {}
+      try { execute(`DELETE FROM activity WHERE target_id = ?`, [id]); } catch {}
     }
     for (const w of tracked.users) {
       try { execute(`DELETE FROM users WHERE wallet_address = ?`, [w]); } catch {}

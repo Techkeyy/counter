@@ -57,7 +57,7 @@ async function run() {
     const A = await siwsAuth();
     const B = await siwsAuth();
     tracked.users.push(A.wallet, B.wallet);
-    // Author handle setup (identity joins resolve through users rows)
+    // Author setup (identity joins resolve through users rows)
     const { queryOne, execute } = require('../db');
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Del Author', 'delauthor', A.wallet]);
 
@@ -75,9 +75,64 @@ async function run() {
     ok('author deletes unchallenged Take (soft delete, feed-clean)');
 
     // 2. non-author cannot delete
-    r = await api('POST', '/api/takes', A.token, { topic: 'Not yours', content: 'Hands off', category: 'CRYPTO' });
+    r = await api('POST', '/api/takes', A.token, {
+      topic: 'Not yours', content: 'Hands off', category: 'CRYPTO',
+      author_name: 'Forged name', author_handle: 'forged_handle', author_avatar: '/forged.png',
+    });
     const takeId2 = r.data.take.id;
     tracked.takes.push(takeId2);
+
+    // Route-level profile contract + historical propagation proof. The client
+    // may send @/mixed-case handles, but reads must expose the canonical
+    // current profile through the author_* response fields.
+    r = await api('PUT', '/api/users/profile', A.token, {
+      displayName: 'Profile Name A', handle: '@ProfileA', bio: 'Profile bio A',
+    });
+    assert(
+      r.status === 200 && r.data.user.display_name === 'Profile Name A' &&
+      r.data.user.handle === 'profilea' && r.data.user.bio === 'Profile bio A',
+      'authenticated PUT returns canonical profile fields'
+    );
+    r = await api('GET', '/api/takes', A.token);
+    let feedTake = (r.data.takes || []).find((t) => t.id === takeId2);
+    assert(
+      feedTake && feedTake.author_wallet === A.wallet && feedTake.author_name === 'Profile Name A' &&
+      feedTake.author_handle === 'profilea' && feedTake.author_avatar === '',
+      'feed returns live canonical identity and ignores forged author fields'
+    );
+
+    r = await api('PUT', '/api/users/profile', A.token, {
+      displayName: 'Profile Name B', handle: '@ProfileB', bio: 'Profile bio B',
+    });
+    assert(r.status === 200 && r.data.user.handle === 'profileb', 'profile edit normalizes handle');
+    r = await api('GET', `/api/users/${A.wallet}`, A.token);
+    assert(
+      r.status === 200 && r.data.user.display_name === 'Profile Name B' &&
+      r.data.user.handle === 'profileb' && r.data.user.bio === 'Profile bio B',
+      'fresh profile GET matches the edited identity'
+    );
+    r = await api('GET', '/api/takes', A.token);
+    feedTake = (r.data.takes || []).find((t) => t.id === takeId2);
+    assert(
+      feedTake && feedTake.id === takeId2 && feedTake.author_name === 'Profile Name B' &&
+      feedTake.author_handle === 'profileb' && feedTake.author_name !== 'Counter user',
+      'existing Take keeps its ID and feed resolves current identity'
+    );
+    r = await api('POST', `/api/takes/${takeId2}/comments`, A.token, { content: 'Live identity reply' });
+    assert(
+      r.status === 201 && r.data.comment.author_wallet === A.wallet &&
+      r.data.comment.author_name === 'Profile Name B' && r.data.comment.author_handle === 'profileb',
+      'new comment resolves current canonical identity'
+    );
+    r = await api('GET', `/api/takes/${takeId2}`, A.token);
+    assert(
+      r.status === 200 && r.data.take.author_name === 'Profile Name B' &&
+      r.data.take.author_handle === 'profileb' &&
+      r.data.comments.some((c) => c.author_name === 'Profile Name B' && c.author_handle === 'profileb'),
+      'Take detail and comments resolve current identity'
+    );
+    ok('profile PUT/GET, feed, detail, comments, and historical propagation agree');
+
     r = await api('DELETE', `/api/takes/${takeId2}`, B.token);
     assert(r.status === 403, 'non-author delete rejected');
     r = await api('GET', `/api/takes/${takeId2}`, A.token);
@@ -95,10 +150,14 @@ async function run() {
     assert(r.status === 201, 'challenge proposes');
     const chalId = r.data.challenge.id;
     tracked.challenges.push(chalId);
+    r = await api('GET', '/api/challenges', A.token);
+    assert(r.status === 200 && (r.data.challenges || []).some((c) => c.id === chalId), 'pending challenge is actionable before delete');
     r = await api('DELETE', `/api/takes/${takeId2}`, A.token);
     assert(r.status === 200 && r.data.cancelledChallenges === 1, 'delete cancels pending challenge');
     const chRow = queryOne(`SELECT status FROM challenges WHERE id = ?`, [chalId]);
     assert(chRow && chRow.status === 'CANCELLED', 'pending challenge invalidated, not destroyed');
+    r = await api('GET', '/api/challenges', A.token);
+    assert(r.status === 200 && !(r.data.challenges || []).some((c) => c.id === chalId), 'cancelled challenge is hidden from actionable inbox');
     ok('pending challenges atomically cancelled on delete');
 
     // 4. formed Duel blocks deletion (even unfunded)
@@ -125,7 +184,11 @@ async function run() {
 
     // 5. author identity join still resolves on remaining rows
     r = await api('GET', `/api/takes/${takeId3}`, A.token);
-    assert(r.status === 200 && r.data.take.author_handle === 'delauthor', 'live take resolves current handle');
+    assert(
+      r.status === 200 && r.data.take.author_name === 'Profile Name B' &&
+      r.data.take.author_handle === 'profileb',
+      'live take resolves current identity'
+    );
     ok('feed/detail identity contract holds (author_* populated)');
 
     console.log('\nAll take-deletion boundary tests passed.');

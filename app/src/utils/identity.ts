@@ -18,6 +18,57 @@ interface UserIdentityInput {
   wallet?: string | null;
 }
 
+export type AvatarExpectation = 'ignore' | 'present' | 'empty';
+
+export interface ProfileVerificationInput {
+  displayName: string;
+  handle: string;
+  bio: string;
+  avatar?: AvatarExpectation;
+}
+
+// Profile writes use the server's canonical semantics: display names and bios
+// are trimmed, handles ignore a leading @ and are case-folded, and an avatar
+// is compared by persisted presence rather than by URL spelling. That keeps
+// relative and absolute avatar references semantically equivalent.
+export function normalizeIdentityHandle(value?: unknown): string {
+  return String(value ?? '').trim().replace(/^@+/, '').toLowerCase();
+}
+
+function normalizeProfileText(value?: unknown): string {
+  return String(value ?? '').trim();
+}
+
+export function isPersistedAvatarUrl(value?: unknown): boolean {
+  const url = normalizeProfileText(value);
+  return /^https?:\/\//i.test(url) || url.startsWith('/api/users/profile/avatar/');
+}
+
+export function findProfileMismatch(
+  user: { display_name?: unknown; handle?: unknown; bio?: unknown; avatar_url?: unknown } | null | undefined,
+  expected: ProfileVerificationInput
+): string | null {
+  if (!user) return 'no profile returned';
+  if (normalizeProfileText(user.display_name) !== normalizeProfileText(expected.displayName)) {
+    return 'display name differs';
+  }
+  if (normalizeIdentityHandle(user.handle) !== normalizeIdentityHandle(expected.handle)) {
+    return 'handle differs';
+  }
+  if (normalizeProfileText(user.bio) !== normalizeProfileText(expected.bio)) {
+    return 'bio differs';
+  }
+
+  const avatar = expected.avatar || 'ignore';
+  if (avatar === 'present' && !isPersistedAvatarUrl(user.avatar_url)) {
+    return 'avatar differs';
+  }
+  if (avatar === 'empty' && normalizeProfileText(user.avatar_url) !== '') {
+    return 'avatar differs';
+  }
+  return null;
+}
+
 // Designed incomplete-profile state. Wallets are NEVER used as social names:
 // surfaces show this label when no linked Counter profile exists yet.
 export const INCOMPLETE_PROFILE_NAME = 'Counter user';

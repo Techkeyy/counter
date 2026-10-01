@@ -9,6 +9,20 @@ const {
   validateFallbackMode,
 } = require('../resolution-templates');
 
+// GET /api/challenges (current user's actionable challenge inbox)
+// Cancelled/declined/accepted rows remain in storage for history but are not
+// returned to the review sheet as actionable pending challenges.
+router.get('/', requireAuth, (req, res) => {
+  const challenges = queryAll(
+    `SELECT * FROM challenges
+     WHERE (creator_wallet = ? OR challenger_wallet = ?)
+       AND status IN ('PROPOSED', 'COUNTERED')
+     ORDER BY created_at DESC LIMIT 50`,
+    [req.userWallet, req.userWallet]
+  );
+  res.json({ challenges });
+});
+
 // POST /api/challenges (Propose Challenge on a Take)
 router.post('/', requireAuth, (req, res) => {
   const {

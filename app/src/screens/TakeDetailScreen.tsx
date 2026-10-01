@@ -9,6 +9,7 @@ import {
   Image,
   ActivityIndicator,
   Share,
+  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -30,6 +31,7 @@ interface TakeDetailScreenProps {
   onSelectDuel: (duel: Duel) => void;
   onChallengeTake: (take: Take) => void;
   onOpenAuthorProfile?: (wallet: string | null) => void;
+  onTakeDeleted?: () => void;
   userWallet?: string | null;
 }
 
@@ -39,6 +41,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   onSelectDuel,
   onChallengeTake,
   onOpenAuthorProfile,
+  onTakeDeleted,
   userWallet,
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -46,6 +49,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState('');
   const [posting, setPosting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Live take header: refetched on every thread load so a profile edit
   // (name/handle/avatar) reflects here without recreating the Take.
@@ -94,11 +98,40 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
     try {
       const effectiveAuthor = authorHandle || authorDisplayName;
       await Share.share({
-        message: `"${take.content}" by ${effectiveAuthor} on Counter. Check it out or challenge them!`,
+        message: `"${liveTake.content}" by ${effectiveAuthor} on Counter. Check it out or challenge them!`,
       });
     } catch {
       // user cancelled
     }
+  };
+
+  const isOwnTake = !!userWallet && liveTake.author_wallet === userWallet;
+
+  const confirmDeleteTake = () => {
+    Alert.alert(
+      'Delete this Take?',
+      'It will disappear from Counter. Any pending challenges will be cancelled. A Take that is part of a Duel cannot be deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            setError(null);
+            try {
+              await api.deleteTake(liveTake.id);
+              if (onTakeDeleted) onTakeDeleted();
+              else onBack();
+            } catch (err: any) {
+              setError(err?.message || "Couldn't delete this take.");
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const authorDisplayName = formatUserDisplayName({
@@ -122,9 +155,27 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
           <Icon name="chevron-left" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Take</Text>
-        <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.8}>
-          <Icon name="share-2" size={20} color={colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={styles.topBarActions}>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.8}>
+            <Icon name="share-2" size={20} color={colors.textPrimary} />
+          </TouchableOpacity>
+          {isOwnTake && (
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={confirmDeleteTake}
+              disabled={deleting}
+              activeOpacity={0.8}
+              accessibilityLabel="Take options"
+              accessibilityRole="button"
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color={colors.textPrimary} />
+              ) : (
+                <Icon name="more-horizontal" size={20} color={colors.textPrimary} />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -290,6 +341,10 @@ const styles = StyleSheet.create({
   topBarTitle: {
     ...typography.h3,
     color: colors.textPrimary,
+  },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   shareButton: {
     minHeight: touchMin,

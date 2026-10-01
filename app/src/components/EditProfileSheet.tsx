@@ -15,7 +15,7 @@ import { User } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { api } from '../api';
-import { getAvatarUri } from '../utils/identity';
+import { findProfileMismatch, getAvatarUri, normalizeIdentityHandle } from '../utils/identity';
 
 interface EditProfileSheetProps {
   user: User | null;
@@ -113,15 +113,32 @@ export const EditProfileSheet: React.FC<EditProfileSheetProps> = ({
     setSaving(true);
     setError(null);
     try {
-      await api.updateProfile({
-        display_name: name,
+      const putUser = await api.updateProfile({
+        displayName: name,
         handle: handle.trim(),
         bio: bio.trim(),
       });
+      const expected = {
+        displayName: name,
+        handle: normalizeIdentityHandle(handle),
+        bio: bio.trim(),
+      };
+      const putMismatch = findProfileMismatch(putUser, { ...expected, avatar: 'ignore' });
+      if (putMismatch) {
+        throw new Error(`Saved, but the confirmed profile looks different (${putMismatch}).`);
+      }
       if (removeAvatar) {
         await api.removeAvatar();
       } else if (avatarChanged && avatarBase64) {
         await api.uploadAvatar(`data:${avatarMime};base64,${avatarBase64}`);
+      }
+      const fresh = await api.getUserProfile(wallet);
+      const getMismatch = findProfileMismatch(fresh, {
+        ...expected,
+        avatar: removeAvatar ? 'empty' : avatarChanged ? 'present' : 'ignore',
+      });
+      if (getMismatch) {
+        throw new Error(`Saved, but the confirmed profile looks different (${getMismatch}).`);
       }
       onSaved();
       onClose();

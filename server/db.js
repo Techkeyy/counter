@@ -6,6 +6,7 @@ const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'counter.sqlite');
 
 let db = null;
+let transactionDepth = 0;
 
 async function getDb() {
   if (db) return db;
@@ -253,7 +254,26 @@ function execute(sql, params = []) {
   const stmt = db.prepare(sql);
   stmt.run(params);
   stmt.free();
-  saveDb();
+  if (transactionDepth === 0) saveDb();
+}
+
+// Run a group of related writes as one durable unit. sql.js exposes SQLite's
+// transaction semantics synchronously; suppressing intermediate saveDb calls
+// prevents a crash from persisting a half-applied boundary.
+function transaction(callback) {
+  if (transactionDepth > 0) return callback();
+  db.run('BEGIN');
+  transactionDepth = 1;
+  try {
+    const result = callback();
+    db.run('COMMIT');
+    transactionDepth = 0;
+    saveDb();
+    return result;
+  } catch (error) {
+    try { db.run('ROLLBACK'); } finally { transactionDepth = 0; }
+    throw error;
+  }
 }
 
 module.exports = {
@@ -262,4 +282,5 @@ module.exports = {
   queryAll,
   queryOne,
   execute,
+  transaction,
 };

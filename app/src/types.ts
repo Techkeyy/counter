@@ -74,7 +74,7 @@ export interface Challenge {
   stake_amount_usd: number;
   cutoff_ts: number;
   resolution_ts: number;
-  status: 'PROPOSED' | 'ACCEPTED' | 'DECLINED' | 'COUNTERED';
+  status: 'PROPOSED' | 'ACCEPTED' | 'DECLINED' | 'COUNTERED' | 'CANCELLED';
   created_at: string;
   resolution_mode?: ResolutionMode;
   fallback_mode?: FallbackMode;

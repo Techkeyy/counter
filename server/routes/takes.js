@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { queryAll, queryOne, execute } = require('../db');
+const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
 
 // GET /api/takes
@@ -140,28 +140,53 @@ router.delete('/:id', requireAuth, (req, res) => {
   const takeId = req.params.id;
   const userWallet = req.userWallet;
 
-  const take = queryOne(`SELECT * FROM takes WHERE id = ?`, [takeId]);
-  if (!take || take.status === 'DELETED') {
-    return res.status(404).json({ error: 'Take not found' });
-  }
-  if (take.author_wallet !== userWallet) {
-    return res.status(403).json({ error: 'Only the author can delete this Take' });
-  }
+  try {
+    const result = transaction(() => {
+      const take = queryOne(`SELECT * FROM takes WHERE id = ?`, [takeId]);
+      if (!take || take.status === 'DELETED') {
+        const error = new Error('Take not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      if (take.author_wallet !== userWallet) {
+        const error = new Error('Only the author can delete this Take');
+        error.statusCode = 403;
+        throw error;
+      }
 
-  const duel = queryOne(`SELECT id, chain_status FROM duels WHERE take_id = ? LIMIT 1`, [takeId]);
-  if (duel) {
-    return res.status(400).json({ error: "Can't delete this Take because it is part of a Duel." });
-  }
+      // Any Duel row is a permanent challenge/evidence relationship. The
+      // guard intentionally does not inspect stake totals: even an unfunded
+      // formed Duel cannot be deleted. An accepted challenge without its Duel
+      // row is also treated as locked rather than risking orphaned history.
+      const duel = queryOne(`SELECT id FROM duels WHERE take_id = ? LIMIT 1`, [takeId]);
+      const acceptedChallenge = queryOne(
+        `SELECT id FROM challenges WHERE take_id = ? AND status = 'ACCEPTED' LIMIT 1`,
+        [takeId]
+      );
+      if (duel || acceptedChallenge) {
+        const error = new Error("Can't delete this Take because it is part of a Duel.");
+        error.statusCode = 400;
+        throw error;
+      }
 
-  const pending = queryAll(
-    `SELECT id FROM challenges WHERE take_id = ? AND (status = 'PROPOSED' OR status = 'COUNTERED')`,
-    [takeId]
-  );
-  for (const ch of pending) {
-    execute(`UPDATE challenges SET status = 'CANCELLED' WHERE id = ?`, [ch.id]);
+      const pending = queryAll(
+        `SELECT id FROM challenges WHERE take_id = ? AND status IN ('PROPOSED', 'COUNTERED')`,
+        [takeId]
+      );
+      for (const ch of pending) {
+        execute(`UPDATE challenges SET status = 'CANCELLED' WHERE id = ?`, [ch.id]);
+      }
+      execute(`UPDATE takes SET status = 'DELETED' WHERE id = ?`, [takeId]);
+      return { success: true, cancelledChallenges: pending.length };
+    });
+    res.json(result);
+  } catch (error) {
+    if (error && error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    console.error('[TAKE_DELETE] transaction failed:', error);
+    return res.status(500).json({ error: 'Could not delete this Take.' });
   }
-  execute(`UPDATE takes SET status = 'DELETED' WHERE id = ?`, [takeId]);
-  res.json({ success: true, cancelledChallenges: pending.length });
 });
 
 module.exports = router;

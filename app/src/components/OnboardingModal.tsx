@@ -16,7 +16,7 @@ import { Icon } from './Icon';
 import { ConnectionHelp } from './ConnectionHelp';
 import { WalletConnectionStatus } from '../wallet';
 import { api } from '../api';
-import { getAvatarUri } from '../utils/identity';
+import { findProfileMismatch, getAvatarUri, normalizeIdentityHandle } from '../utils/identity';
 
 interface OnboardingModalProps {
   visible: boolean;
@@ -75,7 +75,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const failed = isFailure(connectionStatus);
 
   // Canonical persist: draft -> authenticated PUT -> avatar upload ->
-  // fresh GET verify -> session state -> close. Never closes on silent loss.
+  // fresh GET verify -> session state -> close. The PUT response is checked
+  // first (same-request proof); the fresh GET then confirms durability.
+  // Any mismatch names the exact field instead of a generic warning.
   const persistDraft = async () => {
     if (!wallet || saving) return;
     const name = displayName.trim();
@@ -87,11 +89,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setError(null);
     try {
       setSavePhase('Saving your profile.');
-      await api.updateProfile({
-        display_name: name,
+      const putUser: any = await api.updateProfile({
+        displayName: name,
         handle: handle.trim(),
         bio: bio.trim(),
       });
+      const expected = {
+        displayName: name,
+        handle: normalizeIdentityHandle(handle),
+        bio: bio.trim(),
+      };
+      const putMismatch = findProfileMismatch(putUser, { ...expected, avatar: 'ignore' });
+      if (putMismatch) {
+        setError(`Saved, but the server returned something different (${putMismatch}). Retry to make sure.`);
+        setSavePhase(null);
+        setSaving(false);
+        return;
+      }
       if (avatarBase64) {
         setSavePhase('Uploading your photo.');
         try {
@@ -109,12 +123,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       setSavePhase('Confirming your profile.');
       const fresh: any = await api.getUserProfile(wallet);
       const u = fresh?.user || fresh;
-      const mismatch =
-        !u ||
-        (u.display_name || '').trim() !== name ||
-        (handle.trim() && (u.handle || '').toLowerCase() !== handle.trim().replace(/^@/, '').toLowerCase());
-      if (mismatch) {
-        setError('Saved, but the confirmed profile looks different. Retry to make sure.');
+      const getMismatch = findProfileMismatch(u, {
+        ...expected,
+        avatar: avatarBase64 ? 'present' : 'ignore',
+      });
+      if (getMismatch) {
+        setError(`Saved, but the confirmed profile looks different (${getMismatch}). Retry to make sure.`);
         setSavePhase(null);
         setSaving(false);
         return;
@@ -122,7 +136,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       if (onProfileUpdated) onProfileUpdated();
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not save profile.');
+      setError(err.message || 'Could not save profile.');
     } finally {
       setSavePhase(null);
       setSaving(false);

@@ -1,5 +1,11 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification } from './types';
 
+export interface ProfileUpdateInput {
+  displayName?: string;
+  handle?: string;
+  bio?: string;
+}
+
 // Dedicated Hosted VPS Backend URL (Fixed Public HTTPS)
 export const STABLE_BACKEND_URL = 'https://counter.103-195-188-198.sslip.io/api';
 export const API_BASE_URL = STABLE_BACKEND_URL;
@@ -130,6 +136,11 @@ export const api = {
       body: JSON.stringify({ content }),
     });
     return res?.comment || res;
+  },
+  deleteTake: async (takeId: string): Promise<{ success: boolean; cancelledChallenges: number }> => {
+    return request<{ success: boolean; cancelledChallenges: number }>(`/takes/${takeId}`, {
+      method: 'DELETE',
+    });
   },
 
   // Challenges & Negotiation
@@ -288,7 +299,7 @@ export const api = {
   getRivalry: async (wallet: string, opponentWallet: string) => {
     return request<Rivalry>(`/users/${wallet}/rivalry/${opponentWallet}`);
   },
-  updateProfile: async (data: Partial<User>) => {
+  updateProfile: async (data: ProfileUpdateInput): Promise<User> => {
     const res = await request<any>(`/users/profile`, {
       method: 'PUT',
       body: JSON.stringify(data),
