@@ -2315,9 +2315,10 @@ Final target status: **`BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTAL
 
 ### 54.G — Commit and APK boundary
 
-- Runtime, app, and regression-test changes are local working-tree changes
-  pending this ledger commit; no history rewrite, reset, rebase, or squash was
-  performed.
+- MVP implementation commit: `19ed74e`
+  (`feat: implement minimum counter mvp lifecycle`). The runtime, app,
+  regression-test, and this ledger changes were committed locally without
+  history rewrite, reset, rebase, or squash. No push was performed.
 - APK build remains intentionally held. The implementation is ready for
   Director rebuild review; fresh APK authorization is safe to consider after
   that review, but no build or device/UAT claim is made here.
