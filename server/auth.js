@@ -4,7 +4,14 @@ const bs58Module = require('bs58');
 const bs58 = bs58Module.default || bs58Module;
 const { queryOne, execute } = require('./db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'counter-secret-key-solana-hackathon-2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+function getJwtSecret() {
+  if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET is required');
+  }
+  return JWT_SECRET;
+}
 
 function generateNonce(walletAddress) {
   const nonce = crypto.randomBytes(16).toString('hex');
@@ -21,6 +28,13 @@ function generateNonce(walletAddress) {
 }
 
 function verifySignature(walletAddress, signatureBase58, nonce) {
+  let jwtSecret;
+  try {
+    jwtSecret = getJwtSecret();
+  } catch (err) {
+    return { valid: false, error: 'Authentication is unavailable' };
+  }
+
   const nonceRow = queryOne(`SELECT nonce, expires_at FROM auth_nonces WHERE wallet_address = ?`, [walletAddress]);
   if (!nonceRow) {
     return { valid: false, error: 'No active authentication challenge for this wallet' };
@@ -55,7 +69,7 @@ function verifySignature(walletAddress, signatureBase58, nonce) {
       iat: Date.now(),
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
     });
-    const tokenSignature = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex');
+    const tokenSignature = crypto.createHmac('sha256', jwtSecret).update(payload).digest('hex');
     const token = `${Buffer.from(payload).toString('base64url')}.${tokenSignature}`;
 
     return { valid: true, token, wallet: walletAddress };
@@ -66,12 +80,20 @@ function verifySignature(walletAddress, signatureBase58, nonce) {
 
 function verifyToken(tokenString) {
   if (!tokenString) return null;
+
+  let jwtSecret;
+  try {
+    jwtSecret = getJwtSecret();
+  } catch (err) {
+    return null;
+  }
+
   const parts = tokenString.split('.');
   if (parts.length !== 2) return null;
 
   const [payloadBase64, providedSig] = parts;
   const payloadStr = Buffer.from(payloadBase64, 'base64url').toString('utf-8');
-  const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(payloadStr).digest('hex');
+  const expectedSig = crypto.createHmac('sha256', jwtSecret).update(payloadStr).digest('hex');
 
   if (providedSig !== expectedSig) return null;
 
