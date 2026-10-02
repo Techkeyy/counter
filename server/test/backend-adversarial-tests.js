@@ -194,7 +194,10 @@ async function runTests() {
     assert(cryptoRes.evidence !== undefined, 'Evidence must be present');
 
     // Test Weather Resolver Logic
-    const weatherRes = await resolveWeather({ latitude: 40.7128, longitude: -74.0060, condition: 'RAIN_OR_SNOW' });
+    const weatherRes = await resolveWeather({
+      provider: 'open-meteo', metric: 'temperature_2m', operator: '>=',
+      city: 'New York', latitude: 40.7128, longitude: -74.0060, threshold: 20,
+    });
     assert(weatherRes && weatherRes.success, 'Weather resolver must execute successfully');
 
     // Test Sports Resolver Logic

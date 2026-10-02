@@ -2199,3 +2199,126 @@ the build, and it is documentation-only. No install, `adb` operation,
 physical UAT, or economic UAT has been performed.
 
 Final target status: **`BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTALL REQUIRED`**.
+
+## 54. MINIMUM COUNTER MVP — 2026-10-02
+
+### 54.A — Freeze and scope
+
+- Starting `HEAD`: `4efaa105b0240490428111cd43e32e178a9f369d`.
+- Starting `origin/master`: `4efaa105b0240490428111cd43e32e178a9f369d`.
+- Starting tree was clean.
+- No Solana program, stake math, claim math, token mint, MWA flow,
+  settlement authority, terminal guard, receipt truth, or Take-image/media
+  infrastructure was changed.
+- No APK was built, installed, or used for physical/economic UAT.
+
+### 54.B — Duels transaction home
+
+- `DuelsScreen` now loads `/api/challenges`, `/api/duels`, and the existing
+  authenticated portfolio/position state.
+- Pending challenges are split into `Incoming` and `Sent`. Incoming rows open
+  the review sheet with Accept, Counter, and Decline; Sent rows are read-only
+  and say they are waiting for the Take creator.
+- Accepted economic state is shown as `Active`, `Claimable`, or `Completed`,
+  with simple lifecycle copy for awaiting funding, live, and ready to resolve.
+- Challenge creation retains the returned server Challenge object, closes the
+  modal, navigates to Duels, triggers a refresh, and immediately merges the
+  returned object into the Sent list until the refresh confirms it.
+- Accepted challenges leave the pending lists and produce one linked Duel;
+  acceptance is transactionally idempotent and retries return that Duel
+  without incrementing `takes.duels_count` twice.
+
+### 54.C — Challenge ownership and terms
+
+- `server/routes/challenges.js` derives `challenger_wallet` only from the
+  authenticated session and `creator_wallet` only from the server-loaded
+  `Take.author_wallet`.
+- Client `creatorWallet`/`targetWallet` fields remain compatibility inputs but
+  cannot redirect ownership. Self-challenges and non-`ACTIVE` Takes are
+  rejected.
+- Challenge GET and POST responses join canonical creator/challenger profile
+  fields (`*_handle`, `*_name`, `*_avatar`) for immediate identity rendering.
+- Generic `MUTUAL + REFUND` is valid for any active Take and stores no oracle
+  config. Its bound terms include both propositions, both captains, stake,
+  cutoff, resolution time, mutual deadline, resolution mode, and fallback.
+- Counterparty signatures remain required for Mutual settlement: one vote does
+  not settle, mismatched votes remain disputed, matching votes settle, and the
+  locked deadline executes the on-chain refund path. Generic Mutual never falls
+  through to Counter Verified.
+
+### 54.D — Counter Verified MVP contract
+
+- The only enabled Counter Verified template is Weather temperature.
+- The locked fields are provider `open-meteo`, metric `temperature_2m`, city
+  label, latitude, longitude, operator `>=`, and numeric Celsius threshold.
+- The product wording is: “At or after the resolution time, Counter checks
+  Open-Meteo's current temperature for [location].” No historical-weather or
+  exact-time observation claim was added.
+- Weather Counter Verified rejects incomplete config, invalid coordinates,
+  invalid operator, nonnumeric threshold, and unsupported providers.
+- Sports, crypto, politics, culture, rain, arbitrary categories, and the old
+  crypto fallback are absent from the shipped Challenge Verified controls and
+  fail closed at the server resolver boundary.
+
+### 54.E — Regression and scan gate
+
+- Focused MVP lifecycle/ownership test:
+  `server/test/mvp-lifecycle.test.js` — passed.
+- Auth boundary — passed: configured SIWS, missing-secret refusal, former
+  fallback-token rejection.
+- Sessions — `5/5`.
+- Profile boundaries — passed.
+- Take identity/deletion — passed.
+- Portfolio — passed.
+- Chain vectors — `11/11`.
+- Resolution boundaries — passed; one-vote, mismatch, convergence, verified
+  rejection, and fail-closed Weather checks remained explicit.
+- Backend adversarial — `8/8`; live oracle probes remained honest.
+- TypeScript no-emit — passed.
+- Targeted application-owned scans: former JWT fallback `0`, unsafe JWT
+  fallback pattern `0`, mock wallet/session fallback `0`, obsolete tunnel or
+  host `0`, deferred Verified controls in ChallengeModal `0`, and crypto/sports
+  fallback resolver references `0`.
+
+### 54.F — Production deployment and readback
+
+- Production precheck passed without revealing the JWT value:
+  `counter-backend.service` active, runtime JWT presence `true`, runtime JWT
+  non-empty `true`, Counter DB present, and health HTTP `200`.
+- Pre-deploy DB backup:
+  `/opt/counter/backups/counter-mvp-predeploy-20261002134255.sqlite`;
+  `184320` bytes; SHA-256
+  `c312461bf5a5e5167a9fea814b567a47b1f86ef94bf7f5a4ef4ca5b362022425`.
+- Rollback copy:
+  `/opt/counter/backups/server-mvp-20261002134255/`.
+- Only these four Counter runtime files were deployed:
+  `server/routes/challenges.js`, `server/resolution-templates.js`,
+  `server/resolvers/index.js`, and `server/resolvers/weather.js`.
+  Local and remote SHA-256 hashes matched exactly:
+  `73212b926eddcb3e57cd99adda05e18dac183cb084f6e38654f70dcde1de6a26`,
+  `82b9353cc80c96c2000f12120eebeafa40e20a63ade821044920835cec372c61`,
+  `f529fe9bb7ac735966c109aa6f4a4618657ad0c5b06eba19bdece3d7fb0a0800`,
+  and `e5ee80f00ca09436a7761df8246fc8d97d2ff2e3c2c093d7ec24c269a1bab2d7`.
+- Only `counter-backend.service` was restarted. Post-restart service status was
+  active and health returned HTTP `200`.
+- Disposable live API contract readback passed: three throwaway SIWS
+  identities exercised forged ownership fields, B/A/C visibility, generic
+  Mutual + Refund, Weather temperature creation, and invalid-provider refusal.
+  The probe formed no Duel. Normal API deletion soft-deleted both Takes and
+  canceled their pending challenges; exact probe IDs were then removed through
+  controlled cleanup. Final exact-ID counts were zero for all disposable
+  users, Takes, and challenges. Private invalid-auth readback returned `401`.
+- Final production readback after cleanup: service active, JWT presence true,
+  health `200`, public Takes `200`, private portfolio invalid auth `401`,
+  `duels=0`, `positions=0`, and `receipts=0`. No genuine owner row was part of
+  the exact disposable cleanup.
+
+### 54.G — Commit and APK boundary
+
+- Runtime, app, and regression-test changes are local working-tree changes
+  pending this ledger commit; no history rewrite, reset, rebase, or squash was
+  performed.
+- APK build remains intentionally held. The implementation is ready for
+  Director rebuild review; fresh APK authorization is safe to consider after
+  that review, but no build or device/UAT claim is made here.
+- Target status: **`BUILDING — MINIMUM COUNTER MVP IMPLEMENTED / DIRECTOR REBUILD REVIEW REQUIRED`**.

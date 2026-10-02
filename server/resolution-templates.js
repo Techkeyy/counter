@@ -1,12 +1,12 @@
-// Canonical resolution templates. Every Counter Verified duel (and every
-// MUTUAL duel whose fallback is COUNTER_VERIFIED) must carry one of these
-// exact shapes; anything else is rejected at proposal time, never defaulted.
+// Canonical resolution contracts. Counter Verified is deliberately narrow in
+// the MVP; generic social Takes use MUTUAL + REFUND and do not need an oracle.
 const RESOLUTION_MODES = ['COUNTER_VERIFIED', 'MUTUAL'];
 const FALLBACK_MODES = ['REFUND', 'COUNTER_VERIFIED'];
 
-const CRYPTO_ASSETS = ['solana', 'bitcoin', 'ethereum'];
-const CRYPTO_OPERATORS = ['>=', '<=', '>', '<'];
-const WEATHER_CONDITIONS = ['rain', 'temp'];
+const VERIFIED_CATEGORY = 'WEATHER';
+const WEATHER_PROVIDER = 'open-meteo';
+const WEATHER_METRIC = 'temperature_2m';
+const WEATHER_OPERATOR = '>=';
 const WEATHER_CITIES = [
   { city: 'London', latitude: 51.5074, longitude: -0.1278 },
   { city: 'New York', latitude: 40.7128, longitude: -74.006 },
@@ -16,63 +16,50 @@ const WEATHER_CITIES = [
 ];
 
 function parseConfig(raw) {
-  if (!raw) return {};
+  if (raw === undefined || raw === null || raw === '') return {};
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return null;
   }
 }
 
-function validateCryptoConfig(cfg) {
-  if (!CRYPTO_ASSETS.includes(cfg.assetId)) {
-    return `Unsupported crypto asset '${cfg.assetId}'. Use one of: ${CRYPTO_ASSETS.join(', ')}.`;
-  }
-  if (!Number.isFinite(Number(cfg.targetPriceUsd)) || Number(cfg.targetPriceUsd) <= 0) {
-    return 'Crypto template needs a target price above zero.';
-  }
-  if (!CRYPTO_OPERATORS.includes(cfg.operator)) {
-    return `Unsupported comparison '${cfg.operator}'. Use one of: ${CRYPTO_OPERATORS.join(', ')}.`;
-  }
-  return null;
-}
-
-function validateSportsConfig(cfg) {
-  if (!cfg.eventId || String(cfg.eventId).trim().length === 0) return 'Sports template needs an event ID.';
-  if (!cfg.homeTeam || String(cfg.homeTeam).trim().length === 0) return 'Sports template needs a home team.';
-  if (!cfg.awayTeam || String(cfg.awayTeam).trim().length === 0) return 'Sports template needs an away team.';
-  if (cfg.targetSide !== 'home' && cfg.targetSide !== 'away') {
-    return "Sports template needs targetSide 'home' or 'away'.";
-  }
-  return null;
-}
-
-function validateWeatherConfig(cfg) {
-  if (!Number.isFinite(Number(cfg.latitude)) || !Number.isFinite(Number(cfg.longitude))) {
-    return 'Weather template needs numeric latitude and longitude.';
-  }
-  if (!cfg.city || String(cfg.city).trim().length === 0) return 'Weather template needs a city label.';
-  if (!WEATHER_CONDITIONS.includes(cfg.condition)) {
-    return `Weather condition must be one of: ${WEATHER_CONDITIONS.join(', ')}.`;
-  }
-  if (!Number.isFinite(Number(cfg.threshold))) return 'Weather template needs a numeric threshold.';
-  return null;
-}
-
-// Validate a verified-resolution template for a category. Non-feed categories
-// (politics/culture/…) have no dedicated resolver, so they must carry an
-// explicit crypto market decider — never an empty or malformed object.
-function validateVerifiedTemplate(category, sourceType, rawConfig) {
+function validateWeatherConfig(rawConfig) {
   const cfg = parseConfig(rawConfig);
-  if (cfg === null) return { ok: false, error: 'Resolution config is not valid JSON.' };
-  const kind = String(category || '').toLowerCase();
-  let problem = null;
-  if (kind === 'sports') problem = validateSportsConfig(cfg);
-  else if (kind === 'weather') problem = validateWeatherConfig(cfg);
-  else problem = validateCryptoConfig(cfg);
-  if (problem) return { ok: false, error: problem };
-  return { ok: true, config: cfg };
+  if (cfg === null) return 'Resolution config is not valid JSON.';
+  if (cfg.provider !== WEATHER_PROVIDER) return 'Weather provider must be Open-Meteo.';
+  if (cfg.metric !== WEATHER_METRIC) return 'Weather metric must be temperature_2m.';
+  if (cfg.operator !== WEATHER_OPERATOR) return 'Weather operator must be >=.';
+  if (!cfg.city || String(cfg.city).trim().length === 0) return 'Weather template needs a location label.';
+
+  const latitude = Number(cfg.latitude);
+  const longitude = Number(cfg.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    return 'Weather latitude must be between -90 and 90.';
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return 'Weather longitude must be between -180 and 180.';
+  }
+  if (!Number.isFinite(Number(cfg.threshold))) {
+    return 'Weather threshold must be a numeric Celsius value.';
+  }
+  return null;
+}
+
+// Validate a Counter Verified template. Unsupported categories never fall
+// through to a different resolver.
+function validateVerifiedTemplate(category, sourceType, rawConfig) {
+  const kind = String(category || '').toUpperCase();
+  const source = String(sourceType || '').toLowerCase();
+  if (kind !== VERIFIED_CATEGORY) {
+    return { ok: false, error: 'Counter Verified currently supports Weather temperature only.' };
+  }
+  if (source && source !== WEATHER_PROVIDER && source !== 'weather') {
+    return { ok: false, error: 'Counter Verified weather source must be Open-Meteo.' };
+  }
+  const error = validateWeatherConfig(rawConfig);
+  return error ? { ok: false, error } : { ok: true, config: parseConfig(rawConfig) };
 }
 
 function validateResolutionMode(mode) {
@@ -91,15 +78,39 @@ function validateFallbackMode(mode) {
   return { ok: true, value: m };
 }
 
+// Generic MUTUAL + REFUND is the universal social path and deliberately does
+// not need an oracle. Any Counter Verified path, including MUTUAL with a
+// Counter Verified fallback, must satisfy the enabled Weather contract.
+function validateChallengeContract({ category, sourceType, sourceConfig, resolutionMode, fallbackMode }) {
+  const mode = validateResolutionMode(resolutionMode);
+  if (!mode.ok) return mode;
+  const fallback = validateFallbackMode(fallbackMode);
+  if (!fallback.ok) return fallback;
+
+  if (mode.value === 'MUTUAL' && fallback.value === 'REFUND') {
+    return { ok: true, mode: mode.value, fallback: fallback.value, config: null };
+  }
+
+  const template = validateVerifiedTemplate(category, sourceType, sourceConfig);
+  if (!template.ok) return template;
+  if (mode.value === 'COUNTER_VERIFIED' && fallback.value !== 'REFUND') {
+    return { ok: false, error: 'Counter Verified Duels must use REFUND as their fallback.' };
+  }
+  return { ok: true, mode: mode.value, fallback: fallback.value, config: template.config };
+}
+
 module.exports = {
   RESOLUTION_MODES,
   FALLBACK_MODES,
-  CRYPTO_ASSETS,
-  CRYPTO_OPERATORS,
-  WEATHER_CONDITIONS,
+  VERIFIED_CATEGORY,
+  WEATHER_PROVIDER,
+  WEATHER_METRIC,
+  WEATHER_OPERATOR,
   WEATHER_CITIES,
   parseConfig,
+  validateWeatherConfig,
   validateVerifiedTemplate,
   validateResolutionMode,
   validateFallbackMode,
+  validateChallengeContract,
 };

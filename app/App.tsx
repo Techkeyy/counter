@@ -62,6 +62,7 @@ export default function App() {
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
   const [reviewChallenge, setReviewChallenge] = useState<Challenge | null>(null);
+  const [createdChallenge, setCreatedChallenge] = useState<Challenge | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   // Other-user profile viewing (overlay; own profile lives on the tab).
   const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
@@ -250,6 +251,8 @@ export default function App() {
           <DuelsScreen
             userWallet={walletState.publicKey}
             onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
+            createdChallenge={createdChallenge}
             focusSignal={tabFocus}
           />
         </View>
@@ -371,9 +374,13 @@ export default function App() {
         visible={!!challengeTargetTake}
         take={challengeTargetTake}
         onClose={() => setChallengeTargetTake(null)}
-        onChallengeCreated={() => {
+        onChallengeCreated={(created) => {
+          // Keep the server-returned object locally so the Sent row is
+          // visible even before the refreshed transaction-home request lands.
+          setCreatedChallenge(created);
           setChallengeTargetTake(null);
-          setCurrentTab('HOME');
+          setCurrentTab('DUELS');
+          setTabFocus((n) => n + 1);
         }}
       />
 

@@ -39,15 +39,22 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
     setChallengerName(INCOMPLETE_PROFILE_NAME);
     if (!challenge) return;
     let cancelled = false;
+    const otherWallet = userWallet === challenge.creator_wallet
+      ? challenge.challenger_wallet
+      : challenge.creator_wallet;
+    const fallbackName = userWallet === challenge.creator_wallet
+      ? formatUserDisplayName({ display_name: challenge.challenger_name, handle: challenge.challenger_handle, wallet: otherWallet })
+      : formatUserDisplayName({ display_name: challenge.creator_name, handle: challenge.creator_handle, wallet: otherWallet });
+    setChallengerName(fallbackName);
     api
-      .getUserProfile(challenge.challenger_wallet)
+      .getUserProfile(otherWallet)
       .then((user) => {
         if (!cancelled && user) {
           setChallengerName(
             formatUserDisplayName({
               display_name: user.display_name,
               handle: user.handle,
-              wallet: challenge.challenger_wallet,
+              wallet: otherWallet,
             })
           );
         }
@@ -56,12 +63,14 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [challenge?.id]);
+  }, [challenge?.id, userWallet]);
 
   if (!challenge) return null;
 
-  const isCreator = userWallet === challenge.creator_wallet;
+  const isIncoming = userWallet === challenge.creator_wallet;
   const status = challenge.status;
+  const isGenericMutual = (challenge.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL'
+    && (challenge.fallback_mode || 'REFUND') === 'REFUND';
 
   const run = async (fn: () => Promise<any>, after: (res: any) => void) => {
     setWorking(true);
@@ -118,7 +127,7 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
 
             <View style={styles.statusRow}>
               <Text style={styles.statusText}>
-                From {challengerName} · {status.toLowerCase()}
+                {isIncoming ? `From ${challengerName} · ${status.toLowerCase()}` : `You challenged ${challengerName} · waiting for response`}
               </Text>
             </View>
 
@@ -147,7 +156,7 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
             <View style={styles.factsBox}>
               <Text style={styles.factLabel}>Decided by</Text>
               <Text style={styles.factValue}>
-                {describeCriteria(challenge.source_type || challenge.category, challenge.source_config)}
+                {isGenericMutual ? 'No oracle. Both captains confirm the winner after resolution time.' : describeCriteria(challenge.source_type || challenge.category, challenge.source_config)}
               </Text>
             </View>
             <View style={styles.factsBox}>
@@ -155,11 +164,11 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
               <Text style={styles.factValue}>
                 {(challenge.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL'
                   ? `Settle together. If no agreement, ${(challenge.fallback_mode || 'REFUND') === 'REFUND' ? 'everyone is refunded' : 'Counter Verified decides'}.`
-                  : 'Counter Verified by the criteria above.'}
+                  : 'Counter Verified checks Open-Meteo current temperature at or after the resolution time.'}
               </Text>
             </View>
 
-            {mode === 'COUNTER' ? (
+            {mode === 'COUNTER' && isIncoming ? (
               <>
                 <Text style={styles.label}>Your counter stake (test cUSD)</Text>
                 <TextInput
@@ -199,7 +208,7 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
               </>
             ) : status === 'PROPOSED' || status === 'COUNTERED' ? (
               <View style={styles.actionsCol}>
-                {!isCreator && (
+                {isIncoming && (
                   <TouchableOpacity
                     style={styles.primaryButton}
                     onPress={handleAccept}
@@ -216,7 +225,7 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
                   </TouchableOpacity>
                 )}
                 <View style={styles.actionsRow}>
-                  {!isCreator && (
+                  {isIncoming && (
                     <TouchableOpacity
                       style={styles.secondaryButton}
                       onPress={() => setMode('COUNTER')}
@@ -228,22 +237,20 @@ export const ChallengeSheet: React.FC<ChallengeSheetProps> = ({
                       <Text style={styles.secondaryText}>Counter</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity
-                    style={styles.dangerButton}
-                    onPress={handleDecline}
-                    disabled={working}
-                    activeOpacity={0.8}
-                    accessibilityLabel="Decline challenge"
-                    accessibilityRole="button"
-                  >
-                    <Text style={styles.dangerText}>Decline</Text>
-                  </TouchableOpacity>
+                  {isIncoming && (
+                    <TouchableOpacity
+                      style={styles.dangerButton}
+                      onPress={handleDecline}
+                      disabled={working}
+                      activeOpacity={0.8}
+                      accessibilityLabel="Decline challenge"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.dangerText}>Decline</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-                {isCreator && (
-                  <Text style={styles.note}>
-                    You sent this challenge. It becomes a duel once your opponent accepts.
-                  </Text>
-                )}
+                {!isIncoming && <Text style={styles.note}>This Challenge is waiting for the Take creator to review it.</Text>}
               </View>
             ) : (
               <Text style={styles.note}>This challenge is {status.toLowerCase()}. No action needed.</Text>

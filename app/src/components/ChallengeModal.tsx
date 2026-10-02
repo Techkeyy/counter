@@ -9,15 +9,13 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Take, Category, ResolutionMode, FallbackMode } from '../types';
+import { Take, Challenge, Category, ResolutionMode, FallbackMode } from '../types';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { api } from '../api';
 import { formatUserDisplayName } from '../utils/identity';
 import {
-  CRYPTO_ASSETS,
   WEATHER_CITIES,
-  CryptoOperator,
   describeCriteria,
   formatDeadline,
 } from '../utils/criteria';
@@ -26,7 +24,7 @@ interface ChallengeModalProps {
   visible: boolean;
   take: Take | null;
   onClose: () => void;
-  onChallengeCreated: () => void;
+  onChallengeCreated: (challenge: Challenge) => void;
 }
 
 const STAKE_PRESETS = ['10', '25', '50', '100', '250'];
@@ -40,7 +38,6 @@ const AGREEMENT_WINDOWS = [
   { label: '24 hours', seconds: 24 * 3600 },
   { label: '48 hours', seconds: 48 * 3600 },
 ];
-const OPERATORS: CryptoOperator[] = ['>=', '<='];
 
 export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   visible,
@@ -53,22 +50,12 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   const [sideATerms, setSideATerms] = useState('');
   const [sideBTerms, setSideBTerms] = useState('');
   const [cutoffSeconds, setCutoffSeconds] = useState(CUTOFF_PRESETS[0].seconds);
-  const [resolutionMode, setResolutionMode] = useState<ResolutionMode>('COUNTER_VERIFIED');
+  const [resolutionMode, setResolutionMode] = useState<ResolutionMode>('MUTUAL');
   const [fallbackMode, setFallbackMode] = useState<FallbackMode>('REFUND');
   const [agreementSeconds, setAgreementSeconds] = useState(AGREEMENT_WINDOWS[1].seconds);
-  // Crypto decider
-  const [assetId, setAssetId] = useState<string>('solana');
-  const [operator, setOperator] = useState<CryptoOperator>('>=');
-  const [targetPrice, setTargetPrice] = useState('250');
-  // Sports decider
-  const [eventId, setEventId] = useState('');
-  const [homeTeam, setHomeTeam] = useState('');
-  const [awayTeam, setAwayTeam] = useState('');
-  const [targetSide, setTargetSide] = useState<'home' | 'away'>('home');
-  // Weather decider
+  // The only Counter Verified template in the MVP.
   const [cityIndex, setCityIndex] = useState(0);
-  const [weatherCondition, setWeatherCondition] = useState<'rain' | 'temp'>('rain');
-  const [threshold, setThreshold] = useState('0.1');
+  const [threshold, setThreshold] = useState('30');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,35 +65,42 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
       setStep(1);
       setSideATerms(take.topic);
       setSideBTerms('');
+      setResolutionMode(take.category === 'WEATHER' ? 'COUNTER_VERIFIED' : 'MUTUAL');
+      setFallbackMode('REFUND');
       setError(null);
     }
   }, [take]);
 
   if (!take) return null;
   const category: Category = take.category || 'CRYPTO';
-  const needsCrypto = category !== 'SPORTS' && category !== 'WEATHER';
+  const isWeather = category === 'WEATHER';
+  const usesWeatherContract = isWeather && (resolutionMode === 'COUNTER_VERIFIED' || fallbackMode === 'COUNTER_VERIFIED');
 
   const buildSourceConfig = (): Record<string, any> => {
-    if (category === 'SPORTS') {
-      return { eventId: eventId.trim(), homeTeam: homeTeam.trim(), awayTeam: awayTeam.trim(), targetSide };
-    }
-    if (category === 'WEATHER') {
-      const city = WEATHER_CITIES[cityIndex];
-      return { latitude: city.latitude, longitude: city.longitude, city: city.city, condition: weatherCondition, threshold: Number(threshold) };
-    }
-    return { assetId, targetPriceUsd: Number(targetPrice), operator };
+    const city = WEATHER_CITIES[cityIndex];
+    return {
+      provider: 'open-meteo',
+      metric: 'temperature_2m',
+      operator: '>=',
+      latitude: city.latitude,
+      longitude: city.longitude,
+      city: city.city,
+      threshold: Number(threshold),
+    };
   };
 
   const validate = (): string | null => {
     const stake = parseFloat(stakeAmount);
     if (Number.isNaN(stake) || stake <= 0) return 'Enter a valid stake amount in test cUSD.';
     if (!sideATerms.trim() || !sideBTerms.trim()) return 'Write both sides of the dispute in plain words.';
-    if (category === 'SPORTS') {
-      if (!eventId.trim() || !homeTeam.trim() || !awayTeam.trim()) return 'Add the event ID and both teams so anyone can check the result.';
-    } else if (category === 'WEATHER') {
-      if (Number.isNaN(Number(threshold))) return 'Enter a numeric threshold for the weather decider.';
-    } else {
-      if (Number.isNaN(Number(targetPrice)) || Number(targetPrice) <= 0) return 'Enter a target price above zero.';
+    if (resolutionMode === 'COUNTER_VERIFIED' && !isWeather) {
+      return 'Counter Verified currently supports Weather temperature only. Use Settle Together for this Take.';
+    }
+    if (fallbackMode === 'COUNTER_VERIFIED' && !isWeather) {
+      return 'Counter Verified fallback currently supports Weather temperature only.';
+    }
+    if (usesWeatherContract && !Number.isFinite(Number(threshold))) {
+      return 'Enter a numeric Celsius threshold for the Weather decider.';
     }
     return null;
   };
@@ -123,7 +117,7 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
     setLoading(true);
     setError(null);
     try {
-      await api.proposeChallenge({
+      const created = await api.proposeChallenge({
         takeId: take.id,
         targetWallet: take.author_wallet,
         propositionA: sideATerms.trim(),
@@ -132,15 +126,15 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
         stakeAmountUsd: parseFloat(stakeAmount),
         cutoffTs,
         resolutionTs,
-        sourceType: category,
-        sourceConfig: buildSourceConfig(),
+        sourceType: usesWeatherContract ? 'open-meteo' : null,
+        sourceConfig: usesWeatherContract ? buildSourceConfig() : null,
         resolutionMode,
         fallbackMode,
         mutualDeadlineTs:
           resolutionMode === 'MUTUAL' ? resolutionTs + agreementSeconds : null,
       });
       setLoading(false);
-      onChallengeCreated();
+      onChallengeCreated(created);
       onClose();
     } catch (err: any) {
       setLoading(false);
@@ -148,7 +142,9 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
     }
   };
 
-  const criteriaSummary = describeCriteria(category, JSON.stringify(buildSourceConfig()));
+  const criteriaSummary = usesWeatherContract
+    ? describeCriteria('weather', JSON.stringify(buildSourceConfig()))
+    : 'Settle together: both captains confirm the winner. If they do not agree by the deadline, everyone is refunded.';
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -213,31 +209,9 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                   accessibilityLabel="Side B terms"
                 />
 
-                <Text style={styles.label}>Deciding evidence · {category.toLowerCase()}</Text>
-                {category === 'SPORTS' ? (
+                {usesWeatherContract ? (
                   <>
-                    <TextInput style={styles.input} value={eventId} onChangeText={setEventId} placeholder="Event ID (sports database)" placeholderTextColor={colors.textMuted} accessibilityLabel="Event ID" />
-                    <View style={styles.twoCol}>
-                      <TextInput style={[styles.input, styles.flex]} value={homeTeam} onChangeText={setHomeTeam} placeholder="Home team" placeholderTextColor={colors.textMuted} accessibilityLabel="Home team" />
-                      <TextInput style={[styles.input, styles.flex]} value={awayTeam} onChangeText={setAwayTeam} placeholder="Away team" placeholderTextColor={colors.textMuted} accessibilityLabel="Away team" />
-                    </View>
-                    <View style={styles.chipRow}>
-                      {(['home', 'away'] as const).map((s) => (
-                        <TouchableOpacity
-                          key={s}
-                          style={[styles.chip, targetSide === s && styles.chipActive]}
-                          onPress={() => setTargetSide(s)}
-                          accessibilityLabel={`Side A wins if ${s} wins`}
-                        >
-                          <Text style={[styles.chipText, targetSide === s && styles.chipTextActive]}>
-                            Side A if {s} wins
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                ) : category === 'WEATHER' ? (
-                  <>
+                    <Text style={styles.label}>Counter Verified · Open-Meteo temperature</Text>
                     <View style={styles.chipRow}>
                       {WEATHER_CITIES.map((c, i) => (
                         <TouchableOpacity
@@ -250,73 +224,23 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View style={styles.chipRow}>
-                      {(['rain', 'temp'] as const).map((c) => (
-                        <TouchableOpacity
-                          key={c}
-                          style={[styles.chip, weatherCondition === c && styles.chipActive]}
-                          onPress={() => setWeatherCondition(c)}
-                          accessibilityLabel={c === 'rain' ? 'Decided by rain' : 'Decided by temperature'}
-                        >
-                          <Text style={[styles.chipText, weatherCondition === c && styles.chipTextActive]}>
-                            {c === 'rain' ? 'Rain' : 'Temperature'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
                     <TextInput
                       style={styles.input}
                       value={threshold}
                       onChangeText={setThreshold}
-                      placeholder={weatherCondition === 'rain' ? 'Rain threshold in mm' : 'Temperature threshold in C'}
+                      placeholder="Temperature threshold in °C"
                       placeholderTextColor={colors.textMuted}
                       keyboardType="numeric"
-                      accessibilityLabel="Weather threshold"
+                      accessibilityLabel="Temperature threshold in Celsius"
                     />
+                    <Text style={styles.note}>
+                      At or after the resolution time, Counter checks Open-Meteo's current temperature for the selected location.
+                    </Text>
                   </>
                 ) : (
-                  <>
-                    <View style={styles.chipRow}>
-                      {CRYPTO_ASSETS.map((a) => (
-                        <TouchableOpacity
-                          key={a.id}
-                          style={[styles.chip, assetId === a.id && styles.chipActive]}
-                          onPress={() => setAssetId(a.id)}
-                          accessibilityLabel={a.label}
-                        >
-                          <Text style={[styles.chipText, assetId === a.id && styles.chipTextActive]}>{a.label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <View style={styles.chipRow}>
-                      {OPERATORS.map((op) => (
-                        <TouchableOpacity
-                          key={op}
-                          style={[styles.chip, operator === op && styles.chipActive]}
-                          onPress={() => setOperator(op)}
-                          accessibilityLabel={`Side A wins if price ${op} target`}
-                        >
-                          <Text style={[styles.chipText, operator === op && styles.chipTextActive]}>
-                            {op === '>=' ? 'At or above' : 'At or below'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <TextInput
-                      style={styles.input}
-                      value={targetPrice}
-                      onChangeText={setTargetPrice}
-                      placeholder="Target price in USD"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="numeric"
-                      accessibilityLabel="Target price in USD"
-                    />
-                    {category !== 'CRYPTO' && (
-                      <Text style={styles.note}>
-                        This category has no dedicated data feed, so the duel is decided by this public market reference.
-                      </Text>
-                    )}
-                  </>
+                  <Text style={styles.note}>
+                    This Take uses Settle Together. Both captains independently confirm the winner after resolution time; no public oracle is required.
+                  </Text>
                 )}
 
                 <Text style={styles.label}>Captain stake each (test cUSD)</Text>
@@ -357,21 +281,23 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                 </View>
 
                 <Text style={styles.label}>How this settles</Text>
-                <TouchableOpacity
-                  style={[styles.modeRow, resolutionMode === 'COUNTER_VERIFIED' && styles.modeRowActive]}
-                  onPress={() => setResolutionMode('COUNTER_VERIFIED')}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Settle by Counter Verified"
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: resolutionMode === 'COUNTER_VERIFIED' }}
-                >
-                  <View style={styles.modeTextCol}>
-                    <Text style={styles.modeTitle}>Counter Verified (recommended)</Text>
-                    <Text style={styles.modeDesc}>
-                      An objective data feed decides using the criteria above.
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                {isWeather && (
+                  <TouchableOpacity
+                    style={[styles.modeRow, resolutionMode === 'COUNTER_VERIFIED' && styles.modeRowActive]}
+                    onPress={() => setResolutionMode('COUNTER_VERIFIED')}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Settle by Counter Verified"
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: resolutionMode === 'COUNTER_VERIFIED' }}
+                  >
+                    <View style={styles.modeTextCol}>
+                      <Text style={styles.modeTitle}>Counter Verified</Text>
+                      <Text style={styles.modeDesc}>
+                        Counter checks a supported public data source and settles the Duel.
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[styles.modeRow, resolutionMode === 'MUTUAL' && styles.modeRowActive]}
                   onPress={() => setResolutionMode('MUTUAL')}
@@ -392,7 +318,7 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                   <>
                     <Text style={styles.label}>If no agreement</Text>
                     <View style={styles.chipRow}>
-                      {(['REFUND', 'COUNTER_VERIFIED'] as FallbackMode[]).map((fb) => (
+                      {(['REFUND', ...(isWeather ? ['COUNTER_VERIFIED'] : [])] as FallbackMode[]).map((fb) => (
                         <TouchableOpacity
                           key={fb}
                           style={[styles.chip, fallbackMode === fb && styles.chipActive]}

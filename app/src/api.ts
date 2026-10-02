@@ -159,8 +159,8 @@ export const api = {
     stakeAmountUsd: number;
     cutoffTs: number;
     resolutionTs: number;
-    sourceType: string;
-    sourceConfig: any;
+    sourceType?: string | null;
+    sourceConfig?: any;
     resolutionMode?: string;
     fallbackMode?: string;
     mutualDeadlineTs?: number | null;
@@ -168,10 +168,11 @@ export const api = {
     // Server contract uses `creatorWallet` (Captain A / take author).
     // Send both keys so the challenge counterparty is never silently dropped
     // by a field-name mismatch.
-    return request<Challenge>(`/challenges`, {
+    const res = await request<any>(`/challenges`, {
       method: 'POST',
       body: JSON.stringify({ ...data, creatorWallet: data.targetWallet }),
     });
+    return res?.challenge || res;
   },
   createCounteroffer: async (challengeId: string, data: {
     stakeAmountUsd: number;

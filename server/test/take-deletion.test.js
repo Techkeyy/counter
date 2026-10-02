@@ -143,9 +143,8 @@ async function run() {
     r = await api('POST', '/api/challenges', B.token, {
       takeId: takeId2, targetWallet: A.wallet,
       propositionA: 'X up', propositionB: 'X down', category: 'CRYPTO',
-      sourceType: 'coingecko', sourceConfig: { assetId: 'solana', targetPriceUsd: 10, operator: '>=' },
       stakeAmountUsd: 5, cutoffTs: Math.floor(Date.now() / 1000) + 3600, resolutionTs: Math.floor(Date.now() / 1000) + 7200,
-      resolutionMode: 'COUNTER_VERIFIED', fallbackMode: 'REFUND',
+      resolutionMode: 'MUTUAL', fallbackMode: 'REFUND',
     });
     assert(r.status === 201, 'challenge proposes');
     const chalId = r.data.challenge.id;
@@ -167,7 +166,6 @@ async function run() {
     r = await api('POST', '/api/challenges', B.token, {
       takeId: takeId3, targetWallet: A.wallet,
       propositionA: 'Y up', propositionB: 'Y down', category: 'CRYPTO',
-      sourceType: 'coingecko', sourceConfig: { assetId: 'solana', targetPriceUsd: 11, operator: '>=' },
       stakeAmountUsd: 5, cutoffTs: Math.floor(Date.now() / 1000) - 10, resolutionTs: Math.floor(Date.now() / 1000) - 5,
       resolutionMode: 'MUTUAL', fallbackMode: 'REFUND', mutualDeadlineTs: Math.floor(Date.now() / 1000) + 3600,
     });

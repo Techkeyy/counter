@@ -31,24 +31,11 @@ export function parseSourceConfig(raw?: string | null): Record<string, any> {
 export function describeCriteria(sourceType?: string | null, raw?: string | null): string {
   const cfg = parseSourceConfig(raw);
   const kind = (sourceType || '').toLowerCase();
-  if (kind === 'sports') {
-    const home = cfg.homeTeam || 'Home';
-    const away = cfg.awayTeam || 'Away';
-    const side = cfg.targetSide === 'away' ? 'away wins' : 'home wins';
-    return `${home} vs ${away}: side A wins if ${side}.`;
-  }
-  if (kind === 'weather') {
+  if (kind === 'weather' || kind === 'open-meteo') {
     const city = cfg.city || 'the city';
-    if (cfg.condition === 'temp') {
-      return `${city} temperature above ${cfg.threshold ?? '?'}°C at resolution time means side A wins.`;
-    }
-    return `Rain in ${city} at resolution time means side A wins.`;
+    return `At or after the resolution time, Open-Meteo current temperature in ${city} at or above ${cfg.threshold ?? '?'}°C means Side A wins.`;
   }
-  // Crypto is also the backend fallthrough for every other category.
-  const asset = String(cfg.assetId || 'solana').toUpperCase();
-  const op = String(cfg.operator || cfg.condition || '>=');
-  const price = cfg.targetPriceUsd !== undefined && cfg.targetPriceUsd !== null ? `$${cfg.targetPriceUsd}` : 'the target price';
-  return `${asset} price ${op} ${price} at resolution time means side A wins.`;
+  return 'Settle together: both captains confirm the winner. If they do not agree by the deadline, everyone is refunded.';
 }
 
 export function formatDeadline(tsSeconds?: number | null): string {

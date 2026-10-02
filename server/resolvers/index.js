@@ -1,5 +1,3 @@
-const { resolveCrypto } = require('./crypto');
-const { resolveSports } = require('./sports');
 const { resolveWeather } = require('./weather');
 const {
   Connection,
@@ -12,6 +10,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 const { queryOne, execute } = require('../db');
+const { validateVerifiedTemplate } = require('../resolution-templates');
 
 const DEVNET_RPC = process.env.DEVNET_RPC || 'https://api.devnet.solana.com';
 const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || '52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT');
@@ -63,16 +62,16 @@ async function resolveVerifiedDuel(duel, forcedConfig) {
     sourceConfig = forcedConfig || JSON.parse(duel.source_config || '{}');
   } catch (e) {}
 
+  const templateCheck = validateVerifiedTemplate(duel.category, duel.source_type, sourceConfig);
+  if (!templateCheck.ok) {
+    return { success: false, error: `Verified resolution refused: ${templateCheck.error}` };
+  }
+
   let resolutionResult = null;
-  if (category === 'crypto') {
-    resolutionResult = await resolveCrypto(sourceConfig);
-  } else if (category === 'sports') {
-    resolutionResult = await resolveSports(sourceConfig);
-  } else if (category === 'weather') {
+  if (category === 'weather') {
     resolutionResult = await resolveWeather(sourceConfig);
   } else {
-    // Default fallback
-    resolutionResult = await resolveCrypto(sourceConfig);
+    return { success: false, error: 'Verified resolution is unavailable for this category.' };
   }
 
   if (!resolutionResult || !resolutionResult.success) {

@@ -79,6 +79,12 @@ export interface Challenge {
   resolution_mode?: ResolutionMode;
   fallback_mode?: FallbackMode;
   mutual_deadline_ts?: number | null;
+  creator_handle?: string;
+  creator_name?: string;
+  creator_avatar?: string;
+  challenger_handle?: string;
+  challenger_name?: string;
+  challenger_avatar?: string;
 }
 
 export interface Counteroffer {

@@ -89,28 +89,45 @@ async function run() {
     tracked.takes.push(probeTakeId);
     VALID_CRYPTO.takeId = probeTakeId;
 
+    const weatherTakeRes = await api('POST', '/api/takes', A.token, {
+      topic: 'Weather resolution probe', content: 'Weather temperature probe Take', category: 'WEATHER',
+    });
+    assert(weatherTakeRes.status === 201 && weatherTakeRes.data.take, 'weather Take creates');
+    const weatherTakeId = weatherTakeRes.data.take.id;
+    tracked.takes.push(weatherTakeId);
+    const VALID_WEATHER = {
+      ...VALID_CRYPTO,
+      takeId: weatherTakeId,
+      category: 'WEATHER',
+      sourceType: 'open-meteo',
+      sourceConfig: {
+        provider: 'open-meteo', metric: 'temperature_2m', operator: '>=',
+        city: 'Lagos', latitude: 6.5244, longitude: 3.3792, threshold: 30,
+      },
+    };
+
     // 1. template validation at propose time
-    let r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, sourceConfig: { operator: '>=' } });
-    assert(r.status === 400, 'crypto without assetId rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'dogecoin', targetPriceUsd: 1, operator: '>=' } });
-    assert(r.status === 400, 'unknown asset rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'solana', targetPriceUsd: 0, operator: '>=' } });
-    assert(r.status === 400, 'zero price rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'solana', targetPriceUsd: 5, operator: '==' } });
-    assert(r.status === 400, 'bad operator rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, category: 'SPORTS', sourceConfig: { homeTeam: 'A' } });
-    assert(r.status === 400, 'incomplete sports template rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, category: 'WEATHER', sourceConfig: { city: 'X' } });
+    let r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, sourceConfig: { operator: '>=' } });
+    assert(r.status === 400, 'unsupported crypto verified mode rejected');
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'dogecoin', targetPriceUsd: 1, operator: '>=' } });
+    assert(r.status === 400, 'unsupported crypto template rejected');
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'solana', targetPriceUsd: 0, operator: '>=' } });
+    assert(r.status === 400, 'unsupported zero-price template rejected');
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, sourceConfig: { assetId: 'solana', targetPriceUsd: 5, operator: '==' } });
+    assert(r.status === 400, 'unsupported bad operator rejected');
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, category: 'SPORTS', sourceConfig: { homeTeam: 'A' } });
+    assert(r.status === 400, 'unsupported sports template rejected');
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_WEATHER, sourceConfig: { city: 'X' } });
     assert(r.status === 400, 'incomplete weather template rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, resolutionMode: 'TRIBUNAL' });
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, resolutionMode: 'TRIBUNAL' });
     assert(r.status === 400, 'unknown mode rejected');
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, fallbackMode: 'COINFLIP' });
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_CRYPTO, fallbackMode: 'COINFLIP' });
     assert(r.status === 400, 'unknown fallback rejected');
     ok('malformed templates and modes rejected at propose time');
 
     // valid MUTUAL challenge A -> B
     const nowSec = Math.floor(Date.now() / 1000);
-    r = await api('POST', '/api/challenges', A.token, {
+    r = await api('POST', '/api/challenges', B.token, {
       ...VALID_CRYPTO,
       targetWallet: B.wallet,
       resolutionMode: 'MUTUAL',
@@ -184,7 +201,7 @@ async function run() {
     ok('re-vote converges to a verified match');
 
     // 9. vote on VERIFIED-mode duel rejected
-    r = await api('POST', '/api/challenges', A.token, { ...VALID_CRYPTO, targetWallet: B.wallet });
+    r = await api('POST', '/api/challenges', B.token, { ...VALID_WEATHER, targetWallet: A.wallet });
     assert(r.status === 201, 'verified challenge proposes');
     tracked.challenges.push(r.data.challenge.id);
     const acc = await api('POST', `/api/challenges/${r.data.challenge.id}/accept`, B.token, {});

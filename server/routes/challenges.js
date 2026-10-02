@@ -1,23 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { queryAll, queryOne, execute } = require('../db');
+const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
-const {
-  validateVerifiedTemplate,
-  validateResolutionMode,
-  validateFallbackMode,
-} = require('../resolution-templates');
+const { validateChallengeContract } = require('../resolution-templates');
 
 // GET /api/challenges (current user's actionable challenge inbox)
 // Cancelled/declined/accepted rows remain in storage for history but are not
 // returned to the review sheet as actionable pending challenges.
 router.get('/', requireAuth, (req, res) => {
   const challenges = queryAll(
-    `SELECT * FROM challenges
-     WHERE (creator_wallet = ? OR challenger_wallet = ?)
-       AND status IN ('PROPOSED', 'COUNTERED')
-     ORDER BY created_at DESC LIMIT 50`,
+    `SELECT c.*,
+            creator.handle AS creator_handle,
+            creator.display_name AS creator_name,
+            creator.avatar_url AS creator_avatar,
+            challenger.handle AS challenger_handle,
+            challenger.display_name AS challenger_name,
+            challenger.avatar_url AS challenger_avatar
+     FROM challenges c
+     LEFT JOIN users creator ON creator.wallet_address = c.creator_wallet
+     LEFT JOIN users challenger ON challenger.wallet_address = c.challenger_wallet
+     WHERE (c.creator_wallet = ? OR c.challenger_wallet = ?)
+       AND c.status IN ('PROPOSED', 'COUNTERED')
+     ORDER BY c.created_at DESC LIMIT 50`,
     [req.userWallet, req.userWallet]
   );
   res.json({ challenges });
@@ -27,8 +32,6 @@ router.get('/', requireAuth, (req, res) => {
 router.post('/', requireAuth, (req, res) => {
   const {
     takeId,
-    creatorWallet: creatorWalletRaw,
-    targetWallet: targetWalletRaw, // client alias for creatorWallet (Captain A)
     propositionA,
     propositionB,
     category,
@@ -42,39 +45,37 @@ router.post('/', requireAuth, (req, res) => {
     mutualDeadlineTs: mutualDeadlineRaw,
   } = req.body;
 
-  // Accept both field names so the counterparty is never silently dropped.
-  // NOTE: creatorWallet is still client-asserted; challenge integrity against
-  // take authorship is SOFT (see claim-mechanism-proof ledger).
-  const creatorWallet = creatorWalletRaw || targetWalletRaw;
-
+  // The client may still send target fields for compatibility, but the server
+  // derives both parties from authenticated identity and Take authorship.
   const challengerWallet = req.userWallet; // Captain B
 
-  if (!takeId || !creatorWallet || !propositionA || !propositionB || !stakeAmountUsd) {
+  if (!takeId || !propositionA || !propositionB || !Number.isFinite(Number(stakeAmountUsd)) || Number(stakeAmountUsd) <= 0) {
     return res.status(400).json({ error: 'Missing required challenge parameters' });
   }
 
-  const sourceTake = queryOne(`SELECT id, status FROM takes WHERE id = ?`, [takeId]);
-  if (!sourceTake || sourceTake.status === 'DELETED') {
-    return res.status(400).json({ error: 'Challenges can only target a live Take' });
+  const sourceTake = queryOne(`SELECT id, author_wallet, category, status FROM takes WHERE id = ?`, [takeId]);
+  if (!sourceTake || sourceTake.status !== 'ACTIVE') {
+    return res.status(400).json({ error: 'Challenges can only target an active Take' });
+  }
+  const creatorWallet = sourceTake.author_wallet;
+  if (!creatorWallet || creatorWallet === challengerWallet) {
+    return res.status(400).json({ error: 'You cannot challenge your own Take' });
   }
 
-  // Settlement mode is part of the binding terms: validated now, stored
-  // explicitly, copied to the duel at accept time, never inferred.
-  const modeCheck = validateResolutionMode(resolutionModeRaw);
-  if (!modeCheck.ok) return res.status(400).json({ error: modeCheck.error });
-  const fallbackCheck = validateFallbackMode(fallbackModeRaw);
-  if (!fallbackCheck.ok) return res.status(400).json({ error: fallbackCheck.error });
-
-  // Verified resolution criteria are validated BEFORE money can enter. No
-  // silent oracle defaults: malformed templates are rejected here.
-  const templateCheck = validateVerifiedTemplate(category, sourceType, sourceConfig);
-  if (!templateCheck.ok) return res.status(400).json({ error: templateCheck.error });
+  const contract = validateChallengeContract({
+    category: sourceTake.category,
+    sourceType: sourceType || undefined,
+    sourceConfig,
+    resolutionMode: resolutionModeRaw,
+    fallbackMode: fallbackModeRaw,
+  });
+  if (!contract.ok) return res.status(400).json({ error: contract.error });
 
   const nowSec = Math.floor(Date.now() / 1000);
   const finalCutoff = Number(cutoffTs) || nowSec + 3600;
   const finalResolution = Number(resolutionTs) || nowSec + 7200;
   let mutualDeadline = Number(mutualDeadlineRaw);
-  if (modeCheck.value === 'MUTUAL') {
+  if (contract.mode === 'MUTUAL') {
     if (!Number.isFinite(mutualDeadline) || mutualDeadline <= nowSec) {
       mutualDeadline = finalResolution;
     }
@@ -84,7 +85,8 @@ router.post('/', requireAuth, (req, res) => {
 
   const id = `chal_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
-  const configStr = typeof sourceConfig === 'string' ? sourceConfig : JSON.stringify(sourceConfig || {});
+  const configStr = contract.config ? JSON.stringify(contract.config) : null;
+  const storedSourceType = contract.config ? 'open-meteo' : null;
 
   execute(
     `INSERT INTO challenges (id, take_id, challenger_wallet, creator_wallet, proposition_a, proposition_b, category, source_type, source_config, stake_amount_usd, cutoff_ts, resolution_ts, resolution_mode, fallback_mode, mutual_deadline_ts, status, created_at)
@@ -96,14 +98,14 @@ router.post('/', requireAuth, (req, res) => {
       creatorWallet,
       propositionA,
       propositionB,
-      category || 'crypto',
-      sourceType || 'coingecko',
+      sourceTake.category,
+      storedSourceType,
       configStr,
       Number(stakeAmountUsd),
       finalCutoff,
       finalResolution,
-      modeCheck.value,
-      fallbackCheck.value,
+      contract.mode,
+      contract.fallback,
       mutualDeadline,
       now,
     ]
@@ -116,7 +118,20 @@ router.post('/', requireAuth, (req, res) => {
     [`act_${Date.now()}`, creatorWallet, challengerWallet, id, `Stake: $${stakeAmountUsd} cUSD`, now]
   );
 
-  const challenge = queryOne(`SELECT * FROM challenges WHERE id = ?`, [id]);
+  const challenge = queryOne(
+    `SELECT c.*,
+            creator.handle AS creator_handle,
+            creator.display_name AS creator_name,
+            creator.avatar_url AS creator_avatar,
+            challenger.handle AS challenger_handle,
+            challenger.display_name AS challenger_name,
+            challenger.avatar_url AS challenger_avatar
+     FROM challenges c
+     LEFT JOIN users creator ON creator.wallet_address = c.creator_wallet
+     LEFT JOIN users challenger ON challenger.wallet_address = c.challenger_wallet
+     WHERE c.id = ?`,
+    [id]
+  );
   res.status(201).json({ challenge });
 });
 
@@ -140,17 +155,24 @@ router.post('/:id/counter', requireAuth, (req, res) => {
     return res.status(400).json({ error: `Cannot counteroffer challenge in state: ${challenge.status}` });
   }
 
-  // A renegotiated resolution template must re-validate; a malformed config
-  // can never slip in through the counter path.
-  if (sourceConfig !== undefined) {
-    const { validateVerifiedTemplate: validateTemplate } = require('../resolution-templates');
-    const templateCheck = validateTemplate(challenge.category, challenge.source_type, sourceConfig);
-    if (!templateCheck.ok) return res.status(400).json({ error: templateCheck.error });
+  // A renegotiated resolution template must re-validate. Generic MUTUAL +
+  // REFUND keeps its deliberately empty oracle config.
+  let storedConfig = challenge.source_config;
+  if (typeof storedConfig === 'string' && storedConfig) {
+    try { storedConfig = JSON.parse(storedConfig); } catch { storedConfig = null; }
   }
+  const contract = validateChallengeContract({
+    category: challenge.category,
+    sourceType: challenge.source_type || undefined,
+    sourceConfig: sourceConfig !== undefined ? sourceConfig : storedConfig,
+    resolutionMode: challenge.resolution_mode,
+    fallbackMode: challenge.fallback_mode,
+  });
+  if (!contract.ok) return res.status(400).json({ error: contract.error });
 
   const counterId = `cnt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
-  const configStr = typeof sourceConfig === 'string' ? sourceConfig : JSON.stringify(sourceConfig || {});
+  const configStr = contract.config ? JSON.stringify(contract.config) : null;
 
   execute(
     `INSERT INTO counteroffers (id, challenge_id, proposer_wallet, stake_amount_usd, cutoff_ts, resolution_ts, proposition_a, proposition_b, source_config, status, created_at)
@@ -164,7 +186,7 @@ router.post('/:id/counter', requireAuth, (req, res) => {
       Number(resolutionTs) || challenge.resolution_ts,
       propositionA || challenge.proposition_a,
       propositionB || challenge.proposition_b,
-      configStr || challenge.source_config,
+      configStr || (contract.config ? challenge.source_config : null),
       now,
     ]
   );
@@ -186,7 +208,7 @@ router.post('/:id/counter', requireAuth, (req, res) => {
       Number(resolutionTs) || challenge.resolution_ts,
       propositionA || challenge.proposition_a,
       propositionB || challenge.proposition_b,
-      configStr || challenge.source_config,
+      configStr || (contract.config ? challenge.source_config : null),
       challengeId,
     ]
   );
@@ -217,6 +239,11 @@ router.post('/:id/accept', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Only challenge counterparties can accept' });
   }
 
+  const existingDuel = queryOne(`SELECT * FROM duels WHERE challenge_id = ? ORDER BY created_at ASC LIMIT 1`, [challengeId]);
+  if (existingDuel) {
+    return res.json({ success: true, duel: existingDuel });
+  }
+
   if (challenge.status !== 'PROPOSED' && challenge.status !== 'COUNTERED') {
     return res.status(400).json({ error: `Cannot accept challenge in state: ${challenge.status}` });
   }
@@ -230,43 +257,59 @@ router.post('/:id/accept', requireAuth, (req, res) => {
   const shareSlug = `d_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
 
-  // Mark challenge accepted
-  execute(`UPDATE challenges SET status = 'ACCEPTED' WHERE id = ?`, [challengeId]);
+  // Acceptance is idempotent: retries return the one Duel already linked to
+  // this Challenge instead of incrementing the Take or creating a duplicate.
+  let duel;
+  try {
+    transaction(() => {
+      const currentDuel = queryOne(`SELECT * FROM duels WHERE challenge_id = ? ORDER BY created_at ASC LIMIT 1`, [challengeId]);
+      if (currentDuel) {
+        duel = currentDuel;
+        return;
+      }
 
-  // Create Duel record in database (settlement terms copied verbatim from
-  // the mutually accepted challenge — mode, fallback, and deadline included).
-  execute(
-    `INSERT INTO duels (
-      id, onchain_duel_id, challenge_id, take_id, captain_a_wallet, captain_b_wallet,
-      side_a_total, side_b_total, terms_hash, proposition_a, proposition_b, category,
-      source_type, source_config, cutoff_ts, resolution_ts, resolution_mode, fallback_mode, mutual_deadline_ts, status, winning_side, is_arena, share_slug, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTING_STAKES', 0, 0, ?, ?)`,
-    [
-      duelId,
-      onchainDuelId,
-      challengeId,
-      challenge.take_id,
-      challenge.creator_wallet,    // Captain A
-      challenge.challenger_wallet, // Captain B
-      termsHash,
-      challenge.proposition_a,
-      challenge.proposition_b,
-      challenge.category,
-      challenge.source_type,
-      challenge.source_config,
-      challenge.cutoff_ts,
-      challenge.resolution_ts,
-      challenge.resolution_mode || 'COUNTER_VERIFIED',
-      challenge.fallback_mode || 'REFUND',
-      challenge.mutual_deadline_ts || null,
-      shareSlug,
-      now,
-    ]
-  );
+      const currentChallenge = queryOne(`SELECT status FROM challenges WHERE id = ?`, [challengeId]);
+      if (!currentChallenge || (currentChallenge.status !== 'PROPOSED' && currentChallenge.status !== 'COUNTERED')) {
+        const error = new Error(`Cannot accept challenge in state: ${currentChallenge?.status || 'UNKNOWN'}`);
+        error.statusCode = 400;
+        throw error;
+      }
 
-  execute(`UPDATE takes SET duels_count = duels_count + 1 WHERE id = ?`, [challenge.take_id]);
-
-  const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+      execute(`UPDATE challenges SET status = 'ACCEPTED' WHERE id = ?`, [challengeId]);
+      execute(
+        `INSERT INTO duels (
+          id, onchain_duel_id, challenge_id, take_id, captain_a_wallet, captain_b_wallet,
+          side_a_total, side_b_total, terms_hash, proposition_a, proposition_b, category,
+          source_type, source_config, cutoff_ts, resolution_ts, resolution_mode, fallback_mode, mutual_deadline_ts, status, winning_side, is_arena, share_slug, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTING_STAKES', 0, 0, ?, ?)`,
+        [
+          duelId,
+          onchainDuelId,
+          challengeId,
+          challenge.take_id,
+          challenge.creator_wallet,
+          challenge.challenger_wallet,
+          termsHash,
+          challenge.proposition_a,
+          challenge.proposition_b,
+          challenge.category,
+          challenge.source_type,
+          challenge.source_config,
+          challenge.cutoff_ts,
+          challenge.resolution_ts,
+          challenge.resolution_mode || 'COUNTER_VERIFIED',
+          challenge.fallback_mode || 'REFUND',
+          challenge.mutual_deadline_ts || null,
+          shareSlug,
+          now,
+        ]
+      );
+      execute(`UPDATE takes SET duels_count = duels_count + 1 WHERE id = ?`, [challenge.take_id]);
+      duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message });
+  }
   res.json({ success: true, duel });
 });
 
