@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — SOCIAL UX / RETURNING USER / PORTFOLIO REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILDING — PRODUCT POLISH + AUTH BOUNDARY CLOSED / FRESH APK BUILD AUTHORIZED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`, clean and equal to `origin/master` after the accepted source and production-proof ledger commits  
+**Repository State:** On branch `master`; product-polish and JWT security closure commits are locally complete, with final push closure recorded in §52
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `7ff8845d64e00a316e8bf1660725f7ff67a58306` (product-polish remediation; production alignment and readback are recorded in §51)
-**Last Updated:** 2026-10-01T22:35:00Z
+**Authoritative Local Commit:** `d9fcf84` (JWT fail-closed security closure; product-polish source is `7ff8845d64e00a316e8bf1660725f7ff67a58306` and ledger history is recorded in §51–§52)
+**Last Updated:** 2026-10-02T05:13:19Z
 
 ---
 
@@ -1957,3 +1957,102 @@ Remaining: owner reinstall + full UAT rerun from scratch on a fresh artifact.
 - Target status: **`BUILDING — SOCIAL UX / RETURNING USER / PORTFOLIO REMEDIATED / DIRECTOR REBUILD REVIEW REQUIRED`**.
 - Not claimed: physical UAT passed, Core Outcome passed, RC, ready, or
   submission ready.
+
+## 52. FINAL SECURITY + GIT CLOSURE — 2026-10-02
+
+### 52.A — Accepted-work preservation
+
+- Starting `HEAD`: `9d51076a09fa9db0cdd8f675b59f84eb545c6f4d`.
+- Starting `origin/master`: `6ce16717d38f0f46f31ee59f30b86909a63a11e2`.
+- Accepted product-polish commits were preserved without reset, rebase, or
+  squash.
+- Product-polish runtime source remains
+  `7ff8845d64e00a316e8bf1660725f7ff67a58306`.
+- Product-polish ledger remains `9d51076a09fa9db0cdd8f675b59f84eb545c6f4d`.
+
+### 52.B — JWT fallback removal
+
+- Removed the application-owned fallback
+  `process.env.JWT_SECRET || 'counter-secret-key-solana-hackathon-2026'` from
+  `server/auth.js`.
+- The module now captures only `process.env.JWT_SECRET` and uses an explicit
+  `JWT_SECRET is required` guard.
+- Missing configuration fails closed: session issuance returns an ordinary
+  authentication-unavailable failure and token verification returns no
+  authenticated payload.
+- No replacement secret literal was added and no secret value is logged or
+  reported.
+- The scan over application-owned `server/` and `app/` source reports zero
+  former fallback literals and zero unsafe `process.env.JWT_SECRET ||`
+  patterns.
+
+### 52.C — Authentication boundary tests
+
+- Configured SIWS/session flow: passed.
+- Missing `JWT_SECRET`: token issuance refused and token verification refused.
+- Token signed with the former fallback: rejected.
+- Malformed token: rejected.
+- New isolated test: `server/test/auth-boundary.test.js`.
+
+### 52.D — Production configuration precheck
+
+The live `counter-backend.service` process was checked without printing,
+echoing, copying, logging, or reporting the secret value:
+
+- `service_active=true`
+- `runtime_jwt_secret_present=true`
+- `runtime_jwt_secret_nonempty=true`
+
+The precheck passed before deployment.
+
+### 52.E — Production deployment and readback
+
+- Only `/opt/counter/server/auth.js` was deployed for this security fix.
+- Only `counter-backend.service` was restarted.
+- Local auth.js SHA-256:
+  `fe4bd7350e2f052be5c216d7f7e6f91ed79acd823bfd5d9e3de7ec0682a9ca06`.
+- Remote auth.js SHA-256 matched exactly.
+- Post-restart `service_active=true`.
+- Production `/api/health` returned HTTP `200`.
+
+Disposable live SIWS readback passed:
+
+- nonce: `200`
+- normal auth/session issue: `200`
+- authenticated profile operation: `200`
+- former-fallback token: `401`
+- malformed token: `401`
+
+The exact disposable wallet used for this readback was removed after the
+test, with no dependent Takes, comments, or positions. Post-cleanup service
+readback remained active with health HTTP `200`.
+
+Genuine production content remained unchanged:
+
+- visible Takes: `2`
+- genuine owner `iszee23` Takes: `2`
+- probe/UAT identity rows: `0`
+
+### 52.F — Regression closure
+
+- TypeScript no-emit: passed, exit `0`.
+- Session persistence: `5/5`.
+- Profile boundaries: passed.
+- Take identity/deletion: passed.
+- Portfolio: passed.
+- Chain vectors: `11/11`.
+- Resolution boundaries: passed with unavailable external-oracle behavior
+  remaining honest.
+- Backend adversarial: `8/8`.
+- Auth boundary: passed.
+- Changed-file syntax checks: passed.
+- Application-owned JWT fallback scan: zero hits.
+
+### 52.G — Commits, push boundary, and APK boundary
+
+- JWT security commit: `d9fcf84` —
+  `fix(auth): require configured JWT secret`.
+- No history rewriting was performed.
+- No APK was built, installed, or used for physical/economic UAT.
+- APK build remains held until Director reviews this closure report.
+- Target status: **`BUILDING — PRODUCT POLISH + AUTH BOUNDARY CLOSED / FRESH APK BUILD AUTHORIZED`**.
