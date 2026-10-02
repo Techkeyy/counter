@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — PRODUCT POLISH + AUTH BOUNDARY CLOSED / FRESH APK BUILD AUTHORIZED`
+**Current Authoritative Status:** `BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; product-polish and JWT security closure commits are locally complete, with final push closure recorded in §52
+**Repository State:** On branch `master`; product-polish, JWT security closure, and the fresh product-polish APK artifact ledger are complete, with final push closure recorded in §53
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Local Commit:** `d9fcf84` (JWT fail-closed security closure; product-polish source is `7ff8845d64e00a316e8bf1660725f7ff67a58306` and ledger history is recorded in §51–§52)
-**Last Updated:** 2026-10-02T05:13:19Z
+**Authoritative Packaged-Source Commit:** `4dcc4674d85e061af0ff66fd3f3b26cf6e7b3b61` (JWT closure ledger; fresh product-polish APK artifact recorded in §53)
+**Last Updated:** 2026-10-02T06:24:40Z
 
 ---
 
@@ -2056,3 +2056,146 @@ Genuine production content remained unchanged:
 - No APK was built, installed, or used for physical/economic UAT.
 - APK build remains held until Director reviews this closure report.
 - Target status: **`BUILDING — PRODUCT POLISH + AUTH BOUNDARY CLOSED / FRESH APK BUILD AUTHORIZED`**.
+
+## 53. FINAL PRODUCT-POLISH UAT APK — 2026-10-02
+
+### 53.A — Freeze and packaged-source identity
+
+The fresh APK was built only after the accepted product-polish source and
+JWT fail-closed security closure were present at the authoritative source
+commit:
+
+- Packaged-source commit:
+  `4dcc4674d85e061af0ff66fd3f3b26cf6e7b3b61`.
+- Freeze check before build: `HEAD == origin/master` at the same commit.
+- Build tree was clean; no runtime source changes were made for this APK.
+- Existing rotated Counter signing identity was reused through the existing
+  DPAPI vault and alias `counter`; no key was regenerated and no password was
+  printed or logged.
+
+### 53.B — Regression gate
+
+The final pre-build regression set passed:
+
+- TypeScript no-emit: passed.
+- Session persistence: `5/5`.
+- Profile boundaries: passed; fixture cleanup complete.
+- Take identity/deletion: passed; fixture cleanup complete.
+- Portfolio: passed.
+- Auth boundary: passed, including configured-secret flow, missing-secret
+  fail-closed behavior, former-fallback rejection, and malformed-token
+  rejection.
+- Chain vectors: `11/11`.
+- Resolution boundaries: passed; unavailable external-oracle behavior stayed
+  honest and was not converted into a fake success.
+- Backend adversarial: `8/8`.
+- Secret/mock/JWT-fallback scan: zero application-owned hits.
+
+### 53.C — Exactly one fresh release APK
+
+Exactly one release APK was built with the existing Android release command:
+
+```text
+.\gradlew.bat assembleRelease --no-daemon
+```
+
+Result:
+
+- `BUILD SUCCESSFUL in 24m 28s`.
+- Exit code: `0`.
+- Actionable tasks: `703` (`31 executed`, `672 up-to-date`).
+- APK count in the release output: exactly `1`.
+- APK path:
+  `C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk`.
+- Exact bytes: `62,512,623`.
+- SHA-256:
+  `47ab08b6f0b5890f93abe15d055878c8de5f98c0dd0b0bb58c04271750020048`.
+- Package: `app.counter.mobile`.
+- Version code: `1`.
+- Version name: `1.0.0`.
+- Signing certificate SHA-256:
+  `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- APK Signature Scheme v2 verification: passed; one signer.
+
+All previous APK hashes, including the immediately preceding
+`65b19566a20a...` UAT artifact, are superseded by this APK. Only the APK hash
+listed above is authorized for the next owner-controlled install.
+
+### 53.D — Compiled artifact proof of product-polish remediation
+
+The built APK was extracted and its Hermes bundle was inspected with the
+bundled Hermes bytecode disassembler. The following evidence is from the
+compiled `assets/index.android.bundle`, not from source files alone:
+
+- Profile identity contract: compiled markers include `display_name`,
+  `getUserProfile`, `needsProfileSetup`, `hasCompleteCounterProfile`, the
+  returning-user copy `Returning users continue with their existing Counter
+  profile.`, and the setup copy `Set up your Counter profile`.
+- Canonical Take identity: compiled property accesses and string-table entries
+  include `author_name`, `author_handle`, and `author_avatar`.
+- Take authoring semantics: compiled code keeps `topic` distinct from
+  `content` and includes `Why? (optional)` for the optional reasoning field;
+  `Your Take` and `Original Take` are present in the compiled UI.
+- Take deletion: the bundle contains the compiled delete action, the
+  `/takes/` route fragment, and the user-facing confirmation `Delete this
+  Take?`. The deletion client contract is therefore packaged in the APK.
+- Portfolio: compiled markers include `Portfolio`, `getPortfolio`,
+  `requestFaucet`, `Active in Duels`, `Available balance`, `Claimable`, and
+  `Realized P&L`. The compiled bottom navigation has exactly `HOME`, `DUELS`,
+  `ACTIVITY`, and `PROFILE`; Portfolio is not emitted as a fifth tab.
+  The exact literal `Open positions` is not emitted; open-position state is
+  represented by the compiled Portfolio/open-state UI markers.
+
+### 53.E — Packaged production configuration and forbidden-content scan
+
+The compiled bundle contains the required release configuration:
+
+- Backend: `https://counter.103-195-188-198.sslip.io/api`.
+- Program: `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`.
+- Mint: `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC`.
+
+The artifact scan found no application-owned occurrence of:
+
+- the obsolete mint;
+- `counter.app`;
+- `ngrok`, `trycloudflare`, or `localtunnel`;
+- `mock_dev_session_token`;
+- the former JWT fallback literal;
+- signing-password environment markers.
+
+The only generic `PRIVATE_KEY`/`private_key` strings are third-party Solana
+error identifiers in the bundle; they are not key material. The few
+`localhost`/`127.0.0.1` strings are third-party library validation, cluster
+label, or React Native development metadata; there is no application-owned
+localhost API base and the packaged API base is the required production URL.
+
+### 53.F — App Links and live assetlinks
+
+The built manifest preserves:
+
+- `counter://duel/:id` through the `counter` scheme and `duel` host;
+- `counter://receipt/:id` through the `counter` scheme and `receipt` host;
+- HTTPS `/d` and `/r` routes for
+  `counter.103-195-188-198.sslip.io`, both with `android:autoVerify=true`.
+
+Live `https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json`
+verification returned:
+
+- HTTP `200`;
+- target package `app.counter.mobile` present;
+- current signing certificate fingerprint present.
+
+### 53.G — Source-to-APK binding and release boundary
+
+After the build:
+
+```text
+git diff 4dcc4674d85e061af0ff66fd3f3b26cf6e7b3b61 HEAD -- app/ server/ program/
+```
+
+was empty. The artifact is bound to the accepted packaged-source commit; no
+runtime drift occurred. This section is the only change being recorded after
+the build, and it is documentation-only. No install, `adb` operation,
+physical UAT, or economic UAT has been performed.
+
+Final target status: **`BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTALL REQUIRED`**.
