@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — MINIMUM MVP UAT APK READY / OWNER INSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; product-polish, JWT security closure, and the fresh product-polish APK artifact ledger are complete, with final push closure recorded in §53
+**Repository State:** On branch `master`; the accepted minimum MVP, production alignment, and fresh MVP UAT APK artifact ledger are complete, with final push closure recorded in §55
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `4dcc4674d85e061af0ff66fd3f3b26cf6e7b3b61` (JWT closure ledger; fresh product-polish APK artifact recorded in §53)
-**Last Updated:** 2026-10-02T06:24:40Z
+**Authoritative Packaged-Source Commit:** `147ea2bec51e9577ead4fc6ced13136302133a2d` (accepted minimum MVP source; fresh MVP UAT APK artifact recorded in §55)
+**Last Updated:** 2026-10-02T17:18:17Z
 
 ---
 
@@ -2323,3 +2323,154 @@ Final target status: **`BUILDING — PRODUCT-POLISH UAT APK READY / OWNER INSTAL
   Director rebuild review; fresh APK authorization is safe to consider after
   that review, but no build or device/UAT claim is made here.
 - Target status: **`BUILDING — MINIMUM COUNTER MVP IMPLEMENTED / DIRECTOR REBUILD REVIEW REQUIRED`**.
+
+## 55. FINAL MINIMUM MVP UAT APK — 2026-10-02
+
+### 55.A — Freeze and packaged-source identity
+
+The accepted minimum MVP was frozen before the build. The packaged source
+commit was:
+
+- `147ea2bec51e9577ead4fc6ced13136302133a2d`
+  (`docs: record minimum mvp closure`).
+- Runtime implementation commit: `19ed74e`
+  (`feat: implement minimum counter mvp lifecycle`).
+- Before and after the build, `HEAD == origin/master` at the packaged-source
+  commit and the worktree was clean.
+- The existing rotated Counter signing identity was reused through
+  `C:\Users\HomePC\.counter-secrets\counter-release.keystore`, the
+  current-user DPAPI password vault, and alias `counter`. No key was
+  regenerated; the password was recovered only in process and was never
+  printed, logged, or persisted.
+
+### 55.B — Frozen regression gate
+
+The complete pre-build gate passed without runtime source changes:
+
+- TypeScript no-emit — passed.
+- Minimum MVP lifecycle — passed.
+- Auth boundary — passed: configured-secret SIWS/session/token flow,
+  missing-secret refusal, former fallback-token rejection, and malformed-token
+  rejection.
+- Sessions — `5/5`.
+- Profile boundaries — passed.
+- Take identity/deletion — passed.
+- Portfolio — passed.
+- Chain vectors — `11/11`.
+- Resolution boundaries — passed; unavailable external-oracle behavior stayed
+  honest and was not converted into a fake success.
+- Backend adversarial — `8/8`.
+- Secret/mock/JWT-fallback scan — passed with zero application-owned fallback
+  JWT literals, zero mock wallet/session fallback, zero obsolete host/tunnel
+  hits, zero deferred Verified controls, and zero crypto/sports resolver
+  fallback hits.
+- `git diff --check` — passed.
+
+### 55.C — Exactly one fresh release APK
+
+The first invocation stopped before packaging at the existing signing guard
+because the release password environment was not populated. It produced no
+APK. The authorized retry used the same command and existing DPAPI vault:
+
+```text
+.\gradlew.bat assembleRelease --no-daemon
+```
+
+Result:
+
+- `BUILD SUCCESSFUL in 17m 41s`.
+- Exit code: `0`.
+- Actionable tasks: `703` (`31 executed`, `672 up-to-date`).
+- APK count in the release output: exactly `1`.
+- APK path:
+  `C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk`.
+- Exact bytes: `62,512,863`.
+- SHA-256:
+  `fcaaf86967871c58711fd908d9c4b7a104ce4a29f49cf3bfb40a3abd01105f62`.
+- Package: `app.counter.mobile`.
+- Version code: `1`.
+- Version name: `1.0.0`.
+- Signing certificate SHA-256:
+  `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`.
+- APK Signature Scheme v2 verification: passed; exactly one signer.
+
+All previous APK hashes, including `65b19566a20a...` and the immediately
+preceding product-polish artifact
+`47ab08b6f0b5890f93abe15d055878c8de5f98c0dd0b0bb58c04271750020048`, are
+superseded. Only the full hash listed above is authorized for installation.
+
+### 55.D — Compiled artifact proof of the minimum MVP
+
+The APK itself contains `assets/index.android.bundle` (2,573,876 bytes). The
+following evidence was read from that compiled bundle, not inferred only from
+source files:
+
+- MVP lifecycle markers: `Incoming`, `Sent`, `Active`, `Claimable`, and
+  `Completed`.
+- Challenge state UX: `You challenged`, `challenged your Take`, `waiting for
+  response`, and `Accept challenge`.
+- Generic contract UX: `MUTUAL`, `REFUND`, `Settle together`, `If no
+  agreement`, and `everyone is refunded`.
+- Weather-only Verified UX: `Open-Meteo`, `temperature_2m`, `Celsius`, and
+  the compiled Counter Verified copy. Legacy `TheSportsDB`, `CoinGecko`,
+  `targetPrice`, `homeTeam`, `awayTeam`, and `weatherCondition` controls were
+  absent from the bundle. Generic category words elsewhere in the app are not
+  treated as Verified controls.
+- Profile/identity contract: `displayName`, `display_name`,
+  `needsProfileSetup`, `hasCompleteCounterProfile`, the returning-profile
+  copy, `Your Take`, and `Why:`.
+- Canonical Take identity fields: `author_name`, `author_handle`, and
+  `author_avatar` are present in the compiled client.
+- Take deletion: the compiled `deleteTake` action, `DELETE` method marker,
+  `/takes/` route fragment, and user confirmation `Delete this Take?` are
+  present in the bundle.
+- Preserved product boundaries: `Portfolio`, `Get test funds`,
+  `connectAndAuthenticate`, and MWA-related compiled markers remain present.
+
+### 55.E — Packaged production configuration and forbidden-content scan
+
+The compiled client contains the required release configuration:
+
+- Backend host: `https://counter.103-195-188-198.sslip.io`; the request layer
+  uses its `/api` route prefix.
+- Program:
+  `52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT`.
+- Mint:
+  `AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC`.
+
+The compiled bundle contains no application-owned occurrence of the obsolete
+chain identifier/mint, `counter.app`, `ngrok`, `trycloudflare`, mock wallet or
+session fallback text, the former JWT fallback literal, private-key PEM
+material, JWT secret name, or signing-password environment marker. The only
+localhost literal found was the third-party Solana SDK/local-cluster
+`http://localhost:8899`; it is not the Counter API base. The compiled
+application API base is the required production host, and the compiled
+Solana RPC is `https://api.devnet.solana.com`.
+
+### 55.F — App Links and live assetlinks
+
+The built manifest preserves:
+
+- `counter://duel/:id` through the `counter` scheme and `duel` host;
+- `counter://receipt/:id` through the `counter` scheme and `receipt` host;
+- HTTPS `/d` and `/r` routes for
+  `counter.103-195-188-198.sslip.io`, both with `android:autoVerify=true`.
+
+Live `https://counter.103-195-188-198.sslip.io/.well-known/assetlinks.json`
+returned HTTP `200`; it contains package `app.counter.mobile` and the current
+signing certificate fingerprint (colon-normalized comparison passed).
+
+### 55.G — Source-to-APK binding and release boundary
+
+After the successful build:
+
+```text
+git diff 147ea2bec51e9577ead4fc6ced13136302133a2d HEAD -- app/ server/ program/
+```
+
+was empty. No runtime drift occurred after packaging. This section and the
+header update are the only post-build changes, and they are documentation-only.
+The artifact is not installed, no `adb` operation has been performed, and no
+physical or economic UAT has been performed.
+
+Target status: **`BUILDING — MINIMUM MVP UAT APK READY / OWNER INSTALL REQUIRED`**.
