@@ -5,6 +5,24 @@ const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
 const { validateChallengeContract } = require('../resolution-templates');
 
+const MIN_DECISION_LEAD_SECONDS = 2 * 60 * 60;
+const STAKE_BUFFER_SECONDS = 60 * 60;
+const MUTUAL_DEADLINE_SECONDS = 24 * 60 * 60;
+const HIDDEN_TIMING_FIELDS = ['cutoffTs', 'resolutionTs', 'mutualDeadlineTs'];
+
+function deriveChallengeTiming(decisionTsRaw, nowSec = Math.floor(Date.now() / 1000)) {
+  const selected = Number(decisionTsRaw);
+  const requestedResolution = Number.isFinite(selected) ? Math.floor(selected) : nowSec + MIN_DECISION_LEAD_SECONDS;
+  const resolutionTs = Math.max(requestedResolution, nowSec + MIN_DECISION_LEAD_SECONDS);
+  const cutoffTs = resolutionTs - STAKE_BUFFER_SECONDS;
+  const mutualDeadlineTs = resolutionTs + MUTUAL_DEADLINE_SECONDS;
+
+  if (!(cutoffTs > nowSec && cutoffTs < resolutionTs && resolutionTs < mutualDeadlineTs)) {
+    return { ok: false, error: 'Decision time must be at least two hours from now' };
+  }
+  return { ok: true, cutoffTs, resolutionTs, mutualDeadlineTs };
+}
+
 // GET /api/challenges (current user's actionable challenge inbox)
 // Cancelled/declined/accepted rows remain in storage for history but are not
 // returned to the review sheet as actionable pending challenges.
@@ -38,12 +56,19 @@ router.post('/', requireAuth, (req, res) => {
     sourceType,
     sourceConfig,
     stakeAmountUsd,
-    cutoffTs,
-    resolutionTs,
+    decisionTs,
     resolutionMode: resolutionModeRaw,
     fallbackMode: fallbackModeRaw,
-    mutualDeadlineTs: mutualDeadlineRaw,
   } = req.body;
+
+  const callerTimingOverrides = HIDDEN_TIMING_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(req.body || {}, field)
+  );
+  if (callerTimingOverrides.length > 0) {
+    return res.status(400).json({
+      error: 'Timing is derived from decision time; cutoff and deadline fields cannot be supplied',
+    });
+  }
 
   // The client may still send target fields for compatibility, but the server
   // derives both parties from authenticated identity and Take authorship.
@@ -71,17 +96,10 @@ router.post('/', requireAuth, (req, res) => {
   });
   if (!contract.ok) return res.status(400).json({ error: contract.error });
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const finalCutoff = Number(cutoffTs) || nowSec + 3600;
-  const finalResolution = Number(resolutionTs) || nowSec + 7200;
-  let mutualDeadline = Number(mutualDeadlineRaw);
-  if (contract.mode === 'MUTUAL') {
-    if (!Number.isFinite(mutualDeadline) || mutualDeadline <= nowSec) {
-      mutualDeadline = finalResolution;
-    }
-  } else {
-    mutualDeadline = null;
-  }
+  const timing = deriveChallengeTiming(decisionTs);
+  if (!timing.ok) return res.status(400).json({ error: timing.error });
+  const { cutoffTs, resolutionTs: finalResolution, mutualDeadlineTs } = timing;
+  const finalMutualDeadline = contract.mode === 'MUTUAL' ? mutualDeadlineTs : null;
 
   const id = `chal_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
@@ -102,11 +120,11 @@ router.post('/', requireAuth, (req, res) => {
       storedSourceType,
       configStr,
       Number(stakeAmountUsd),
-      finalCutoff,
+      cutoffTs,
       finalResolution,
       contract.mode,
       contract.fallback,
-      mutualDeadline,
+       finalMutualDeadline,
       now,
     ]
   );
@@ -139,7 +157,15 @@ router.post('/', requireAuth, (req, res) => {
 router.post('/:id/counter', requireAuth, (req, res) => {
   const challengeId = req.params.id;
   const proposerWallet = req.userWallet;
-  const { stakeAmountUsd, cutoffTs, resolutionTs, propositionA, propositionB, sourceConfig } = req.body;
+  const { stakeAmountUsd, propositionA, propositionB, sourceConfig } = req.body;
+  const counterTimingOverrides = HIDDEN_TIMING_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(req.body || {}, field)
+  );
+  if (counterTimingOverrides.length > 0) {
+    return res.status(400).json({
+      error: 'Timing is derived from decision time; cutoff and deadline fields cannot be supplied',
+    });
+  }
 
   const challenge = queryOne(`SELECT * FROM challenges WHERE id = ?`, [challengeId]);
   if (!challenge) {
@@ -182,8 +208,8 @@ router.post('/:id/counter', requireAuth, (req, res) => {
       challengeId,
       proposerWallet,
       Number(stakeAmountUsd) || challenge.stake_amount_usd,
-      Number(cutoffTs) || challenge.cutoff_ts,
-      Number(resolutionTs) || challenge.resolution_ts,
+      challenge.cutoff_ts,
+      challenge.resolution_ts,
       propositionA || challenge.proposition_a,
       propositionB || challenge.proposition_b,
       configStr || (contract.config ? challenge.source_config : null),
@@ -204,8 +230,8 @@ router.post('/:id/counter', requireAuth, (req, res) => {
      WHERE id = ?`,
     [
       Number(stakeAmountUsd) || challenge.stake_amount_usd,
-      Number(cutoffTs) || challenge.cutoff_ts,
-      Number(resolutionTs) || challenge.resolution_ts,
+      challenge.cutoff_ts,
+      challenge.resolution_ts,
       propositionA || challenge.proposition_a,
       propositionB || challenge.proposition_b,
       configStr || (contract.config ? challenge.source_config : null),
@@ -234,9 +260,10 @@ router.post('/:id/accept', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'Challenge not found' });
   }
 
-  // Only the two counterparties may accept and spawn the duel.
-  if (userWallet !== challenge.creator_wallet && userWallet !== challenge.challenger_wallet) {
-    return res.status(403).json({ error: 'Only challenge counterparties can accept' });
+  // Only the authoritative Take creator may accept and spawn the Duel. The
+  // challenger is never allowed to accept their own outgoing Challenge.
+  if (userWallet !== challenge.creator_wallet) {
+    return res.status(403).json({ error: 'Only the Take creator can accept this challenge' });
   }
 
   const existingDuel = queryOne(`SELECT * FROM duels WHERE challenge_id = ? ORDER BY created_at ASC LIMIT 1`, [challengeId]);
@@ -333,3 +360,4 @@ router.post('/:id/decline', requireAuth, (req, res) => {
 });
 
 module.exports = router;
+module.exports.deriveChallengeTiming = deriveChallengeTiming;

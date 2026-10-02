@@ -142,7 +142,8 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
     const total = poolA + poolB;
     const isResolved = resolved(duel);
     const isClaimable = claimableIds.has(duel.id);
-    const modeLabel = (duel.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL' ? ' · Settle together' : '';
+    const ownPosition = (portfolio?.positions || []).find((position) => position.duel_id === duel.id);
+    const isCaptain = duel.captain_a_wallet === userWallet || duel.captain_b_wallet === userWallet;
     const nameA = formatUserDisplayName({
       display_name: duel.captain_a_name,
       handle: duel.captain_a_handle,
@@ -173,22 +174,27 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
         </Text>
         <View style={styles.line3}>
           <Text style={styles.status}>
-            {isClaimable
+            {duel.status === 'CANCELLED'
+              ? 'Refunded'
+              : isClaimable
               ? 'Claimable'
               : isResolved
                 ? 'Completed'
-                : duel.status === 'ACCEPTING_STAKES' || duel.chain_status !== 'INITIALIZED'
-                  ? 'Awaiting funding'
-                  : duel.status === 'CUTOFF_REACHED' || duel.status === 'SETTLEMENT_PENDING'
-                    ? 'Ready to resolve'
-                    : 'Live'}
-            {modeLabel}
+                : duel.chain_status !== 'INITIALIZED'
+                  ? isCaptain ? 'Set up this Duel' : 'Waiting for setup'
+                  : isCaptain && !ownPosition
+                    ? 'Needs your stake'
+                    : poolA === 0 || poolB === 0
+                      ? 'Waiting for opponent'
+                      : duel.resolution_mode === 'MUTUAL' && Number(duel.resolution_ts || 0) <= Date.now() / 1000
+                        ? 'Ready to settle'
+                        : 'Live'}
           </Text>
           <Text style={styles.time}>
             {isResolved
               ? formatRelativeTime(duel.created_at)
-              : duel.cutoff_ts
-                ? `Closes ${new Date(duel.cutoff_ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+              : duel.resolution_ts
+                ? `Decide ${new Date(duel.resolution_ts * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
                 : ''}
           </Text>
         </View>

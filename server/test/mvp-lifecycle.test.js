@@ -64,6 +64,11 @@ async function run() {
     tracked.users.push(A.wallet, B.wallet, C.wallet);
 
     const { queryAll, queryOne, execute } = require('../db');
+    const { deriveChallengeTiming } = require('../routes/challenges');
+    const timingNow = Math.floor(Date.now() / 1000);
+    const clampedTiming = deriveChallengeTiming(timingNow - 60, timingNow);
+    assert(clampedTiming.ok && clampedTiming.resolutionTs === timingNow + 2 * 3600, 'past decision time clamps to the two-hour minimum');
+    assert(clampedTiming.cutoffTs > timingNow && clampedTiming.cutoffTs < clampedTiming.resolutionTs, 'derived cutoff stays inside the valid timing boundary');
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Take Author', 'takeauthor', A.wallet]);
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Challenger B', 'challengerb', B.wallet]);
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Unrelated C', 'unrelatedc', C.wallet]);
@@ -78,7 +83,7 @@ async function run() {
     const cultureTakeId = response.data.take.id;
     tracked.takes.push(cultureTakeId);
 
-    response = await api('POST', '/api/challenges', B.token, {
+    const genericChallengeBody = {
       takeId: cultureTakeId,
       creatorWallet: C.wallet,
       targetWallet: C.wallet,
@@ -88,12 +93,19 @@ async function run() {
       sourceType: 'coingecko',
       sourceConfig: { assetId: 'solana', targetPriceUsd: 250, operator: '>=' },
       stakeAmountUsd: 25,
-      cutoffTs: Math.floor(Date.now() / 1000) + 3600,
-      resolutionTs: Math.floor(Date.now() / 1000) + 7200,
+      decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
       resolutionMode: 'MUTUAL',
       fallbackMode: 'REFUND',
-      mutualDeadlineTs: Math.floor(Date.now() / 1000) + 7200,
+    };
+    response = await api('POST', '/api/challenges', B.token, {
+      ...genericChallengeBody,
+      cutoffTs: Math.floor(Date.now() / 1000) + 3600,
+      resolutionTs: Math.floor(Date.now() / 1000) + 7200,
+      mutualDeadlineTs: Math.floor(Date.now() / 1000) + 90000,
     });
+    assert(response.status === 400 && /derived from decision time/.test(response.data.error), 'hidden timing overrides rejected');
+    const createdBefore = Math.floor(Date.now() / 1000);
+    response = await api('POST', '/api/challenges', B.token, genericChallengeBody);
     assert(response.status === 201 && response.data.challenge, 'generic Mutual challenge creates');
     const challenge = response.data.challenge;
     tracked.challenges.push(challenge.id);
@@ -102,6 +114,9 @@ async function run() {
     assert(challenge.category === 'CULTURE', 'Take category is authoritative');
     assert(challenge.resolution_mode === 'MUTUAL' && challenge.fallback_mode === 'REFUND', 'generic Mutual contract persists');
     assert(challenge.source_type === null && challenge.source_config === null, 'generic Mutual has no oracle config');
+    assert(Number(challenge.cutoff_ts) > createdBefore, 'cutoff is server-derived and in the future');
+    assert(Number(challenge.resolution_ts) - Number(challenge.cutoff_ts) === 3600, 'cutoff is one hour before resolution');
+    assert(Number(challenge.mutual_deadline_ts) - Number(challenge.resolution_ts) === 24 * 3600, 'mutual deadline is server-derived');
 
     response = await api('GET', '/api/challenges', B.token);
     assert(response.status === 200 && response.data.challenges.some((row) => row.id === challenge.id), 'challenger sees Sent challenge');
@@ -109,8 +124,18 @@ async function run() {
     assert(response.status === 200 && response.data.challenges.some((row) => row.id === challenge.id), 'Take author sees Incoming challenge');
     response = await api('GET', '/api/challenges', C.token);
     assert(response.status === 200 && !response.data.challenges.some((row) => row.id === challenge.id), 'forged third party cannot see challenge');
+    response = await api('POST', `/api/challenges/${challenge.id}/counter`, B.token, {
+      stakeAmountUsd: 30,
+      cutoffTs: Math.floor(Date.now() / 1000) + 3600,
+      resolutionTs: Math.floor(Date.now() / 1000) + 7200,
+    });
+    assert(response.status === 400 && /derived from decision time/.test(response.data.error), 'counteroffer timing overrides rejected');
     ok('challenge parties, category, profile joins, and generic contract are authoritative');
 
+    response = await api('POST', `/api/challenges/${challenge.id}/accept`, B.token, {});
+    assert(response.status === 403, 'challenger cannot accept their outgoing challenge');
+    response = await api('POST', `/api/challenges/${challenge.id}/accept`, C.token, {});
+    assert(response.status === 403, 'unrelated wallet cannot accept the challenge');
     response = await api('POST', `/api/challenges/${challenge.id}/accept`, A.token, {});
     assert(response.status === 200 && response.data.duel, 'Take author accepts and forms Duel');
     const duelId = response.data.duel.id;
@@ -152,8 +177,7 @@ async function run() {
         city: 'Lagos', latitude: 6.5244, longitude: 3.3792, threshold: 30,
       },
       stakeAmountUsd: 10,
-      cutoffTs: Math.floor(Date.now() / 1000) + 3600,
-      resolutionTs: Math.floor(Date.now() / 1000) + 7200,
+      decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
       resolutionMode: 'COUNTER_VERIFIED', fallbackMode: 'REFUND',
     };
     response = await api('POST', '/api/challenges', B.token, validWeather);
@@ -216,6 +240,7 @@ async function run() {
     response = await api('POST', '/api/challenges', B.token, {
       takeId: deletedTakeId, targetWallet: A.wallet,
       propositionA: 'after delete A', propositionB: 'after delete B', stakeAmountUsd: 5,
+      decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
       resolutionMode: 'MUTUAL', fallbackMode: 'REFUND',
     });
     assert(response.status === 400 && /active Take/.test(response.data.error), 'deleted Take cannot be challenged');

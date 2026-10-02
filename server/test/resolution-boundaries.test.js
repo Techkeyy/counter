@@ -62,8 +62,9 @@ const VALID_CRYPTO = {
   takeId: 'take_probe', targetWallet: 'WALLET_B', propositionA: 'SOL over 200', propositionB: 'SOL under 200',
   category: 'CRYPTO', sourceType: 'coingecko', sourceConfig: { assetId: 'solana', targetPriceUsd: 200, operator: '>=' },
   stakeAmountUsd: 10,
-  // Voting opens at resolution time: use past timestamps so confirmations are allowed.
-  cutoffTs: Math.floor(Date.now() / 1000) - 3600, resolutionTs: Math.floor(Date.now() / 1000) - 60,
+  // The API accepts only the user-facing decision time. The test moves the
+  // created Duel past resolution below before exercising the vote boundary.
+  decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
   resolutionMode: 'COUNTER_VERIFIED', fallbackMode: 'REFUND',
 };
 
@@ -77,6 +78,7 @@ async function run() {
     const A = await siwsAuth();
     const B = await siwsAuth();
     const C = await siwsAuth();
+    const { execute } = require('../db');
     tracked.users.push(A.wallet, B.wallet, C.wallet);
 
     // The live-Take boundary is authoritative: all valid challenge cases need
@@ -132,7 +134,6 @@ async function run() {
       targetWallet: B.wallet,
       resolutionMode: 'MUTUAL',
       fallbackMode: 'REFUND',
-      mutualDeadlineTs: nowSec + 3600,
     });
     assert(r.status === 201 && r.data.challenge, 'mutual challenge proposes');
     const chal = r.data.challenge;
@@ -147,8 +148,10 @@ async function run() {
     assert(r.status === 404, 'vote on missing duel 404s');
     ok('counterparty gates hold');
 
-    // 3. accept as B -> duel inherits terms
+    // 3. only the Take creator A may accept; the challenger B may not accept
     r = await api('POST', `/api/challenges/${chal.id}/accept`, B.token, {});
+    assert(r.status === 403, 'challenger cannot accept outgoing challenge');
+    r = await api('POST', `/api/challenges/${chal.id}/accept`, A.token, {});
     assert(r.status === 200 && r.data.duel, 'accept forms duel');
     const duel = r.data.duel;
     tracked.duels.push(duel.id);
@@ -161,7 +164,11 @@ async function run() {
     ok('post-accept config changes rejected');
 
     // 5. mutual votes: non-captain rejected even with valid-shape sig
-    const resTs = duel.resolution_ts;
+    const resTs = Math.floor(Date.now() / 1000) - 60;
+    execute(
+      `UPDATE duels SET resolution_ts = ?, mutual_deadline_ts = ? WHERE id = ?`,
+      [resTs, resTs + 3600, duel.id]
+    );
     const outsiderSig = signSettlement(C.kp, duel.id, 1, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, C.token, { winnerSide: 1, signature: outsiderSig.signature });
     assert(r.status === 400, 'non-captain vote rejected');
@@ -204,7 +211,8 @@ async function run() {
     r = await api('POST', '/api/challenges', B.token, { ...VALID_WEATHER, targetWallet: A.wallet });
     assert(r.status === 201, 'verified challenge proposes');
     tracked.challenges.push(r.data.challenge.id);
-    const acc = await api('POST', `/api/challenges/${r.data.challenge.id}/accept`, B.token, {});
+    const acc = await api('POST', `/api/challenges/${r.data.challenge.id}/accept`, A.token, {});
+    assert(acc.status === 200 && acc.data.duel, 'creator accepts verified challenge');
     tracked.duels.push(acc.data.duel.id);
     const rv = await api('POST', `/api/duels/${acc.data.duel.id}/mutual-vote`, A.token, { winnerSide: 1, signature: sigA1.signature });
     assert(rv.status === 400, 'vote on verified-mode duel rejected');

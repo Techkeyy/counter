@@ -36,7 +36,6 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
   // Participant names + settlement mode come from the real duel record.
   const [captainAName, setCaptainAName] = useState<string | null>(null);
   const [captainBName, setCaptainBName] = useState<string | null>(null);
-  const [duelMode, setDuelMode] = useState<string>('COUNTER_VERIFIED');
   const [confirmations, setConfirmations] = useState<any[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +60,6 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
             wallet: receipt.captain_b_wallet,
           })
         );
-        setDuelMode(duel.resolution_mode || 'COUNTER_VERIFIED');
         if (Array.isArray(duel.mutualVotes)) setConfirmations(duel.mutualVotes);
       })
       .catch(() => {});
@@ -145,7 +143,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         <View style={styles.personRow}>
           <Text style={styles.personSide}>Method</Text>
           <Text style={styles.personWallet}>
-            {duelMode === 'MUTUAL' ? 'Settled together' : 'Counter Verified'}
+            Settled together
           </Text>
         </View>
         <View style={styles.personRow}>
@@ -160,7 +158,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         </View>
         <View style={styles.personRow}>
           <Text style={styles.personSide}>Source</Text>
-          <Text style={styles.personWallet}>Deterministic oracle</Text>
+          <Text style={styles.personWallet}>Captain confirmations and refund rules</Text>
         </View>
 
         <TouchableOpacity
@@ -176,7 +174,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
         {showProof && (
           verified ? (
             <>
-        {duelMode === 'MUTUAL' && confirmations.length > 0 && (
+        {confirmations.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Confirmed by</Text>
             {confirmations.map((c: any) => {

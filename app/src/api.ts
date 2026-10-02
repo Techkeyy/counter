@@ -157,13 +157,9 @@ export const api = {
     propositionB: string;
     category: string;
     stakeAmountUsd: number;
-    cutoffTs: number;
-    resolutionTs: number;
-    sourceType?: string | null;
-    sourceConfig?: any;
-    resolutionMode?: string;
-    fallbackMode?: string;
-    mutualDeadlineTs?: number | null;
+    decisionTs: number;
+    resolutionMode?: 'MUTUAL';
+    fallbackMode?: 'REFUND';
   }) => {
     // Server contract uses `creatorWallet` (Captain A / take author).
     // Send both keys so the challenge counterparty is never silently dropped
@@ -176,8 +172,6 @@ export const api = {
   },
   createCounteroffer: async (challengeId: string, data: {
     stakeAmountUsd: number;
-    cutoffTs?: number;
-    resolutionTs?: number;
     propositionA?: string;
     propositionB?: string;
   }) => {

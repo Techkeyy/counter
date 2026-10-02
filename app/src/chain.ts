@@ -14,6 +14,8 @@ import {
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Buffer } from 'buffer';
 import { getConnection, DEVNET_RPC } from './wallet';
+import { isWalletCancellation, walletStage } from './diagnostics';
+import type { WalletOperation } from './diagnostics';
 
 // Canonical chain constants — MUST match server/chain.js and program/src/lib.rs.
 // The mobile client never derives PDAs independently: every address below is
@@ -222,34 +224,44 @@ export { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, DEVNET_RPC };
 export async function mwaSignSendConfirm(
   instructions: TransactionInstruction[],
   feePayer: PublicKey,
-  connection?: Connection
+  connection?: Connection,
+  operation: WalletOperation = 'STAKE'
 ): Promise<string> {
   const conn = connection || getConnection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
   const tx = new Transaction({ feePayer, recentBlockhash: blockhash });
   tx.add(...instructions);
 
-  const signatures = await transact(async (wallet) => {
-    await wallet.authorize({
-      cluster: 'devnet',
-      identity: {
-        name: 'Counter Mobile',
-        uri: 'https://counter.103-195-188-198.sslip.io',
-        icon: 'favicon.ico',
-      },
+  walletStage(operation, 'MWA_OPEN');
+  try {
+    const signatures = await transact(async (wallet) => {
+      await wallet.authorize({
+        cluster: 'devnet',
+        identity: {
+          name: 'Counter Mobile',
+          uri: 'https://counter.103-195-188-198.sslip.io',
+          icon: 'favicon.ico',
+        },
+      });
+      return await wallet.signAndSendTransactions({ transactions: [tx] });
     });
-    return await wallet.signAndSendTransactions({ transactions: [tx] });
-  });
 
-  const signature = signatures[0];
-  const confirmation = await conn.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    'confirmed'
-  );
-  if (confirmation.value.err) {
-    throw new Error(`Devnet transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+    walletStage(operation, 'MWA_APPROVED');
+    const signature = signatures[0];
+    walletStage(operation, 'TX_SUBMITTED');
+    const confirmation = await conn.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      'confirmed'
+    );
+    if (confirmation.value.err) {
+      throw new Error('Devnet transaction failed');
+    }
+    walletStage(operation, 'TX_CONFIRMED');
+    return signature;
+  } catch (error) {
+    walletStage(operation, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
+    throw error;
   }
-  return signature;
 }
 
 /**
@@ -267,24 +279,35 @@ export function settlementMessage(duelId: string, winnerSide: 1 | 2, resolutionA
  * exact expected message and verifies the ed25519 signature. Rejection
  * surfaces as an error; nothing is fabricated.
  */
-export async function mwaSignMessage(message: string, walletBase58: string): Promise<string> {
+export async function mwaSignMessage(
+  message: string,
+  walletBase58: string,
+  operation: WalletOperation = 'SETTLEMENT'
+): Promise<string> {
   const walletAddressB64 = Buffer.from(new PublicKey(walletBase58).toBytes()).toString('base64');
   const payload = Uint8Array.from(Buffer.from(message, 'utf-8'));
-  const out = await transact(async (wallet) => {
-    await wallet.authorize({
-      cluster: 'devnet',
-      identity: {
-        name: 'Counter Mobile',
-        uri: 'https://counter.103-195-188-198.sslip.io',
-        icon: 'favicon.ico',
-      },
+  walletStage(operation, 'MWA_OPEN');
+  try {
+    const out = await transact(async (wallet) => {
+      await wallet.authorize({
+        cluster: 'devnet',
+        identity: {
+          name: 'Counter Mobile',
+          uri: 'https://counter.103-195-188-198.sslip.io',
+          icon: 'favicon.ico',
+        },
+      });
+      const results = await wallet.signMessages({
+        addresses: [walletAddressB64],
+        payloads: [payload],
+      });
+      return results[0] as Uint8Array;
     });
-    const results = await wallet.signMessages({
-      addresses: [walletAddressB64],
-      payloads: [payload],
-    });
-    return results[0] as Uint8Array;
-  });
-  const bs58 = require('bs58').default || require('bs58');
-  return bs58.encode(Buffer.from(out));
+    walletStage(operation, 'MWA_APPROVED');
+    const bs58 = require('bs58').default || require('bs58');
+    return bs58.encode(Buffer.from(out));
+  } catch (error) {
+    walletStage(operation, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
+    throw error;
+  }
 }

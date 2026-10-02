@@ -1,0 +1,92 @@
+/* Source-level guardrails for the approved V1 experience rebase.
+ * This deliberately checks the reachable App import graph and the client
+ * contract; it does not pretend to be a native-device or APK test.
+ */
+const fs = require('fs');
+const path = require('path');
+
+const root = __dirname;
+const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
+const assert = (condition, message) => {
+  if (!condition) throw new Error(`[ASSERTION FAILED] ${message}`);
+};
+const includes = (source, text, message) => assert(source.includes(text), message);
+const excludes = (source, text, message) => assert(!source.includes(text), message);
+
+const app = read('App.tsx');
+const modal = read('src/components/ChallengeModalV1.tsx');
+const sheet = read('src/components/ChallengeSheetV1.tsx');
+const stake = read('src/components/BackModal.tsx');
+const duels = read('src/screens/DuelsScreen.tsx');
+const detail = read('src/screens/DuelDetailScreen.tsx');
+const receipt = read('src/screens/ReceiptScreen.tsx');
+const api = read('src/api.ts');
+const chain = read('src/chain.ts');
+const diagnostics = read('src/diagnostics.ts');
+
+includes(app, "ChallengeModalV1", 'App reaches the V1 challenge composer');
+includes(app, "ChallengeSheetV1", 'App reaches the V1 incoming challenge sheet');
+includes(app, "setCurrentTab('DUELS')", 'successful Challenge routes to Duels');
+includes(app, 'setCreatedChallenge(created)', 'returned Challenge is retained locally');
+includes(app, 'setTabFocus((n) => n + 1)', 'successful Challenge triggers the Duels refresh/focus mechanism');
+
+for (const [name, source] of [['ChallengeModalV1', modal], ['ChallengeSheetV1', sheet]]) {
+  excludes(source, 'mwaSign', `${name} does not open the wallet during challenge review/accept`);
+  excludes(source, 'transact', `${name} does not invoke MWA during challenge review/accept`);
+}
+includes(modal, 'decisionTs', 'composer sends only the user-facing decision time');
+includes(modal, "resolutionMode: 'MUTUAL'", 'composer fixes the V1 settlement mode');
+includes(modal, "fallbackMode: 'REFUND'", 'composer fixes the V1 refund fallback');
+excludes(modal, 'cutoffTs', 'composer cannot submit a cutoff override');
+excludes(modal, 'mutualDeadlineTs', 'composer cannot submit a mutual deadline override');
+includes(modal, 'Settle together', 'composer explains the mutual settlement');
+includes(modal, "Money back if no agreement", 'composer explains the refund outcome');
+
+for (const label of ['Incoming', 'Sent', 'Active', 'Claimable', 'Completed']) {
+  includes(duels, label, `Duels home contains ${label} state/tab`);
+}
+for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Needs your stake', 'Waiting for opponent', 'Live', 'Ready to settle', 'Refunded']) {
+  includes(duels + detail, label, `V1 lifecycle contains ${label}`);
+}
+includes(sheet, 'challenged your Take', 'incoming challenge copy identifies the Take');
+includes(sheet, 'You said', 'incoming challenge shows the creator proposition');
+includes(sheet, 'They say', 'incoming challenge shows the challenger proposition');
+includes(sheet, 'Accept challenge', 'incoming challenge exposes the authenticated accept action');
+includes(sheet, 'Counter', 'incoming challenge exposes the counter path');
+includes(sheet, 'Decline', 'incoming challenge exposes the decline path');
+
+includes(detail, "Phantom will open for approval.", 'Duel setup has the pre-wallet boundary');
+includes(detail, 'Waiting for wallet approval…', 'Duel actions have the wallet waiting boundary');
+includes(detail, 'Creating Duel on Solana', 'Duel setup copy names the first on-chain action');
+includes(detail, 'This creates the Duel on Solana.', 'Duel setup explains the first on-chain action');
+includes(detail, 'Duel ready', 'Duel setup has a success state');
+includes(detail, 'What happened?', 'settlement asks for the real-world result');
+includes(detail, 'Your choice isn\'t final until both of you choose the same result.', 'settlement explains mutual agreement');
+includes(detail, 'Claim winnings', 'claim action uses V1 copy');
+includes(detail, 'Choice recorded. Waiting for @other.', 'settlement exposes the first-vote state');
+excludes(detail, 'Counter Verified', 'reachable Duel detail does not expose deferred resolver UI');
+excludes(detail, 'Seeker Arena', 'reachable Duel detail does not expose deferred Arena UI');
+excludes(receipt, 'Counter Verified', 'reachable receipt does not expose deferred resolver UI');
+includes(stake, 'Phantom will open to stake', 'stake action has the pre-wallet boundary');
+includes(stake, 'Waiting for wallet approval…', 'stake action has the wallet waiting boundary');
+includes(stake, 'Submitting your stake…', 'stake action has the backend submission boundary');
+includes(stake, 'Stake confirmed', 'stake action has a success state');
+includes(detail, 'Recording your choice…', 'settlement action has the backend submission boundary');
+
+const proposeBlock = api.slice(api.indexOf('proposeChallenge:'), api.indexOf('createCounteroffer:'));
+includes(proposeBlock, 'decisionTs: number', 'API type requires decisionTs');
+excludes(proposeBlock, 'cutoffTs', 'API proposal type rejects cutoffTs');
+excludes(proposeBlock, 'resolutionTs', 'API proposal type rejects resolutionTs');
+excludes(proposeBlock, 'mutualDeadlineTs', 'API proposal type rejects mutualDeadlineTs');
+const counterBlock = api.slice(api.indexOf('createCounteroffer:'), api.indexOf('// Duels & Arena'));
+excludes(counterBlock, 'cutoffTs?:', 'API counteroffer type rejects cutoffTs');
+excludes(counterBlock, 'resolutionTs?:', 'API counteroffer type rejects resolutionTs');
+
+for (const marker of ['START', 'MWA_OPEN', 'MWA_APPROVED', 'MWA_CANCELLED', 'TX_SUBMITTED', 'TX_CONFIRMED', 'BACKEND_VERIFY_START', 'BACKEND_VERIFY_OK', 'BACKEND_VERIFY_FAILED', 'UI_SUCCESS']) {
+  includes(diagnostics, marker, `diagnostic marker ${marker} is defined`);
+}
+for (const operation of ['DUEL_INIT', 'STAKE', 'SETTLEMENT', 'CLAIM']) {
+  includes(chain + detail, operation, `wallet diagnostics cover ${operation}`);
+}
+
+console.log('V1 experience rebase source guardrails passed');

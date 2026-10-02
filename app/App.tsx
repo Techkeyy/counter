@@ -17,8 +17,8 @@ import { TakeDetailScreen } from './src/screens/TakeDetailScreen';
 import { ReceiptScreen } from './src/screens/ReceiptScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ActivityScreen } from './src/screens/ActivityScreen';
-import { ChallengeModal } from './src/components/ChallengeModal';
-import { ChallengeSheet } from './src/components/ChallengeSheet';
+import { ChallengeModalV1 } from './src/components/ChallengeModalV1';
+import { ChallengeSheetV1 } from './src/components/ChallengeSheetV1';
 import { OnboardingModal } from './src/components/OnboardingModal';
 import { Icon, IconName } from './src/components/Icon';
 import { colors, spacing, borderRadius, touchMin } from './src/theme';
@@ -317,8 +317,6 @@ export default function App() {
               userWallet={walletState.publicKey}
               onBack={() => setSelectedDuelId(null)}
               onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
-              isArenaEligible={walletState.isArenaEligible}
-              skrStakedAmount={walletState.skrStakedAmount}
             />
           </View>
         )}
@@ -370,7 +368,7 @@ export default function App() {
         </TouchableOpacity>
       )}
 
-      <ChallengeModal
+      <ChallengeModalV1
         visible={!!challengeTargetTake}
         take={challengeTargetTake}
         onClose={() => setChallengeTargetTake(null)}
@@ -384,7 +382,7 @@ export default function App() {
         }}
       />
 
-      <ChallengeSheet
+      <ChallengeSheetV1
         challenge={reviewChallenge}
         userWallet={walletState.publicKey}
         onClose={() => setReviewChallenge(null)}

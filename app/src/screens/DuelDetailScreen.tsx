@@ -24,16 +24,15 @@ import {
   mwaSignMessage,
   settlementMessage,
 } from '../chain';
-import { describeCriteria, formatDeadline } from '../utils/criteria';
+import { formatDeadline } from '../utils/criteria';
 import { formatUserDisplayName, formatRelativeTime, isRealSignature } from '../utils/identity';
+import { isWalletCancellation, walletStage } from '../diagnostics';
 
 interface DuelDetailScreenProps {
   duelId: string;
   userWallet: string | null;
   onBack: () => void;
   onViewReceipt: (receiptId: string) => void;
-  isArenaEligible?: boolean;
-  skrStakedAmount?: number;
 }
 
 export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
@@ -41,8 +40,6 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   userWallet,
   onBack,
   onViewReceipt,
-  isArenaEligible,
-  skrStakedAmount,
 }) => {
   const [duel, setDuel] = useState<Duel | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -55,8 +52,6 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showProof, setShowProof] = useState(false);
   const [voting, setVoting] = useState(false);
-  const [publishingArena, setPublishingArena] = useState(false);
-  const [arenaSkR, setArenaSkr] = useState<number | null>(null);
 
   const [backModalVisible, setBackModalVisible] = useState(false);
   const [backSide, setBackSide] = useState<1 | 2>(1);
@@ -85,8 +80,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setInitializing(true);
     setMessage(null);
+    walletStage('DUEL_INIT', 'START');
+    let backendVerifyStarted = false;
     try {
-      setMessage('Fetching canonical duel accounts.');
+      setMessage('Preparing this Duel.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
       if (acct.chainStatus === 'INITIALIZED') {
         throw new Error('Duel is already initialized on-chain.');
@@ -95,7 +92,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const conn = getConnection();
       const vaultAtaInfo = await conn.getAccountInfo(new PublicKey(acct.vaultAta));
 
-      setMessage('Approve initialization in your wallet.');
+      setMessage('Phantom will open for approval.');
       const ixs = [];
       const vaultAtaIx = buildVaultAtaCreateIxIfNeeded(
         payer,
@@ -105,16 +102,22 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       if (vaultAtaIx) ixs.push(vaultAtaIx);
       ixs.push(buildInitializeDuelIx(acct, payer));
 
-      setMessage('Sending to Devnet.');
-      const signature = await mwaSignSendConfirm(ixs, payer);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setMessage('Waiting for wallet approval…');
+      const signature = await mwaSignSendConfirm(ixs, payer, undefined, 'DUEL_INIT');
 
-      setMessage('Verifying on-chain initialization.');
+      setMessage('Creating Duel on Solana…');
+      backendVerifyStarted = true;
+      walletStage('DUEL_INIT', 'BACKEND_VERIFY_START');
       await api.initOnChainDuel(duelId, signature);
+      walletStage('DUEL_INIT', 'BACKEND_VERIFY_OK');
+      walletStage('DUEL_INIT', 'UI_SUCCESS');
 
-      setMessage(`Bound on-chain: ${signature.slice(0, 8)}.`);
+      setMessage('Duel ready');
       await loadDuelData();
     } catch (err: any) {
-      setMessage(`Initialization failed: ${err.message}`);
+      if (backendVerifyStarted) walletStage('DUEL_INIT', 'BACKEND_VERIFY_FAILED');
+      setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't create the Duel on Solana. Try again.");
     } finally {
       setInitializing(false);
     }
@@ -127,23 +130,30 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setClaiming(true);
     setMessage(null);
+    walletStage('CLAIM', 'START');
+    let backendVerifyStarted = false;
     try {
-      setMessage('Fetching canonical duel accounts.');
+      setMessage('Preparing your winnings.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
       const user = new PublicKey(userWallet);
 
-      setMessage('Approve the claim in your wallet.');
-      const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user);
+      setMessage('Phantom will open to claim your winnings.');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setMessage('Waiting for wallet approval…');
+      const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user, undefined, 'CLAIM');
 
-      setMessage('Verifying on-chain payout.');
-      const res = await api.claimDuel(duelId, signature);
+      setMessage('Claiming your winnings…');
+      backendVerifyStarted = true;
+      walletStage('CLAIM', 'BACKEND_VERIFY_START');
+      await api.claimDuel(duelId, signature);
+      walletStage('CLAIM', 'BACKEND_VERIFY_OK');
+      walletStage('CLAIM', 'UI_SUCCESS');
 
-      setMessage(
-        `Claimed ${res.payoutUsd !== null ? `$${Number(res.payoutUsd).toFixed(2)}` : 'payout'} test cUSD.`
-      );
+      setMessage('Winnings claimed');
       await loadDuelData();
     } catch (err: any) {
-      setMessage(`Claim failed: ${err.message}`);
+      if (backendVerifyStarted) walletStage('CLAIM', 'BACKEND_VERIFY_FAILED');
+      setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't claim your winnings. Try again.");
     } finally {
       setClaiming(false);
     }
@@ -160,62 +170,34 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setVoting(true);
     setMessage(null);
+    walletStage('SETTLEMENT', 'START');
+    let backendVerifyStarted = false;
     try {
-      setMessage('Sign the result in your wallet.');
+      setMessage('Your wallet will open to confirm your choice.');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setMessage('Waiting for wallet approval…');
       const signature = await mwaSignMessage(
         settlementMessage(duel.id, side, Number(duel.resolution_ts) || 0),
-        userWallet
+        userWallet,
+        'SETTLEMENT'
       );
-      setMessage('Recording your confirmation.');
+      setMessage('Recording your choice…');
+      backendVerifyStarted = true;
+      walletStage('SETTLEMENT', 'BACKEND_VERIFY_START');
       const res = await api.postMutualVote(duel.id, side, signature);
+      walletStage('SETTLEMENT', 'BACKEND_VERIFY_OK');
+      walletStage('SETTLEMENT', 'UI_SUCCESS');
       if (res.match?.matched) {
-        setMessage(`Both captains agree: Side ${res.match.winnerSide === 1 ? 'A' : 'B'}. Settle when ready.`);
+        setMessage('Result confirmed.');
       } else {
-        setMessage('Confirmation recorded. Waiting for the other captain.');
+        setMessage('Choice recorded. Waiting for @other.');
       }
       await loadDuelData();
     } catch (err: any) {
-      setMessage(`Confirmation failed: ${err.message}`);
+      if (backendVerifyStarted) walletStage('SETTLEMENT', 'BACKEND_VERIFY_FAILED');
+      setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't record your choice. Try again.");
     } finally {
       setVoting(false);
-    }
-  };
-
-  const handlePublishArena = async () => {
-    if (!userWallet) {
-      setMessage('Connect a wallet first.');
-      return;
-    }
-    setPublishingArena(true);
-    setMessage(null);
-    try {
-      const res = await api.publishArena(duelId);
-      setArenaSkr(typeof res.skrStake === 'number' ? res.skrStake : null);
-      setMessage('Published to Seeker Arena.');
-      await loadDuelData();
-    } catch (err: any) {
-      setMessage(err?.message || 'Arena publish failed.');
-    } finally {
-      setPublishingArena(false);
-    }
-  };
-
-  const handleRecheckArena = async () => {
-    if (!userWallet) return;
-    setPublishingArena(true);
-    try {
-      const profile: any = await api.getUserProfile(userWallet);
-      const u = profile?.user || profile;
-      setArenaSkr(Number(u?.skr_staked_amount) || 0);
-      setMessage(
-        Number(u?.skr_staked_amount) > 0
-          ? `Verified: ${u.skr_staked_amount} SKR staked on Mainnet.`
-          : 'No active SKR stake found. Stake in your Seeker wallet first.'
-      );
-    } catch (err: any) {
-      setMessage(err?.message || 'Could not recheck stake.');
-    } finally {
-      setPublishingArena(false);
     }
   };
 
@@ -300,8 +282,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     handle: duel.captain_b_handle,
     wallet: duel.captain_b_wallet,
   });
-  const resolutionMode = duel.resolution_mode || 'COUNTER_VERIFIED';
-  const isMutual = resolutionMode === 'MUTUAL';
+  const isMutual = duel.resolution_mode === 'MUTUAL';
+  const isRefunded = duel.status === 'CANCELLED';
+  const resolutionReached = Date.now() / 1000 >= Number(duel.resolution_ts || 0);
+  const hasBothFunded = poolA > 0 && poolB > 0;
   const myVote = userWallet
     ? mutualVotes.find((v) => v.captain_wallet === userWallet)
     : undefined;
@@ -314,8 +298,26 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const votingOpen =
     !isResolved &&
     isInitialized &&
-    Date.now() / 1000 >= Number(duel.resolution_ts || 0);
-  const effectiveSkr = arenaSkR !== null && arenaSkR !== undefined ? arenaSkR : skrStakedAmount || 0;
+    resolutionReached;
+  const humanState = isRefunded
+    ? 'Refunded'
+    : isResolved
+      ? canClaim
+        ? 'Claim winnings'
+        : 'Completed'
+      : !isInitialized
+        ? isCaptain
+          ? 'Set up this Duel'
+          : 'Waiting for setup'
+        : isCaptain && !myPosition
+          ? 'Needs your stake'
+          : !hasBothFunded
+            ? 'Waiting for opponent'
+            : isMutual && resolutionReached && !myVote
+              ? 'Ready to settle'
+              : isMutual && myVote && !votesMatch
+                ? 'Waiting for @other'
+                : 'Live';
 
   const timeline: { label: string; detail: string }[] = [
     { label: 'Duel formed', detail: formatRelativeTime(duel.created_at) },
@@ -343,11 +345,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
             <Icon name="chevron-left" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.topState}>
-            {isResolved
-              ? duel.status.replace(/_/g, ' ').toLowerCase()
-              : isInitialized
-                ? 'Live on-chain'
-                : 'Forming'}
+            {humanState}
           </Text>
           <TouchableOpacity
             onPress={handleShare}
@@ -363,7 +361,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           {duel.proposition_a} vs {duel.proposition_b}
         </Text>
         <Text style={styles.meta}>
-          {duel.category.toLowerCase()} · closes {formatDeadline(duel.cutoff_ts)}
+          Settle together · Decide: {formatDeadline(duel.resolution_ts)}
         </Text>
 
         <View style={styles.sidesRow}>
@@ -391,7 +389,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           <View style={styles.positionRow}>
             <Icon name="wallet" size={16} color={colors.textSecondary} />
             <Text style={styles.positionText}>
-              You backed {myPosition.side === 1 ? 'Side A' : 'Side B'} with $
+              You backed {myPosition.side === 1 ? nameA : nameB} with $
               {Number(myPosition.stake_amount).toFixed(0)} cUSD
               {myPosition.claimed ? ' · claimed' : isResolved ? (isLoser ? ' · lost' : ' · claimable') : ''}
             </Text>
@@ -404,83 +402,70 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>How this settles</Text>
-        <Text style={styles.criteriaText}>
-          {describeCriteria(duel.source_type || duel.category, duel.source_config)}
-        </Text>
-        <View style={styles.modeRow}>
-          <Icon
-            name={isMutual ? 'users' : 'shield-check'}
-            size={16}
-            color={isMutual ? colors.brandSecondary : colors.success}
-          />
-          <Text style={styles.modeText}>
-            {isMutual
-              ? `Settle together. If no agreement${duel.mutual_deadline_ts ? ` by ${formatDeadline(duel.mutual_deadline_ts)}` : ''}, ${(duel.fallback_mode || 'REFUND') === 'REFUND' ? 'everyone is refunded' : 'Counter Verified decides'}.`
-              : 'Counter Verified by the rule above.'}
+        <Text style={styles.sectionTitle}>Settle together</Text>
+        <View style={styles.mutualBox}>
+          <Text style={styles.mutualTitle}>What happened?</Text>
+          <Text style={styles.mutualLine}>{nameA} says: {duel.proposition_a}</Text>
+          <Text style={styles.mutualLine}>{nameB} says: {duel.proposition_b}</Text>
+          <Text style={styles.mutualTitle}>Choose the winner</Text>
+          <Text style={styles.mutualNote}>
+            Your choice isn't final until both of you choose the same result.
           </Text>
+          {isMutual && !isResolved && !isRefunded && (
+            <>
+              {myVote ? (
+                <Text style={styles.mutualLine}>
+                  You chose {Number(myVote.winner_side) === 1 ? nameA : nameB}.
+                </Text>
+              ) : null}
+              {otherVote ? (
+                <Text style={styles.mutualLine}>
+                  {otherVote.captain_wallet === duel.captain_a_wallet ? nameA : nameB} chose{' '}
+                  {Number(otherVote.winner_side) === 1 ? nameA : nameB}.
+                </Text>
+              ) : null}
+              {votesMatch ? (
+                <Text style={styles.mutualMatch}>Result confirmed.</Text>
+              ) : null}
+              {isCaptain && isInitialized && votingOpen && (
+                <View style={styles.voteRow}>
+                  {([1, 2] as const).map((side) => (
+                    <TouchableOpacity
+                      key={side}
+                      style={styles.voteBtn}
+                      onPress={() => handleVote(side)}
+                      disabled={voting}
+                      activeOpacity={0.85}
+                      accessibilityLabel={
+                        side === 1
+                          ? `Choose ${nameA} as winner`
+                          : `Choose ${nameB} as winner`
+                      }
+                      accessibilityRole="button"
+                    >
+                      {voting ? (
+                        <ActivityIndicator color="#000000" />
+                      ) : (
+                        <Text style={styles.voteBtnText}>
+                          {side === 1 ? `${nameA} won` : `${nameB} won`}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {isCaptain && isInitialized && !votingOpen && (
+                <Text style={styles.mutualNote}>Choices open at the decision time.</Text>
+              )}
+              {!isCaptain && (
+                <Text style={styles.mutualNote}>Only the two captains choose the result.</Text>
+              )}
+            </>
+          )}
+          {isRefunded && (
+            <Text style={styles.mutualMatch}>You couldn't agree. Everyone gets their stake back.</Text>
+          )}
         </View>
-
-        {isMutual && !isResolved && (
-          <View style={styles.mutualBox}>
-            <Text style={styles.mutualTitle}>Captain confirmations</Text>
-            {myVote ? (
-              <Text style={styles.mutualLine}>
-                You say Side {Number(myVote.winner_side) === 1 ? 'A' : 'B'} won.
-              </Text>
-            ) : null}
-            {otherVote ? (
-              <Text style={styles.mutualLine}>
-                {otherVote.captain_wallet === duel.captain_a_wallet ? nameA : nameB} says Side{' '}
-                {Number(otherVote.winner_side) === 1 ? 'A' : 'B'} won.
-              </Text>
-            ) : (
-              <Text style={styles.mutualLine}>Awaiting the other captain.</Text>
-            )}
-            {votesMatch ? (
-              <Text style={styles.mutualMatch}>
-                Both sides agree. This result becomes final once settled on Solana.
-              </Text>
-            ) : null}
-            {isCaptain && isInitialized && votingOpen && (
-              <View style={styles.voteRow}>
-                {([1, 2] as const).map((side) => (
-                  <TouchableOpacity
-                    key={side}
-                    style={styles.voteBtn}
-                    onPress={() => handleVote(side)}
-                    disabled={voting}
-                    activeOpacity={0.85}
-                    accessibilityLabel={
-                      side === 1
-                        ? `Agree, ${nameA} won`
-                        : `Agree, ${nameB} won`
-                    }
-                    accessibilityRole="button"
-                  >
-                    {voting ? (
-                      <ActivityIndicator color="#000000" />
-                    ) : (
-                      <Text style={styles.voteBtnText}>
-                        {side === 1 ? `${nameA} won` : `${nameB} won`}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            {isCaptain && isInitialized && !votingOpen && (
-              <Text style={styles.mutualNote}>
-                Confirmations open at resolution time. You can disagree freely until then.
-              </Text>
-            )}
-            {!isCaptain && (
-              <Text style={styles.mutualNote}>
-                Only the two captains confirm. Backers watch the outcome here.
-              </Text>
-            )}
-          </View>
-        )}
 
         <Text style={styles.sectionTitle}>Timeline</Text>
         {timeline.map((t) => (
@@ -508,58 +493,9 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
             <ProofRow label="Vault account" value={duel.onchain_vault_pda ? `${duel.onchain_vault_pda.slice(0, 8)}` : 'Not bound yet'} mono />
             <ProofRow label="Init transaction" value={duel.init_tx_signature ? `${duel.init_tx_signature.slice(0, 12)}` : 'None'} mono />
             <ProofRow label="Resolve transaction" value={duel.resolution_tx && isRealSignature(duel.resolution_tx) ? `${duel.resolution_tx.slice(0, 12)}` : 'None yet'} mono />
-            <ProofRow label="Resolution source" value={`${duel.source_type || duel.category} deterministic oracle`} />
+            <ProofRow label="Resolution source" value="Captain confirmations and refund rules" />
           </View>
         )}
-
-        <Text style={styles.sectionTitle}>Seeker Arena</Text>
-        <View style={styles.arenaBox}>
-          <View style={styles.arenaRow}>
-            <Icon
-              name="trophy"
-              size={16}
-              color={duel.is_arena ? colors.arenaBadge : colors.textMuted}
-            />
-            <Text style={styles.arenaText}>
-              {duel.is_arena
-                ? 'Published in Seeker Arena.'
-                : effectiveSkr > 0
-                  ? `Your ${effectiveSkr} staked SKR unlocks Arena publishing.`
-                  : 'Arena publishing needs active SKR staked on Mainnet.'}
-            </Text>
-          </View>
-          {isCaptain && !duel.is_arena && (
-            <View style={styles.arenaActions}>
-              <TouchableOpacity
-                style={styles.arenaBtn}
-                onPress={handlePublishArena}
-                disabled={publishingArena}
-                activeOpacity={0.85}
-                accessibilityLabel="Publish duel to Seeker Arena"
-                accessibilityRole="button"
-              >
-                {publishingArena ? (
-                  <ActivityIndicator color="#000000" />
-                ) : (
-                  <Text style={styles.arenaBtnText}>Publish to Seeker Arena</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.arenaRecheck}
-                onPress={handleRecheckArena}
-                disabled={publishingArena}
-                activeOpacity={0.8}
-                accessibilityLabel="Recheck SKR stake"
-                accessibilityRole="button"
-              >
-                <Text style={styles.arenaRecheckText}>Recheck stake</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <Text style={styles.arenaNote}>
-            SKR grants access and reputation only. It never changes odds, winners, or stakes. Stake in your Seeker wallet.
-          </Text>
-        </View>
 
         <Text style={styles.sectionTitle}>Backers ({positions.length})</Text>
         {positions.length === 0 ? (
@@ -575,37 +511,38 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
                 })}
               </Text>
               <Text style={[styles.backerSide, pos.side === 1 ? { color: colors.sideA } : { color: colors.sideB }]}>
-                {pos.side === 1 ? 'Side A' : 'Side B'} · ${Number(pos.stake_amount).toFixed(0)}
+                {pos.side === 1 ? nameA : nameB} · ${Number(pos.stake_amount).toFixed(0)}
               </Text>
             </View>
           ))
         )}
       </ScrollView>
 
-      {!isResolved && !isInitialized && isCaptain && (
+      {!isResolved && !isRefunded && !isInitialized && isCaptain && (
         <View style={styles.ctaBar}>
+          <Text style={styles.ctaNote}>This creates the Duel on Solana.</Text>
           <TouchableOpacity
             style={styles.ctaPrimary}
             onPress={handleInitialize}
             disabled={initializing}
             activeOpacity={0.85}
-            accessibilityLabel="Initialize duel on-chain"
+            accessibilityLabel="Set up this Duel"
             accessibilityRole="button"
           >
             {initializing ? (
               <ActivityIndicator color="#000000" />
             ) : (
-              <Text style={styles.ctaPrimaryText}>Initialize on-chain</Text>
+              <Text style={styles.ctaPrimaryText}>Set up this Duel</Text>
             )}
           </TouchableOpacity>
         </View>
       )}
-      {!isResolved && !isInitialized && !isCaptain && (
+      {!isResolved && !isRefunded && !isInitialized && !isCaptain && (
         <View style={styles.ctaBar}>
           <Text style={styles.ctaNote}>Stakes unlock once a captain binds this duel on-chain.</Text>
         </View>
       )}
-      {!isResolved && isInitialized && (
+      {!isResolved && !isRefunded && isInitialized && (
         <View style={styles.ctaBar}>
           <View style={styles.ctaSplit}>
             <TouchableOpacity
@@ -615,10 +552,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
                 setBackModalVisible(true);
               }}
               activeOpacity={0.85}
-              accessibilityLabel="Back Side A"
+              accessibilityLabel={`Stake with ${nameA}`}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaHalfText}>Back A</Text>
+              <Text style={styles.ctaHalfText}>Stake with {nameA}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.ctaHalf, { backgroundColor: colors.sideB }]}
@@ -627,10 +564,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
                 setBackModalVisible(true);
               }}
               activeOpacity={0.85}
-              accessibilityLabel="Back Side B"
+              accessibilityLabel={`Stake with ${nameB}`}
               accessibilityRole="button"
             >
-              <Text style={styles.ctaHalfText}>Back B</Text>
+              <Text style={styles.ctaHalfText}>Stake with {nameB}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -642,14 +579,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
             onPress={handleClaim}
             disabled={claiming}
             activeOpacity={0.85}
-            accessibilityLabel="Claim payout"
+            accessibilityLabel="Claim winnings"
             accessibilityRole="button"
           >
             {claiming ? (
               <ActivityIndicator color="#000000" />
             ) : (
               <Text style={styles.ctaPrimaryText}>
-                Claim ${Number(myPosition!.stake_amount).toFixed(0)} plus winnings
+                Claim winnings
               </Text>
             )}
           </TouchableOpacity>

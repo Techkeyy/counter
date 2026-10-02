@@ -143,7 +143,7 @@ async function run() {
     r = await api('POST', '/api/challenges', B.token, {
       takeId: takeId2, targetWallet: A.wallet,
       propositionA: 'X up', propositionB: 'X down', category: 'CRYPTO',
-      stakeAmountUsd: 5, cutoffTs: Math.floor(Date.now() / 1000) + 3600, resolutionTs: Math.floor(Date.now() / 1000) + 7200,
+      stakeAmountUsd: 5, decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
       resolutionMode: 'MUTUAL', fallbackMode: 'REFUND',
     });
     assert(r.status === 201, 'challenge proposes');
@@ -166,8 +166,8 @@ async function run() {
     r = await api('POST', '/api/challenges', B.token, {
       takeId: takeId3, targetWallet: A.wallet,
       propositionA: 'Y up', propositionB: 'Y down', category: 'CRYPTO',
-      stakeAmountUsd: 5, cutoffTs: Math.floor(Date.now() / 1000) - 10, resolutionTs: Math.floor(Date.now() / 1000) - 5,
-      resolutionMode: 'MUTUAL', fallbackMode: 'REFUND', mutualDeadlineTs: Math.floor(Date.now() / 1000) + 3600,
+      stakeAmountUsd: 5, decisionTs: Math.floor(Date.now() / 1000) + 24 * 3600,
+      resolutionMode: 'MUTUAL', fallbackMode: 'REFUND',
     });
     const chalId3 = r.data.challenge.id;
     tracked.challenges.push(chalId3);

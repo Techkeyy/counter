@@ -24,6 +24,7 @@ import {
   CUSD_DECIMALS,
   CUSD_MINT,
 } from '../chain';
+import { isWalletCancellation, walletStage } from '../diagnostics';
 
 interface BackModalProps {
   visible: boolean;
@@ -133,7 +134,9 @@ export const BackModal: React.FC<BackModalProps> = ({
 
     setLoading(true);
     setError(null);
-    setStatus('Fetching canonical duel accounts…');
+    walletStage('STAKE', 'START');
+    setStatus(`Preparing your $${stakeUsd.toFixed(2)} stake.`);
+    let backendVerifyStarted = false;
 
     try {
       // 1. Canonical accounts from the backend (single-derivation rule).
@@ -166,34 +169,41 @@ export const BackModal: React.FC<BackModalProps> = ({
       setNeedsFunding(false);
 
       // 3. Build the REAL DepositStake instruction (+ ATA creation if needed).
-      setStatus('Approve the stake in your wallet…');
+      setStatus(`Phantom will open to stake $${stakeUsd.toFixed(2)}.`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
       const ixs = [];
       const ataIx = buildUserAtaCreateIxIfNeeded(user, userAtaExists);
       if (ataIx) ixs.push(ataIx);
       ixs.push(buildDepositStakeIx(acct, user, side, amountBase));
 
       // 4. MWA sign + send + confirm on Devnet.
-      setStatus('Sending to Devnet…');
-      const signature = await mwaSignSendConfirm(ixs, user);
+      setStatus('Waiting for wallet approval…');
+      const signature = await mwaSignSendConfirm(ixs, user, undefined, 'STAKE');
 
       // 5. Backend independently verifies the tx before indexing.
-      setStatus('Verifying on-chain deposit…');
+      setStatus('Submitting your stake…');
+      backendVerifyStarted = true;
+      walletStage('STAKE', 'BACKEND_VERIFY_START');
       await api.recordStake(duel.id, side, stakeUsd, signature, acct.positionPda);
+      walletStage('STAKE', 'BACKEND_VERIFY_OK');
+      walletStage('STAKE', 'UI_SUCCESS');
 
       setLoading(false);
-      setStatus(null);
+      setStatus('Stake confirmed');
       onStakeRecorded();
       onClose();
     } catch (err: any) {
       setLoading(false);
+      if (backendVerifyStarted) walletStage('STAKE', 'BACKEND_VERIFY_FAILED');
       setStatus(null);
-      setError(err.message || 'Failed to deposit stake');
+      setError(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't submit your stake. Try again.");
     }
   };
 
-  const sideLabel = side === 1 ? 'SIDE A' : 'SIDE B';
+  const sideLabel = side === 1
+    ? `${duel.captain_a_name || 'the creator'}'s side`
+    : `${duel.captain_b_name || 'the challenger'}'s side`;
   const sideColor = side === 1 ? colors.sideA : colors.sideB;
-  const captainName = side === 1 ? duel.captain_a_name : duel.captain_b_name;
   const proposition = side === 1 ? duel.proposition_a : duel.proposition_b;
 
   return (
@@ -202,7 +212,7 @@ export const BackModal: React.FC<BackModalProps> = ({
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: sideColor }]}>
-              Back {sideLabel} · {captainName || 'TBD'}
+              Stake on {sideLabel}
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -277,13 +287,13 @@ export const BackModal: React.FC<BackModalProps> = ({
             onPress={handleDeposit}
             disabled={loading}
             activeOpacity={0.8}
-            accessibilityLabel={`Deposit ${stakeNum || 0} test cUSD on ${sideLabel}`}
+            accessibilityLabel={`Stake ${stakeNum || 0} test cUSD on ${sideLabel}`}
             accessibilityRole="button"
           >
             {loading ? (
               <ActivityIndicator color="#000" />
             ) : (
-              <Text style={styles.submitText}>Deposit test cUSD</Text>
+              <Text style={styles.submitText}>Stake ${stakeNum.toFixed(2)}</Text>
             )}
           </TouchableOpacity>
         </View>
