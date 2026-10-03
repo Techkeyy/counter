@@ -5,8 +5,12 @@ const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
 const { validateChallengeContract } = require('../resolution-templates');
 
-const MIN_DECISION_LEAD_SECONDS = 2 * 60 * 60;
-const STAKE_BUFFER_SECONDS = 60 * 60;
+// The program only requires cutoff < resolution and checks both timestamps at
+// instruction time. The old two-hour product floor made short, demoable Duels
+// impossible, so keep a safe 15-minute minimum and derive a hidden staking
+// buffer that is always strictly before resolution.
+const MIN_DECISION_LEAD_SECONDS = 15 * 60;
+const MAX_STAKE_BUFFER_SECONDS = 60 * 60;
 const MUTUAL_DEADLINE_SECONDS = 24 * 60 * 60;
 const HIDDEN_TIMING_FIELDS = ['cutoffTs', 'resolutionTs', 'mutualDeadlineTs'];
 
@@ -14,11 +18,13 @@ function deriveChallengeTiming(decisionTsRaw, nowSec = Math.floor(Date.now() / 1
   const selected = Number(decisionTsRaw);
   const requestedResolution = Number.isFinite(selected) ? Math.floor(selected) : nowSec + MIN_DECISION_LEAD_SECONDS;
   const resolutionTs = Math.max(requestedResolution, nowSec + MIN_DECISION_LEAD_SECONDS);
-  const cutoffTs = resolutionTs - STAKE_BUFFER_SECONDS;
+  const duration = resolutionTs - nowSec;
+  const stakeBuffer = Math.min(MAX_STAKE_BUFFER_SECONDS, Math.max(60, Math.floor(duration / 3)));
+  const cutoffTs = resolutionTs - stakeBuffer;
   const mutualDeadlineTs = resolutionTs + MUTUAL_DEADLINE_SECONDS;
 
   if (!(cutoffTs > nowSec && cutoffTs < resolutionTs && resolutionTs < mutualDeadlineTs)) {
-    return { ok: false, error: 'Decision time must be at least two hours from now' };
+    return { ok: false, error: 'Decision time must be at least 15 minutes from now' };
   }
   return { ok: true, cutoffTs, resolutionTs, mutualDeadlineTs };
 }
@@ -337,6 +343,26 @@ router.post('/:id/accept', requireAuth, (req, res) => {
   } catch (error) {
     return res.status(error.statusCode || 500).json({ error: error.message });
   }
+  execute(
+    `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+     VALUES (?, ?, 'CHALLENGE_ACCEPTED', ?, ?, 'DUEL', 'Challenge accepted', ?, 0, ?)`,
+    [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, challenge.challenger_wallet, userWallet, duel.id,
+      'Your challenge was accepted. Duel setup is ready.', new Date().toISOString()]
+  );
+  for (const wallet of [challenge.creator_wallet, challenge.challenger_wallet]) {
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'STAKE_REQUIRED', 'system', ?, 'DUEL', 'Stake required', ?, 0, ?)`,
+      [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duel.id,
+        `Lock ${Number(challenge.stake_amount_usd).toFixed(2)} Counter Test USD to start the Duel.`, new Date().toISOString()]
+    );
+  }
+  execute(
+    `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+     VALUES (?, ?, 'DUEL_SETUP_NEEDED', 'system', ?, 'DUEL', 'Duel setup needed', ?, 0, ?)`,
+    [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, challenge.creator_wallet, duel.id,
+      'Set up this Duel when you are ready.', new Date().toISOString()]
+  );
   res.json({ success: true, duel });
 });
 

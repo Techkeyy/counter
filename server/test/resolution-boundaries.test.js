@@ -78,7 +78,7 @@ async function run() {
     const A = await siwsAuth();
     const B = await siwsAuth();
     const C = await siwsAuth();
-    const { execute } = require('../db');
+    const { execute, queryAll } = require('../db');
     tracked.users.push(A.wallet, B.wallet, C.wallet);
 
     // The live-Take boundary is authoritative: all valid challenge cases need
@@ -197,15 +197,23 @@ async function run() {
     const sigB2 = signSettlement(B.kp, duel.id, 2, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, B.token, { winnerSide: 2, signature: sigB2.signature });
     assert(r.status === 200 && r.data.match.state === 'DISPUTED', 'opposing votes dispute');
+    const privateRead = await api('GET', `/api/duels/${duel.id}`, A.token);
+    assert(privateRead.status === 200 && privateRead.data.mutualState === 'DISPUTED', 'private read exposes coarse mismatch state');
+    assert(privateRead.data.otherVoteSubmitted === true, 'private read exposes opponent submission presence');
+    assert(privateRead.data.mutualVotes.length === 1 && privateRead.data.mutualVotes[0].captain_wallet === A.wallet && Number(privateRead.data.mutualVotes[0].winner_side) === 1, 'private read hides opponent winner choice');
     r = await api('POST', `/api/duels/${duel.id}/resolve`, B.token, {});
     assert(r.status === 400, 'disputed pair cannot settle');
     ok('opposing votes dispute without settlement');
 
-    // 8. pre-match re-vote converges -> matched (settlement itself needs chain)
+    // 8. Once both captains disagree at/after resolution, the mismatch is
+    // locked and the only valid path is refund. A late re-vote must not turn a
+    // disputed pair into a winner after the decision boundary.
     const sigB1 = signSettlement(B.kp, duel.id, 1, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, B.token, { winnerSide: 1, signature: sigB1.signature });
-    assert(r.status === 200 && r.data.match.matched === true && r.data.match.winnerSide === 1, 'converged votes match');
-    ok('re-vote converges to a verified match');
+    assert(r.status === 400 && /No agreement is final|refund/i.test(String(r.data?.error)), 'late re-vote rejected after mismatch');
+    const lockedVotes = queryAll(`SELECT captain_wallet, winner_side FROM mutual_votes WHERE duel_id = ?`, [duel.id]);
+    assert(lockedVotes.some((vote) => vote.captain_wallet === B.wallet && Number(vote.winner_side) === 2), 'disputed vote remains locked');
+    ok('post-resolution mismatch locks and opens only the refund path');
 
     // 9. vote on VERIFIED-mode duel rejected
     r = await api('POST', '/api/challenges', B.token, { ...VALID_WEATHER, targetWallet: A.wallet });

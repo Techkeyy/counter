@@ -197,9 +197,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const winRate = totalDuels > 0 ? Math.round((wins / totalDuels) * 100) : 0;
   const streak = stats?.streak || (wins > 0 ? `${wins} Streak` : '0 Streak');
 
-  const skrStaked = user?.skr_staked_amount || 0;
-  const isArenaEligible = skrStaked > 0;
-
   // Head-to-head rows derived strictly from this wallet's real duels.
   // No names, scores, or rematch actions are invented.
   const rivalries = (() => {
@@ -256,12 +253,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <Image source={{ uri: avatarUri }} style={styles.avatar} />
         <View style={styles.identityRow}>
           <Text style={styles.displayName}>{displayName}</Text>
-          {isArenaEligible && (
-            <View style={styles.arenaQualifiedBadge}>
-              <Icon name="shield-check" size={13} color={colors.arenaBadge} />
-              <Text style={styles.arenaQualifiedText}>Seeker Arena</Text>
-            </View>
-          )}
         </View>
         {handle ? <Text style={styles.handle}>{handle}</Text> : null}
         {user?.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
@@ -469,7 +460,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               >
                 <View style={styles.itemHeader}>
                   <Text style={styles.itemTitle} numberOfLines={1}>{r.resolution_summary}</Text>
-                  <Text style={styles.settledAmountTag}>${r.total_pool} cUSD</Text>
+                  <Text style={styles.settledAmountTag}>${r.total_pool} cUSD settled</Text>
                 </View>
                 <Text style={styles.itemDate}>{new Date(r.created_at).toLocaleDateString()}</Text>
               </TouchableOpacity>
@@ -504,13 +495,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </View>
           </View>
         )}
-
-        <View style={styles.accountRow}>
-          <Text style={styles.accountKey}>Arena Eligibility</Text>
-          <Text style={[styles.accountVal, { color: isArenaEligible ? colors.brandPrimary : colors.textSecondary }]}>
-            {isArenaEligible ? `Unlocked (${skrStaked} SKR Staked)` : 'Locked (Requires staked SKR > 0)'}
-          </Text>
-        </View>
 
         <View style={styles.accountRow}>
           <Text style={styles.accountKey}>Network</Text>

@@ -13,6 +13,7 @@ import { api, isUnreachable } from '../api';
 import { SkeletonPostCard } from '../components/SkeletonLoader';
 import { EmptyState, ErrorState } from '../components/StateViews';
 import { formatUserDisplayName, formatRelativeTime } from '../utils/identity';
+import { mapDuelState, stateLabel } from '../utils/duelState';
 
 type DuelFilter = 'INCOMING' | 'SENT' | 'ACTIVE' | 'CLAIMABLE' | 'COMPLETED';
 
@@ -137,13 +138,11 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
   };
 
   const renderRow = (duel: Duel) => {
-    const poolA = Number(duel.side_a_total) || 0;
-    const poolB = Number(duel.side_b_total) || 0;
-    const total = poolA + poolB;
     const isResolved = resolved(duel);
     const isClaimable = claimableIds.has(duel.id);
     const ownPosition = (portfolio?.positions || []).find((position) => position.duel_id === duel.id);
     const isCaptain = duel.captain_a_wallet === userWallet || duel.captain_b_wallet === userWallet;
+    const uiState = mapDuelState({ duel, userWallet, positions: ownPosition ? [ownPosition] : [] });
     const nameA = formatUserDisplayName({
       display_name: duel.captain_a_name,
       handle: duel.captain_a_handle,
@@ -159,7 +158,7 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
         style={styles.row}
         onPress={() => onSelectDuel(duel)}
         activeOpacity={0.8}
-        accessibilityLabel={`Duel ${nameA} versus ${nameB}, pool ${total} cUSD`}
+        accessibilityLabel={`Duel ${nameA} versus ${nameB}, ${stateLabel(uiState)}`}
         accessibilityRole="button"
       >
         <View style={styles.line1}>
@@ -167,7 +166,6 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
           <Text style={styles.participants} numberOfLines={1}>
             {nameA} vs {nameB}
           </Text>
-          <Text style={styles.pool}>${total.toFixed(0)}</Text>
         </View>
         <Text style={styles.terms} numberOfLines={2}>
           {duel.proposition_a} vs {duel.proposition_b}
@@ -175,20 +173,12 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
         <View style={styles.line3}>
           <Text style={styles.status}>
             {duel.status === 'CANCELLED'
-              ? 'Refunded'
+              ? 'Refund available'
               : isClaimable
-              ? 'Claimable'
-              : isResolved
-                ? 'Completed'
-                : duel.chain_status !== 'INITIALIZED'
-                  ? isCaptain ? 'Set up this Duel' : 'Waiting for setup'
-                  : isCaptain && !ownPosition
-                    ? 'Needs your stake'
-                    : poolA === 0 || poolB === 0
-                      ? 'Waiting for opponent'
-                      : duel.resolution_mode === 'MUTUAL' && Number(duel.resolution_ts || 0) <= Date.now() / 1000
-                        ? 'Ready to settle'
-                        : 'Live'}
+                ? 'Claimable'
+                : isResolved
+                  ? 'Completed'
+                  : stateLabel(uiState)}
           </Text>
           <Text style={styles.time}>
             {isResolved
@@ -301,7 +291,6 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
   dotSettled: { backgroundColor: colors.success },
   participants: { ...typography.bodyBold, color: colors.textPrimary, fontSize: 14, flex: 1 },
-  pool: { ...typography.bodyBold, color: colors.success, fontSize: 14 },
   terms: { ...typography.body, color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 4 },
   line3: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   status: { ...typography.caption, color: colors.textMuted, fontSize: 12 },

@@ -21,7 +21,7 @@ import {
   WalletFlowError,
   walletStage,
 } from './diagnostics';
-import type { WalletOperation } from './diagnostics';
+import type { WalletAttempt } from './diagnostics';
 
 // Canonical chain constants — MUST match server/chain.js and program/src/lib.rs.
 // The mobile client never derives PDAs independently: every address below is
@@ -230,8 +230,8 @@ export { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, DEVNET_RPC };
 export async function mwaSignSendConfirm(
   instructions: TransactionInstruction[],
   feePayer: PublicKey,
-  connection?: Connection,
-  operation: WalletOperation = 'STAKE'
+  connection: Connection | undefined,
+  attempt: WalletAttempt
 ): Promise<string> {
   const conn = connection || getConnection();
   const {
@@ -241,7 +241,7 @@ export async function mwaSignSendConfirm(
   const tx = new Transaction({ feePayer, recentBlockhash: blockhash });
   tx.add(...instructions);
 
-  walletStage(operation, 'MWA_OPEN');
+  walletStage(attempt, 'MWA_OPEN');
   let authorizationSucceeded = false;
   let signSendStarted = false;
   let handoffSignatures: string[] | null = null;
@@ -253,12 +253,12 @@ export async function mwaSignSendConfirm(
   };
 
   try {
-    walletStage(operation, 'MWA_TRANSACT_START');
+    walletStage(attempt, 'MWA_TRANSACT_START');
     let signatures: string[] | null = null;
     try {
       signatures = await transact(async (wallet) => {
-        walletStage(operation, 'MWA_CALLBACK_ENTER');
-        walletStage(operation, 'MWA_AUTHORIZE_START');
+        walletStage(attempt, 'MWA_CALLBACK_ENTER');
+        walletStage(attempt, 'MWA_AUTHORIZE_START');
         await wallet.authorize({
           chain: 'solana:devnet',
           identity: {
@@ -268,14 +268,14 @@ export async function mwaSignSendConfirm(
           },
         });
         authorizationSucceeded = true;
-        walletStage(operation, 'MWA_AUTHORIZE_OK');
+        walletStage(attempt, 'MWA_AUTHORIZE_OK');
         signSendStarted = true;
-        walletStage(operation, 'MWA_SIGN_SEND_START');
+        walletStage(attempt, 'MWA_SIGN_SEND_START');
         handoffSignatures = await wallet.signAndSendTransactions({
           minContextSlot,
           transactions: [tx],
         });
-        walletStage(operation, 'MWA_SIGN_SEND_RETURN');
+        walletStage(attempt, 'MWA_SIGN_SEND_RETURN');
         return handoffSignatures;
       });
     } catch (error) {
@@ -286,12 +286,12 @@ export async function mwaSignSendConfirm(
       signatures = handoffSignatures;
     }
 
-    walletStage(operation, 'MWA_TRANSACT_RETURN');
+    walletStage(attempt, 'MWA_TRANSACT_RETURN');
 
-    walletStage(operation, 'MWA_APPROVED');
+    walletStage(attempt, 'MWA_APPROVED');
     const signature = parseSignature(signatures);
     if (!signature) {
-      walletStage(operation, 'MWA_ERROR');
+      walletStage(attempt, 'MWA_ERROR');
       throw new WalletFlowError(
         signSendStarted ? 'NOT_SUBMITTED' : 'PRE_SUBMIT',
         signSendStarted
@@ -299,9 +299,9 @@ export async function mwaSignSendConfirm(
           : "Couldn't get the transaction from your wallet."
       );
     }
-    walletStage(operation, 'TX_SIGNATURE_PARSED');
-    walletStage(operation, 'TX_SUBMITTED');
-    walletStage(operation, 'TX_CONFIRM_START');
+    walletStage(attempt, 'TX_SIGNATURE_PARSED');
+    walletStage(attempt, 'TX_SUBMITTED');
+    walletStage(attempt, 'TX_CONFIRM_START');
     try {
       const confirmation = await conn.confirmTransaction(
         { signature, blockhash, lastValidBlockHeight },
@@ -311,7 +311,7 @@ export async function mwaSignSendConfirm(
         throw new Error('Devnet transaction failed');
       }
     } catch (error) {
-      walletStage(operation, 'TX_CONFIRM_FAILED');
+      walletStage(attempt, 'TX_CONFIRM_FAILED');
       throw new WalletFlowError(
         'CONFIRMATION_FAILED',
         'Transaction submitted but not confirmed yet.',
@@ -319,14 +319,14 @@ export async function mwaSignSendConfirm(
         error
       );
     }
-    walletStage(operation, 'TX_CONFIRMED');
+    walletStage(attempt, 'TX_CONFIRMED');
     return signature;
   } catch (error) {
     if (error instanceof WalletFlowError) throw error;
-    walletStage(operation, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
+    walletStage(attempt, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
     if (isWalletCancellation(error)) throw error;
     if (isWalletTimeout(error)) {
-      walletStage(operation, 'MWA_TIMEOUT');
+      walletStage(attempt, 'MWA_TIMEOUT');
       throw new WalletFlowError(
         'TIMEOUT',
         'Wallet response timed out; check transaction status before retrying.',
@@ -335,7 +335,7 @@ export async function mwaSignSendConfirm(
       );
     }
     if (isWalletNotSubmitted(error) || authorizationSucceeded || signSendStarted) {
-      walletStage(operation, 'MWA_ERROR');
+      walletStage(attempt, 'MWA_ERROR');
       throw new WalletFlowError(
         'NOT_SUBMITTED',
         'Your wallet approved, but the transaction was not submitted.',
@@ -343,7 +343,7 @@ export async function mwaSignSendConfirm(
         error
       );
     }
-    walletStage(operation, 'MWA_ERROR');
+    walletStage(attempt, 'MWA_ERROR');
     throw new WalletFlowError(
       'PRE_SUBMIT',
       "Couldn't get the transaction from your wallet.",
@@ -371,11 +371,11 @@ export function settlementMessage(duelId: string, winnerSide: 1 | 2, resolutionA
 export async function mwaSignMessage(
   message: string,
   walletBase58: string,
-  operation: WalletOperation = 'SETTLEMENT'
+  attempt: WalletAttempt
 ): Promise<string> {
   const walletAddressB64 = Buffer.from(new PublicKey(walletBase58).toBytes()).toString('base64');
   const payload = Uint8Array.from(Buffer.from(message, 'utf-8'));
-  walletStage(operation, 'MWA_OPEN');
+  walletStage(attempt, 'MWA_OPEN');
   try {
     const out = await transact(async (wallet) => {
       await wallet.authorize({
@@ -392,11 +392,11 @@ export async function mwaSignMessage(
       });
       return results[0] as Uint8Array;
     });
-    walletStage(operation, 'MWA_APPROVED');
+    walletStage(attempt, 'MWA_APPROVED');
     const bs58 = require('bs58').default || require('bs58');
     return bs58.encode(Buffer.from(out));
   } catch (error) {
-    walletStage(operation, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
+    walletStage(attempt, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
     throw error;
   }
 }

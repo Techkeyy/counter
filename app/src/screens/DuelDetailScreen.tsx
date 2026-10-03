@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,8 @@ import {
 } from '../chain';
 import { formatDeadline } from '../utils/criteria';
 import { formatUserDisplayName, formatRelativeTime, isRealSignature } from '../utils/identity';
-import { isWalletCancellation, WalletFlowError, walletStage } from '../diagnostics';
+import { createWalletAttempt, isWalletCancellation, WalletFlowError, walletStage } from '../diagnostics';
+import type { WalletAttempt } from '../diagnostics';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -54,6 +55,9 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showProof, setShowProof] = useState(false);
   const [voting, setVoting] = useState(false);
+  const initAttemptRef = useRef<WalletAttempt | null>(null);
+  const claimAttemptRef = useRef<WalletAttempt | null>(null);
+  const settlementAttemptRef = useRef<WalletAttempt | null>(null);
 
   const [backModalVisible, setBackModalVisible] = useState(false);
   const [backSide, setBackSide] = useState<1 | 2>(1);
@@ -84,12 +88,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     setMessage(null);
     setPendingInitializationSignature(null);
     setInitializationRecovery(null);
-    walletStage('DUEL_INIT', 'START');
+    const initAttempt = createWalletAttempt(duelId, 'DUEL_INIT');
+    initAttemptRef.current = initAttempt;
+    walletStage(initAttempt, 'START');
     let backendVerifyStarted = false;
     try {
       setMessage('Preparing this Duel.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
-      walletStage('DUEL_INIT', 'CHAIN_ACCOUNTS_OK');
+      walletStage(initAttempt, 'CHAIN_ACCOUNTS_OK');
       if (acct.chainStatus === 'INITIALIZED') {
         throw new Error('Duel is already initialized on-chain.');
       }
@@ -109,19 +115,19 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
 
       await new Promise((resolve) => setTimeout(resolve, 250));
       setMessage('Waiting for wallet approval…');
-      const signature = await mwaSignSendConfirm(ixs, payer, undefined, 'DUEL_INIT');
+      const signature = await mwaSignSendConfirm(ixs, payer, undefined, initAttempt);
 
       setMessage('Creating Duel on Solana…');
       backendVerifyStarted = true;
-      walletStage('DUEL_INIT', 'BACKEND_VERIFY_START');
+      walletStage(initAttempt, 'BACKEND_VERIFY_START');
       await api.initOnChainDuel(duelId, signature);
-      walletStage('DUEL_INIT', 'BACKEND_VERIFY_OK');
-      walletStage('DUEL_INIT', 'UI_SUCCESS');
+      walletStage(initAttempt, 'BACKEND_VERIFY_OK');
+      walletStage(initAttempt, 'UI_SUCCESS');
 
       setMessage('Duel ready');
       await loadDuelData();
     } catch (err: any) {
-      if (backendVerifyStarted) walletStage('DUEL_INIT', 'BACKEND_VERIFY_FAILED');
+      if (backendVerifyStarted) walletStage(initAttempt, 'BACKEND_VERIFY_FAILED');
       if (isWalletCancellation(err)) {
         setMessage('Approval cancelled. Nothing was changed.');
         setInitializationRecovery(null);
@@ -162,24 +168,26 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const result = await conn.getSignatureStatuses([signature], { searchTransactionHistory: true });
       const status = result.value[0];
       if (!status || status.err || (status.confirmationStatus !== 'confirmed' && status.confirmationStatus !== 'finalized')) {
-        walletStage('DUEL_INIT', 'TX_CONFIRM_FAILED');
+        walletStage(initAttemptRef.current || createWalletAttempt(duelId, 'DUEL_INIT'), 'TX_CONFIRM_FAILED');
         setMessage('Transaction submitted but not confirmed yet.');
         setInitializationRecovery('CHECK_STATUS');
         return;
       }
 
-      walletStage('DUEL_INIT', 'TX_CONFIRMED');
+      const initAttempt = initAttemptRef.current || createWalletAttempt(duelId, 'DUEL_INIT');
+      initAttemptRef.current = initAttempt;
+      walletStage(initAttempt, 'TX_CONFIRMED');
       backendVerifyStarted = true;
-      walletStage('DUEL_INIT', 'BACKEND_VERIFY_START');
+      walletStage(initAttempt, 'BACKEND_VERIFY_START');
       await api.initOnChainDuel(duelId, signature);
-      walletStage('DUEL_INIT', 'BACKEND_VERIFY_OK');
-      walletStage('DUEL_INIT', 'UI_SUCCESS');
+      walletStage(initAttempt, 'BACKEND_VERIFY_OK');
+      walletStage(initAttempt, 'UI_SUCCESS');
       setPendingInitializationSignature(null);
       setInitializationRecovery(null);
       setMessage('Duel ready');
       await loadDuelData();
     } catch (err: any) {
-      if (backendVerifyStarted) walletStage('DUEL_INIT', 'BACKEND_VERIFY_FAILED');
+      if (backendVerifyStarted) walletStage(initAttemptRef.current || createWalletAttempt(duelId, 'DUEL_INIT'), 'BACKEND_VERIFY_FAILED');
       setMessage('Transaction confirmed, but Counter could not verify it yet. Check status again.');
       setInitializationRecovery('CHECK_STATUS');
     } finally {
@@ -194,7 +202,9 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setClaiming(true);
     setMessage(null);
-    walletStage('CLAIM', 'START');
+    const claimAttempt = createWalletAttempt(duelId, 'CLAIM');
+    claimAttemptRef.current = claimAttempt;
+    walletStage(claimAttempt, 'START');
     let backendVerifyStarted = false;
     try {
       setMessage('Preparing your winnings.');
@@ -204,19 +214,19 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       setMessage('Phantom will open to claim your winnings.');
       await new Promise((resolve) => setTimeout(resolve, 250));
       setMessage('Waiting for wallet approval…');
-      const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user, undefined, 'CLAIM');
+      const signature = await mwaSignSendConfirm([buildClaimPayoutIx(acct, user)], user, undefined, claimAttempt);
 
       setMessage('Claiming your winnings…');
       backendVerifyStarted = true;
-      walletStage('CLAIM', 'BACKEND_VERIFY_START');
+      walletStage(claimAttempt, 'BACKEND_VERIFY_START');
       await api.claimDuel(duelId, signature);
-      walletStage('CLAIM', 'BACKEND_VERIFY_OK');
-      walletStage('CLAIM', 'UI_SUCCESS');
+      walletStage(claimAttempt, 'BACKEND_VERIFY_OK');
+      walletStage(claimAttempt, 'UI_SUCCESS');
 
       setMessage('Winnings claimed');
       await loadDuelData();
     } catch (err: any) {
-      if (backendVerifyStarted) walletStage('CLAIM', 'BACKEND_VERIFY_FAILED');
+      if (backendVerifyStarted) walletStage(claimAttempt, 'BACKEND_VERIFY_FAILED');
       setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't claim your winnings. Try again.");
     } finally {
       setClaiming(false);
@@ -234,7 +244,9 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setVoting(true);
     setMessage(null);
-    walletStage('SETTLEMENT', 'START');
+    const settlementAttempt = createWalletAttempt(duelId, 'SETTLEMENT');
+    settlementAttemptRef.current = settlementAttempt;
+    walletStage(settlementAttempt, 'START');
     let backendVerifyStarted = false;
     try {
       setMessage('Your wallet will open to confirm your choice.');
@@ -243,14 +255,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       const signature = await mwaSignMessage(
         settlementMessage(duel.id, side, Number(duel.resolution_ts) || 0),
         userWallet,
-        'SETTLEMENT'
+        settlementAttempt
       );
       setMessage('Recording your choice…');
       backendVerifyStarted = true;
-      walletStage('SETTLEMENT', 'BACKEND_VERIFY_START');
+      walletStage(settlementAttempt, 'BACKEND_VERIFY_START');
       const res = await api.postMutualVote(duel.id, side, signature);
-      walletStage('SETTLEMENT', 'BACKEND_VERIFY_OK');
-      walletStage('SETTLEMENT', 'UI_SUCCESS');
+      walletStage(settlementAttempt, 'BACKEND_VERIFY_OK');
+      walletStage(settlementAttempt, 'UI_SUCCESS');
       if (res.match?.matched) {
         setMessage('Result confirmed.');
       } else {
@@ -258,7 +270,7 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       }
       await loadDuelData();
     } catch (err: any) {
-      if (backendVerifyStarted) walletStage('SETTLEMENT', 'BACKEND_VERIFY_FAILED');
+      if (backendVerifyStarted) walletStage(settlementAttempt, 'BACKEND_VERIFY_FAILED');
       setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't record your choice. Try again.");
     } finally {
       setVoting(false);

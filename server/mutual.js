@@ -50,6 +50,10 @@ function recordVote(duel, captainWallet, winnerSide, signature) {
     return { ok: false, error: 'Duel is already settled; votes are locked' };
   }
   const nowSec = Math.floor(Date.now() / 1000);
+  const currentMatch = checkMatch(duel);
+  if (currentMatch.state === 'DISPUTED' && nowSec >= Number(duel.resolution_ts || 0)) {
+    return { ok: false, error: 'No agreement is final; refund is available' };
+  }
   if (duel.resolution_ts && nowSec < Number(duel.resolution_ts)) {
     return { ok: false, error: 'Settlement confirmations open at resolution time' };
   }

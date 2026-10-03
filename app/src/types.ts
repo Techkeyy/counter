@@ -79,6 +79,8 @@ export interface Challenge {
   resolution_mode?: ResolutionMode;
   fallback_mode?: FallbackMode;
   mutual_deadline_ts?: number | null;
+  mutualState?: 'AWAITING_VOTES' | 'AWAITING_COUNTERPARTY' | 'MATCHED' | 'DISPUTED';
+  otherVoteSubmitted?: boolean;
   creator_handle?: string;
   creator_name?: string;
   creator_avatar?: string;
@@ -118,6 +120,8 @@ export interface Duel {
   captain_b_avatar?: string;
   side_a_total: number;
   side_b_total: number;
+  stake_amount_usd?: number;
+  total_pool?: number;
   terms_hash?: string;
   proposition_a: string;
   proposition_b: string;
@@ -131,6 +135,8 @@ export interface Duel {
   resolution_mode?: ResolutionMode;
   fallback_mode?: FallbackMode;
   mutual_deadline_ts?: number | null;
+  mutualState?: 'AWAITING_VOTES' | 'AWAITING_COUNTERPARTY' | 'MATCHED' | 'DISPUTED';
+  otherVoteSubmitted?: boolean;
   resolution_data?: string;
   resolution_tx?: string;
   // Canonical chain binding (see server/chain.js + app/src/chain.ts).
@@ -191,7 +197,7 @@ export interface Rivalry {
 export interface ActivityNotification {
   id: string;
   user_wallet: string;
-  type: 'CHALLENGE_RECEIVED' | 'COUNTEROFFER' | 'DUEL_STARTED' | 'DUEL_RESOLVED' | 'BACKER_JOINED' | 'PAYOUT_CLAIMED';
+  type: string;
   source_wallet: string;
   target_id: string;
   target_type: string;

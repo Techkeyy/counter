@@ -32,6 +32,24 @@ export type WalletFailureKind =
   | 'TIMEOUT'
   | 'CONFIRMATION_FAILED';
 
+export interface WalletAttempt {
+  duelId: string;
+  operation: WalletOperation;
+  attemptId: string;
+}
+
+let attemptSequence = 0;
+
+/** Create a value-free correlation identity for one wallet operation. */
+export function createWalletAttempt(duelId: string, operation: WalletOperation): WalletAttempt {
+  attemptSequence += 1;
+  return {
+    duelId,
+    operation,
+    attemptId: `${operation.toLowerCase()}_${Date.now().toString(36)}_${attemptSequence.toString(36)}`,
+  };
+}
+
 export class WalletFlowError extends Error {
   readonly kind: WalletFailureKind;
   readonly signature?: string;
@@ -47,10 +65,15 @@ export class WalletFlowError extends Error {
 }
 
 // Physical-UAT markers only. Keep this deliberately small and value-free:
-// never include auth tokens, wallet secrets, signatures, or raw request data.
-export function walletStage(operation: WalletOperation, stage: WalletStage): void {
+// never include auth tokens, wallet secrets, or raw request data. A public
+// transaction signature is intentionally not logged; the backend/API remains
+// the authoritative signature ledger.
+export function walletStage(attempt: WalletAttempt, stage: WalletStage): void {
   try {
-    console.info(`[COUNTER][WALLET][${operation}_${stage}]`);
+    console.info(
+      `[COUNTER][WALLET][duel=${attempt.duelId}][attempt=${attempt.attemptId}]` +
+      `[operation=${attempt.operation}][stage=${stage}]`
+    );
   } catch {}
 }
 

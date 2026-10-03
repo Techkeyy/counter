@@ -64,7 +64,7 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
     try {
       const link = DUEL_SHARE_LINK(duel);
       await Share.share({
-        message: `1v1 Duel on Counter: ${duel.proposition_a} vs ${duel.proposition_b}. Back your side: ${link}`,
+        message: `Join this Counter Duel: ${duel.proposition_a} vs ${duel.proposition_b}. ${link}`,
         url: link,
       });
     } catch {

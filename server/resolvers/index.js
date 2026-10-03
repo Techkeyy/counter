@@ -9,6 +9,7 @@ const {
 } = require('@solana/web3.js');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { queryOne, execute } = require('../db');
 const { validateVerifiedTemplate } = require('../resolution-templates');
 
@@ -46,6 +47,10 @@ async function resolveDuel(duelId) {
   // Backend-only "resolution" of uninitialized duels would fabricate receipts.
   if ((duel.chain_status || 'UNINITIALIZED') !== 'INITIALIZED' || !duel.onchain_duel_pda) {
     return { success: false, error: 'Duel is not initialized on-chain; settlement refused' };
+  }
+
+  if (!(Number(duel.side_a_total) > 0 && Number(duel.side_b_total) > 0)) {
+    return { success: false, error: 'Both captain stakes must be confirmed before settlement' };
   }
 
   const mode = duel.resolution_mode || 'COUNTER_VERIFIED';
@@ -119,10 +124,14 @@ async function resolveMutualDuel(duel) {
 
   const nowSec = Math.floor(Date.now() / 1000);
   const deadline = Number(duel.mutual_deadline_ts) || Number(duel.resolution_ts) || 0;
-  if (match.state === 'DISPUTED' && (!deadline || nowSec < deadline)) {
-    return { success: false, error: 'Captains disagree. Settlement waits for agreement or the fallback deadline.' };
+  // The deployed program accepts ResolveDuel(3) as Cancel once the agreed
+  // resolution timestamp is reached. An explicit mismatch therefore becomes
+  // refundable immediately at resolution; the 24-hour deadline remains only
+  // for the no-second-vote timeout path.
+  if (match.state === 'DISPUTED' && nowSec < Number(duel.resolution_ts || 0)) {
+    return { success: false, error: 'Captains disagree. Refund opens at the agreed resolution time.' };
   }
-  if (!deadline || nowSec < deadline) {
+  if (match.state !== 'DISPUTED' && (!deadline || nowSec < deadline)) {
     return { success: false, error: 'Awaiting both captains. Settlement unlocks on agreement or the fallback deadline.' };
   }
 
@@ -224,6 +233,30 @@ function recordSettlement(duel, winningSide, { summary, evidence, txSignature, c
     `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
     [notifB, duel.captain_b_wallet, 'DUEL_RESOLVED', 'system', receiptId, 'RECEIPT', 'Duel Resolved', summary, new Date().toISOString()]
   );
+
+  if (cancelled) {
+    for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
+      execute(
+        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+         VALUES (?, ?, 'NO_AGREEMENT', 'system', ?, 'DUEL', 'No agreement', ?, 0, ?)`,
+        [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
+          'The captains did not choose the same result. Both stakes are refundable.', new Date().toISOString()]
+      );
+      execute(
+        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+         VALUES (?, ?, 'REFUND_READY', 'system', ?, 'DUEL', 'Refund ready', ?, 0, ?)`,
+        [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
+          'Your Duel stake can be refunded.', new Date().toISOString()]
+      );
+    }
+  } else {
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'WINNINGS_READY', 'system', ?, 'DUEL', 'Winnings ready', ?, 0, ?)`,
+      [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, winnerWallet, duelId,
+        'Your winning payout is ready to claim.', new Date().toISOString()]
+    );
+  }
 
   return {
     success: true,

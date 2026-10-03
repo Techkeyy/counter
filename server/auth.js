@@ -122,9 +122,24 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// Read-only routes may personalize their response when a valid session is
+// present, without making public links fail closed. Invalid sessions are
+// treated as anonymous; mutations continue to use requireAuth.
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const payload = verifyToken(authHeader.substring(7));
+    req.userWallet = payload?.wallet || null;
+  } else {
+    req.userWallet = null;
+  }
+  next();
+}
+
 module.exports = {
   generateNonce,
   verifySignature,
   verifyToken,
   requireAuth,
+  optionalAuth,
 };

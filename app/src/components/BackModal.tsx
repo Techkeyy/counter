@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
-  TextInput,
+  AppState,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import { PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { Duel } from '../types';
@@ -24,7 +25,10 @@ import {
   CUSD_DECIMALS,
   CUSD_MINT,
 } from '../chain';
-import { isWalletCancellation, walletStage } from '../diagnostics';
+import { createWalletAttempt, isWalletCancellation, WalletFlowError, walletStage } from '../diagnostics';
+import type { WalletAttempt } from '../diagnostics';
+import { formatCusd, formatSol, hasFeeBalance, hasStakeBalance, readWalletPreflight } from '../utils/preflight';
+import type { WalletPreflight } from '../utils/preflight';
 
 interface BackModalProps {
   visible: boolean;
@@ -43,28 +47,43 @@ export const BackModal: React.FC<BackModalProps> = ({
   onClose,
   onStakeRecorded,
 }) => {
-  const [amount, setAmount] = useState('50');
+  const [amount, setAmount] = useState(String(duel?.stake_amount_usd || '0'));
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsFunding, setNeedsFunding] = useState(false);
   const [funding, setFunding] = useState(false);
+  const [balances, setBalances] = useState<WalletPreflight | null>(null);
+  const [pendingSignature, setPendingSignature] = useState<string | null>(null);
+  const attemptRef = React.useRef<WalletAttempt | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setAmount(String(duel?.stake_amount_usd || '0'));
+    (async () => {
+      try { setBalances(await readWalletPreflight(userWallet)); } catch { setBalances(null); }
+    })();
+  }, [visible, duel?.id, userWallet]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (previousState !== 'active' && nextState === 'active') {
+        readWalletPreflight(userWallet).then(setBalances).catch(() => setBalances(null));
+        if (pendingSignature) handleCheckStakeStatus();
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [visible, userWallet, pendingSignature]);
 
   if (!duel) return null;
 
-  const currentPoolA = Number(duel.side_a_total) || 0;
-  const currentPoolB = Number(duel.side_b_total) || 0;
-  const stakeNum = parseFloat(amount) || 0;
-
-  // Calculate new odds if user backs this side
-  const simPoolA = side === 1 ? currentPoolA + stakeNum : currentPoolA;
-  const simPoolB = side === 2 ? currentPoolB + stakeNum : currentPoolB;
-  const simTotal = simPoolA + simPoolB;
-  const simOdds = side === 1 
-    ? (simPoolA > 0 ? (simTotal / simPoolA).toFixed(2) : '2.00')
-    : (simPoolB > 0 ? (simTotal / simPoolB).toFixed(2) : '2.00');
-
-  const potentialPayout = (stakeNum * parseFloat(simOdds)).toFixed(2);
+  const requiredStake = Number(duel.stake_amount_usd || 0);
+  const hasSol = hasFeeBalance(balances);
+  const hasCusd = hasStakeBalance(balances, requiredStake);
+  const canContinue = !!userWallet && hasSol && hasCusd;
 
   // Devnet test-cUSD faucet. Success is ONLY marked after the wallet's ACTUAL
   // token balance is re-read on-chain — never on HTTP 200 alone. The returned
@@ -104,6 +123,7 @@ export const BackModal: React.FC<BackModalProps> = ({
       }
       setStatus(`Funded $${refreshed.toFixed(2)} Counter Test USD (Devnet, no monetary value). You can deposit now.`);
       setNeedsFunding(false);
+      try { setBalances(await readWalletPreflight(userWallet)); } catch {}
     } catch (err: any) {
       const msg: string = err?.message || 'Faucet request failed';
       if (/24 hours|Rate limit|429/i.test(msg)) {
@@ -117,16 +137,24 @@ export const BackModal: React.FC<BackModalProps> = ({
     }
   };
 
+  const handleGetSol = async () => {
+    try {
+      await Linking.openURL('https://faucet.solana.com/');
+    } catch {
+      setError('Open the official Solana Devnet faucet to get testnet SOL.');
+    }
+  };
+
   const handleDeposit = async () => {
     if (!userWallet) {
-      setError('Connect a Solana wallet first (MWA) to back a side.');
+      setError('Connect a Solana wallet first to lock your captain stake.');
       return;
     }
     let stakeUsd: number;
     let amountBase: number;
     try {
-      stakeUsd = parseFloat(amount);
-      amountBase = usdToBaseUnits(amount);
+      stakeUsd = requiredStake;
+      amountBase = usdToBaseUnits(String(requiredStake));
     } catch {
       setError('Please enter a valid cUSD stake amount');
       return;
@@ -134,11 +162,15 @@ export const BackModal: React.FC<BackModalProps> = ({
 
     setLoading(true);
     setError(null);
-    walletStage('STAKE', 'START');
+    const attempt = createWalletAttempt(duel.id, 'STAKE');
+    attemptRef.current = attempt;
+    setPendingSignature(null);
+    walletStage(attempt, 'START');
     setStatus(`Preparing your $${stakeUsd.toFixed(2)} stake.`);
     let backendVerifyStarted = false;
 
     try {
+      if (!canContinue) throw new Error('Complete the funding steps before opening your wallet.');
       // 1. Canonical accounts from the backend (single-derivation rule).
       const acct = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
       if (acct.chainStatus !== 'INITIALIZED') {
@@ -178,15 +210,16 @@ export const BackModal: React.FC<BackModalProps> = ({
 
       // 4. MWA sign + send + confirm on Devnet.
       setStatus('Waiting for wallet approval…');
-      const signature = await mwaSignSendConfirm(ixs, user, undefined, 'STAKE');
+      const signature = await mwaSignSendConfirm(ixs, user, undefined, attempt);
 
       // 5. Backend independently verifies the tx before indexing.
       setStatus('Submitting your stake…');
       backendVerifyStarted = true;
-      walletStage('STAKE', 'BACKEND_VERIFY_START');
+      walletStage(attempt, 'BACKEND_VERIFY_START');
       await api.recordStake(duel.id, side, stakeUsd, signature, acct.positionPda);
-      walletStage('STAKE', 'BACKEND_VERIFY_OK');
-      walletStage('STAKE', 'UI_SUCCESS');
+      walletStage(attempt, 'BACKEND_VERIFY_OK');
+      walletStage(attempt, 'UI_SUCCESS');
+      setPendingSignature(null);
 
       setLoading(false);
       setStatus('Stake confirmed');
@@ -194,15 +227,63 @@ export const BackModal: React.FC<BackModalProps> = ({
       onClose();
     } catch (err: any) {
       setLoading(false);
-      if (backendVerifyStarted) walletStage('STAKE', 'BACKEND_VERIFY_FAILED');
+      if (backendVerifyStarted) walletStage(attempt, 'BACKEND_VERIFY_FAILED');
       setStatus(null);
-      setError(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't submit your stake. Try again.");
+      if (err instanceof WalletFlowError && err.signature) {
+        setPendingSignature(err.signature);
+        setError('Stake transaction submitted but not confirmed yet. Check status before retrying.');
+      } else {
+        setError(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't submit your stake. Try again.");
+      }
     }
   };
 
-  const sideLabel = side === 1
-    ? `${duel.captain_a_name || 'the creator'}'s side`
-    : `${duel.captain_b_name || 'the challenger'}'s side`;
+  const handleCheckStakeStatus = async () => {
+    const signature = pendingSignature;
+    if (!signature || !userWallet) {
+      setError('No submitted stake transaction was found.');
+      return;
+    }
+    const attempt = attemptRef.current || createWalletAttempt(duel.id, 'STAKE');
+    attemptRef.current = attempt;
+    setLoading(true);
+    setError(null);
+    setStatus('Checking stake transaction status…');
+    let backendVerifyStarted = false;
+    try {
+      const status = (await getConnection().getSignatureStatuses([signature], { searchTransactionHistory: true })).value[0];
+      if (status?.err) {
+        walletStage(attempt, 'TX_CONFIRM_FAILED');
+        setPendingSignature(null);
+        setStatus(null);
+        setError(`Devnet rejected the stake transaction: ${JSON.stringify(status.err)}`);
+        return;
+      }
+      if (!status || !['confirmed', 'finalized'].includes(String(status.confirmationStatus))) {
+        walletStage(attempt, 'TX_CONFIRM_FAILED');
+        setStatus('Stake transaction is not confirmed yet. Check status again later.');
+        return;
+      }
+      walletStage(attempt, 'TX_CONFIRMED');
+      backendVerifyStarted = true;
+      walletStage(attempt, 'BACKEND_VERIFY_START');
+      const acct = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
+      await api.recordStake(duel.id, side, requiredStake, signature, acct.positionPda);
+      walletStage(attempt, 'BACKEND_VERIFY_OK');
+      walletStage(attempt, 'UI_SUCCESS');
+      setPendingSignature(null);
+      setStatus('Stake confirmed');
+      onStakeRecorded();
+      onClose();
+    } catch (err: any) {
+      if (backendVerifyStarted) walletStage(attempt, 'BACKEND_VERIFY_FAILED');
+      setStatus(null);
+      setError(err?.message || 'Transaction confirmed, but Counter could not verify the stake yet. Check status again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sideColor = side === 1 ? colors.sideA : colors.sideB;
   const proposition = side === 1 ? duel.proposition_a : duel.proposition_b;
 
@@ -212,7 +293,7 @@ export const BackModal: React.FC<BackModalProps> = ({
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: sideColor }]}>
-              Stake on {sideLabel}
+              Lock your agreed stake
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -228,72 +309,43 @@ export const BackModal: React.FC<BackModalProps> = ({
             <Text style={styles.propText}>{proposition}</Text>
           </View>
 
-          <Text style={styles.label}>Backer Stake (cUSD)</Text>
-          <View style={styles.presetRow}>
-            {['10', '25', '50', '100', '250'].map((amt) => (
-              <TouchableOpacity
-                key={amt}
-                style={[styles.presetBtn, amount === amt && { borderColor: sideColor, backgroundColor: 'rgba(255,255,255,0.06)' }]}
-                onPress={() => setAmount(amt)}
-              >
-                <Text style={[styles.presetText, amount === amt && { color: sideColor, fontWeight: '800' }]}>
-                  ${amt}
-                </Text>
+          <Text style={styles.label}>Ready to stake</Text>
+          <Text style={styles.explanation}>Your agreed stake is fixed at {requiredStake.toFixed(2)} cUSD. No side selection is needed.</Text>
+          <View style={styles.preflightBox}>
+            <PreflightRow label="Wallet" value={userWallet ? 'Connected' : 'Connect wallet'} ready={!!userWallet} />
+            <PreflightRow label="Devnet SOL" value={formatSol(balances?.sol ?? null)} ready={hasSol} />
+            {!hasSol && (
+              <TouchableOpacity style={styles.linkBtn} onPress={handleGetSol} accessibilityLabel="Get SOL" accessibilityRole="button">
+                <Text style={styles.linkText}>Get SOL</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-
-          <TextInput
-            style={styles.input}
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="cUSD amount"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="numeric"
-          />
-
-          {/* Live Odds & Return Preview */}
-          <View style={styles.previewBox}>
-            <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>Effective Odds:</Text>
-              <Text style={[styles.previewValue, { color: sideColor }]}>{simOdds}x</Text>
-            </View>
-            <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>Potential Payout on Win:</Text>
-              <Text style={styles.payoutValue}>${potentialPayout} cUSD</Text>
+            )}
+            <PreflightRow label="Counter Test USD" value={formatCusd(balances?.testUsd ?? null)} ready={hasCusd} />
+            {!hasCusd && (
+              <TouchableOpacity style={styles.linkBtn} onPress={handleFaucet} disabled={funding} accessibilityLabel="Get test funds" accessibilityRole="button">
+                <Text style={styles.linkText}>{funding ? 'Refreshing…' : 'Get test funds'}</Text>
+              </TouchableOpacity>
+            )}
+            <View style={styles.requiredRow}>
+              <Text style={styles.requiredLabel}>Stake required</Text>
+              <Text style={styles.requiredValue}>{requiredStake.toFixed(2)} cUSD</Text>
             </View>
           </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
           {status && !error && <Text style={styles.statusText}>{status}</Text>}
 
-          {needsFunding && (
-            <TouchableOpacity
-              style={styles.faucetBtn}
-              onPress={handleFaucet}
-              disabled={funding || loading}
-              activeOpacity={0.8}
-            >
-              {funding ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <Text style={styles.faucetBtnText}>Get Counter Test USD (Devnet, no cash value)</Text>
-              )}
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
-            style={[styles.submitBtn, { backgroundColor: sideColor }]}
-            onPress={handleDeposit}
-            disabled={loading}
+            style={[styles.submitBtn, { backgroundColor: canContinue ? sideColor : colors.surfaceLight }]}
+            onPress={pendingSignature ? handleCheckStakeStatus : handleDeposit}
+            disabled={loading || (!pendingSignature && !canContinue)}
             activeOpacity={0.8}
-            accessibilityLabel={`Stake ${stakeNum || 0} test cUSD on ${sideLabel}`}
+            accessibilityLabel={`Lock ${requiredStake.toFixed(0)} cUSD`}
             accessibilityRole="button"
           >
             {loading ? (
               <ActivityIndicator color="#000" />
             ) : (
-              <Text style={styles.submitText}>Stake ${stakeNum.toFixed(2)}</Text>
+              <Text style={styles.submitText}>{pendingSignature ? 'Check status' : canContinue ? `Lock ${requiredStake.toFixed(0)} cUSD` : 'Complete funding first'}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -301,6 +353,13 @@ export const BackModal: React.FC<BackModalProps> = ({
     </Modal>
   );
 };
+
+const PreflightRow: React.FC<{ label: string; value: string; ready: boolean }> = ({ label, value, ready }) => (
+  <View style={styles.preflightRow}>
+    <Text style={styles.preflightLabel}>{ready ? '✓ ' : ''}{label}</Text>
+    <Text style={[styles.preflightValue, ready && styles.preflightReady]}>{value}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   overlay: {
@@ -353,6 +412,54 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textTransform: 'uppercase',
   },
+  explanation: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+  },
+  preflightBox: {
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  preflightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 30,
+  },
+  preflightLabel: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  preflightValue: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  preflightReady: { color: colors.success },
+  linkBtn: {
+    alignSelf: 'flex-start',
+    minHeight: touchMin,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  linkText: { color: colors.brandPrimary, fontSize: 13, fontWeight: '800' },
+  requiredRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    paddingTop: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  requiredLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
+  requiredValue: { color: colors.textPrimary, fontSize: 14, fontWeight: '900' },
   presetRow: {
     flexDirection: 'row',
     gap: 8,

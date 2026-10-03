@@ -121,6 +121,7 @@ export const ChallengeSheetV1: React.FC<ChallengeSheetProps> = ({
               <Text style={styles.summaryValue}>${Number(challenge.stake_amount_usd || 0).toFixed(0)} each</Text>
               <Text style={styles.summaryValue}>Decide: {formatDeadline(challenge.resolution_ts)}</Text>
               <Text style={styles.summaryValue}>Settle together</Text>
+              <Text style={styles.summaryValue}>Same choice pays the winner. Different choices return both stakes.</Text>
             </View>
 
             {counterMode && isIncoming ? (

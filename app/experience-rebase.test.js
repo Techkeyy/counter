@@ -18,7 +18,8 @@ const modal = read('src/components/ChallengeModalV1.tsx');
 const sheet = read('src/components/ChallengeSheetV1.tsx');
 const stake = read('src/components/BackModal.tsx');
 const duels = read('src/screens/DuelsScreen.tsx');
-const detail = read('src/screens/DuelDetailScreen.tsx');
+const stateMachine = read('src/utils/duelState.js');
+const detail = read('src/screens/DuelDetailV1Screen.tsx');
 const receipt = read('src/screens/ReceiptScreen.tsx');
 const api = read('src/api.ts');
 const chain = read('src/chain.ts');
@@ -40,13 +41,13 @@ includes(modal, "fallbackMode: 'REFUND'", 'composer fixes the V1 refund fallback
 excludes(modal, 'cutoffTs', 'composer cannot submit a cutoff override');
 excludes(modal, 'mutualDeadlineTs', 'composer cannot submit a mutual deadline override');
 includes(modal, 'Settle together', 'composer explains the mutual settlement');
-includes(modal, "Money back if no agreement", 'composer explains the refund outcome');
+includes(modal, "Different choices return both stakes", 'composer explains the refund outcome');
 
 for (const label of ['Incoming', 'Sent', 'Active', 'Claimable', 'Completed']) {
   includes(duels, label, `Duels home contains ${label} state/tab`);
 }
-for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Needs your stake', 'Waiting for opponent', 'Live', 'Ready to settle', 'Refunded']) {
-  includes(duels + detail, label, `V1 lifecycle contains ${label}`);
+for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Ready to stake', 'Funding in progress', 'Duel live', 'Ready to settle', 'Refund available']) {
+  includes(duels + detail + stateMachine, label, `V1 lifecycle contains ${label}`);
 }
 includes(sheet, 'challenged your Take', 'incoming challenge copy identifies the Take');
 includes(sheet, 'You said', 'incoming challenge shows the creator proposition');
@@ -55,23 +56,22 @@ includes(sheet, 'Accept challenge', 'incoming challenge exposes the authenticate
 includes(sheet, 'Counter', 'incoming challenge exposes the counter path');
 includes(sheet, 'Decline', 'incoming challenge exposes the decline path');
 
-includes(detail, "Phantom will open for approval.", 'Duel setup has the pre-wallet boundary');
+includes(detail, 'Ready to Duel', 'Duel setup has the pre-wallet boundary');
 includes(detail, 'Waiting for wallet approval…', 'Duel actions have the wallet waiting boundary');
-includes(detail, 'Creating Duel on Solana', 'Duel setup copy names the first on-chain action');
-includes(detail, 'This creates the Duel on Solana.', 'Duel setup explains the first on-chain action');
+includes(detail, 'Set up this Duel', 'Duel setup exposes the first on-chain action');
 includes(detail, 'Duel ready', 'Duel setup has a success state');
-includes(detail, 'What happened?', 'settlement asks for the real-world result');
-includes(detail, 'Your choice isn\'t final until both of you choose the same result.', 'settlement explains mutual agreement');
-includes(detail, 'Claim winnings', 'claim action uses V1 copy');
-includes(detail, 'Choice recorded. Waiting for @other.', 'settlement exposes the first-vote state');
+includes(detail, 'Who won?', 'settlement asks for the real-world result');
+includes(detail, 'Both captains independently confirm the winner.', 'settlement explains mutual agreement');
+includes(detail, 'Claim', 'claim action uses V1 copy');
+includes(detail, 'The other captain has been notified.', 'settlement exposes the first-vote state');
 excludes(detail, 'Counter Verified', 'reachable Duel detail does not expose deferred resolver UI');
 excludes(detail, 'Seeker Arena', 'reachable Duel detail does not expose deferred Arena UI');
 excludes(receipt, 'Counter Verified', 'reachable receipt does not expose deferred resolver UI');
-includes(stake, 'Phantom will open to stake', 'stake action has the pre-wallet boundary');
+includes(stake, 'Ready to stake', 'stake action has the pre-wallet boundary');
 includes(stake, 'Waiting for wallet approval…', 'stake action has the wallet waiting boundary');
 includes(stake, 'Submitting your stake…', 'stake action has the backend submission boundary');
 includes(stake, 'Stake confirmed', 'stake action has a success state');
-includes(detail, 'Recording your choice…', 'settlement action has the backend submission boundary');
+includes(detail, 'Recording your result…', 'settlement action has the backend submission boundary');
 
 const proposeBlock = api.slice(api.indexOf('proposeChallenge:'), api.indexOf('createCounteroffer:'));
 includes(proposeBlock, 'decisionTs: number', 'API type requires decisionTs');
@@ -86,7 +86,7 @@ for (const marker of ['START', 'MWA_OPEN', 'MWA_APPROVED', 'MWA_CANCELLED', 'TX_
   includes(diagnostics, marker, `diagnostic marker ${marker} is defined`);
 }
 for (const operation of ['DUEL_INIT', 'STAKE', 'SETTLEMENT', 'CLAIM']) {
-  includes(chain + detail, operation, `wallet diagnostics cover ${operation}`);
+  includes(chain + detail + stake, operation, `wallet diagnostics cover ${operation}`);
 }
 
 console.log('V1 experience rebase source guardrails passed');

@@ -91,7 +91,7 @@ export const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({
 
       <View style={styles.positionHeader}>
         <Text style={styles.sectionTitle}>Positions</Text>
-        <Text style={styles.devnetLabel}>Verified Counter state</Text>
+        <Text style={styles.devnetLabel}>Settlement state</Text>
       </View>
       <View style={styles.tabs}>
         {(['OPEN', 'CLAIMABLE', 'HISTORY'] as PositionView[]).map((key) => (

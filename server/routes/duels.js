@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { queryAll, queryOne, execute } = require('../db');
-const { requireAuth } = require('../auth');
+const { requireAuth, optionalAuth } = require('../auth');
 const { resolveDuel } = require('../resolvers');
 const { querySkrStakedAmount } = require('../skr');
 const chain = require('../chain');
@@ -39,13 +39,14 @@ function ensureCanonicalDuelId(duel) {
 router.get('/', (req, res) => {
   const { isArena, category, status } = req.query;
   let sql = `
-    SELECT d.*, 
+    SELECT d.*, c.stake_amount_usd AS stake_amount_usd,
            ua.handle as captain_a_handle, ua.display_name as captain_a_name, ua.avatar_url as captain_a_avatar,
            ub.handle as captain_b_handle, ub.display_name as captain_b_name, ub.avatar_url as captain_b_avatar,
            t.topic, t.content as take_content
     FROM duels d
     LEFT JOIN users ua ON d.captain_a_wallet = ua.wallet_address
     LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
+    LEFT JOIN challenges c ON d.challenge_id = c.id
     LEFT JOIN takes t ON d.take_id = t.id
     WHERE 1=1
   `;
@@ -85,15 +86,16 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/duels/:id
-router.get('/:id', (req, res) => {
+router.get('/:id', optionalAuth, (req, res) => {
   const duel = queryOne(
-    `SELECT d.*, 
+    `SELECT d.*, c.stake_amount_usd AS stake_amount_usd,
             ua.handle as captain_a_handle, ua.display_name as captain_a_name, ua.avatar_url as captain_a_avatar,
             ub.handle as captain_b_handle, ub.display_name as captain_b_name, ub.avatar_url as captain_b_avatar,
             t.topic, t.content as take_content
      FROM duels d
      LEFT JOIN users ua ON d.captain_a_wallet = ua.wallet_address
      LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
+     LEFT JOIN challenges c ON d.challenge_id = c.id
      LEFT JOIN takes t ON d.take_id = t.id
      WHERE d.id = ? OR d.share_slug = ?`,
     [req.params.id, req.params.id]
@@ -114,6 +116,14 @@ router.get('/:id', (req, res) => {
   try {
     mutualVotes = queryAll(`SELECT * FROM mutual_votes WHERE duel_id = ? ORDER BY updated_at ASC`, [duel.id]);
   } catch {}
+  const mutual = require('../mutual');
+  const match = mutual.checkMatch(duel);
+  const viewerWallet = req.userWallet || null;
+  const viewerVotes = viewerWallet
+    ? mutualVotes
+      .filter((vote) => vote.captain_wallet === viewerWallet)
+      .map((vote) => ({ captain_wallet: vote.captain_wallet, winner_side: Number(vote.winner_side), updated_at: vote.updated_at }))
+    : [];
 
   const sideA = Number(duel.side_a_total) || 0;
   const sideB = Number(duel.side_b_total) || 0;
@@ -130,7 +140,13 @@ router.get('/:id', (req, res) => {
     },
     positions,
     receipt,
-    mutualVotes,
+    // Never return the other captain's winner_side or signature. The client
+    // receives only its own private choice plus a coarse lifecycle state.
+    mutualVotes: viewerVotes,
+    mutualState: match.matched ? 'MATCHED' : match.state,
+    otherVoteSubmitted: viewerWallet
+      ? mutualVotes.some((vote) => vote.captain_wallet !== viewerWallet)
+      : false,
   });
 });
 
@@ -241,6 +257,15 @@ router.post('/:id/stake', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Duel is not initialized on-chain yet' });
   }
 
+  const expectedSide = userWallet === duel.captain_a_wallet
+    ? 1
+    : userWallet === duel.captain_b_wallet
+      ? 2
+      : null;
+  if (!expectedSide) {
+    return res.status(403).json({ error: 'Only Duel captains can lock the agreed stake' });
+  }
+
   const sideNum = Number(side);
   let amountBase;
   try {
@@ -250,6 +275,15 @@ router.post('/:id/stake', requireAuth, async (req, res) => {
   }
   if (sideNum !== 1 && sideNum !== 2) {
     return res.status(400).json({ error: 'side must be 1 or 2' });
+  }
+  if (sideNum !== expectedSide) {
+    return res.status(403).json({ error: 'Each captain can only lock their agreed side' });
+  }
+
+  const challengeTerms = queryOne(`SELECT stake_amount_usd FROM challenges WHERE id = ?`, [duel.challenge_id]);
+  const agreedStake = Number(challengeTerms?.stake_amount_usd) || 0;
+  if (agreedStake > 0 && Math.abs(Number(amount) - agreedStake) > 0.000001) {
+    return res.status(400).json({ error: `The agreed stake is ${agreedStake} cUSD` });
   }
 
   try {
@@ -288,6 +322,35 @@ router.post('/:id/stake', requireAuth, async (req, res) => {
     );
 
     const updatedDuel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+    const opponentWallet = expectedSide === 1 ? duel.captain_b_wallet : duel.captain_a_wallet;
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'OPPONENT_FUNDED', ?, ?, 'DUEL', 'Opponent funded', ?, 0, ?)`,
+      [
+        `act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        opponentWallet,
+        userWallet,
+        duelId,
+        'The other captain locked the agreed stake.',
+        new Date().toISOString(),
+      ]
+    );
+    if (Number(updatedDuel.side_a_total) > 0 && Number(updatedDuel.side_b_total) > 0) {
+      const liveActivity = queryOne(
+        `SELECT id FROM activity WHERE target_id = ? AND type = 'DUEL_LIVE' LIMIT 1`,
+        [duelId]
+      );
+      if (!liveActivity) {
+        for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
+          execute(
+            `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+             VALUES (?, ?, 'DUEL_LIVE', 'system', ?, 'DUEL', 'Duel live', ?, 0, ?)`,
+            [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
+              'Both captains locked the agreed stake. The Duel is live.', new Date().toISOString()]
+          );
+        }
+      }
+    }
     res.json({ success: true, duel: updatedDuel, verified });
   } catch (err) {
     res.status(400).json({ error: `On-chain stake not verified: ${err.message}` });
@@ -332,6 +395,19 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
         posId,
       ]
     );
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, ?, 'system', ?, 'DUEL', ?, ?, 0, ?)`,
+      [
+        `act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        userWallet,
+        duel.status === 'CANCELLED' ? 'REFUNDED' : 'CLAIMED',
+        duelId,
+        duel.status === 'CANCELLED' ? 'Refund claimed' : 'Payout claimed',
+        duel.status === 'CANCELLED' ? 'Your Duel stake was returned.' : 'Your Duel payout was claimed.',
+        new Date().toISOString(),
+      ]
+    );
     const receipt = queryOne(`SELECT * FROM receipts WHERE duel_id = ?`, [duelId]);
     res.json({
       success: true,
@@ -351,6 +427,25 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
 // remains with the program's resolver key, and re-resolution is rejected.
 router.post('/:id/resolve', requireAuth, async (req, res) => {
   const duelId = req.params.id;
+  const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
+  if (duel && !String(duel.status || '').startsWith('RESOLVED') && duel.status !== 'CANCELLED'
+    && Number(duel.side_a_total) > 0 && Number(duel.side_b_total) > 0
+    && Math.floor(Date.now() / 1000) >= Number(duel.resolution_ts || 0)) {
+    const readyActivity = queryOne(
+      `SELECT id FROM activity WHERE target_id = ? AND type = 'READY_TO_SETTLE' LIMIT 1`,
+      [duelId]
+    );
+    if (!readyActivity) {
+      for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
+        execute(
+          `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+           VALUES (?, ?, 'READY_TO_SETTLE', 'system', ?, 'DUEL', 'Ready to settle', ?, 0, ?)`,
+          [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
+            'The decision time has arrived. Confirm the result privately.', new Date().toISOString()]
+        );
+      }
+    }
+  }
   const result = await resolveDuel(duelId);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
@@ -383,6 +478,25 @@ router.post('/:id/mutual-vote', requireAuth, (req, res) => {
     return res.status(400).json({ error: result.error });
   }
   const match = mutual.checkMatch(duel);
+  const otherWallet = userWallet === duel.captain_a_wallet ? duel.captain_b_wallet : duel.captain_a_wallet;
+  if (!match.matched && match.state === 'AWAITING_COUNTERPARTY') {
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'OPPONENT_SUBMITTED_RESULT', ?, ?, 'DUEL', 'Opponent submitted their result', ?, 0, ?)`,
+      [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, otherWallet, userWallet, duelId,
+        'The other captain submitted their result.', new Date().toISOString()]
+    );
+  }
+  if (match.matched) {
+    for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
+      execute(
+        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+         VALUES (?, ?, 'RESULT_CONFIRMED', ?, ?, 'DUEL', 'Result confirmed', ?, 0, ?)`,
+        [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, 'system', duelId,
+          'Both captains chose the same result.', new Date().toISOString()]
+      );
+    }
+  }
   res.json({ success: true, votes: result.votes, match });
 });
 

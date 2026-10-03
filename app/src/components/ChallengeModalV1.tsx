@@ -22,7 +22,10 @@ interface ChallengeModalProps {
 }
 
 const STAKE_PRESETS = ['10', '25', '50'];
-const TWO_HOURS = 2 * 60 * 60;
+const FIFTEEN_MINUTES = 15 * 60;
+const THIRTY_MINUTES = 30 * 60;
+const ONE_HOUR = 60 * 60;
+const THREE_HOURS = 3 * 60 * 60;
 const DAY = 24 * 60 * 60;
 
 function formatDecisionTime(timestamp: number): string {
@@ -35,6 +38,15 @@ function formatDecisionTime(timestamp: number): string {
   });
 }
 
+function formatDecisionDistance(timestamp: number): string {
+  const minutes = Math.max(1, Math.round((timestamp - Math.floor(Date.now() / 1000)) / 60));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
 export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
   visible,
   take,
@@ -45,15 +57,19 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
   const [counter, setCounter] = useState('');
   const [stakeAmount, setStakeAmount] = useState('25');
   const [decisionTs, setDecisionTs] = useState(Math.floor(Date.now() / 1000) + DAY);
+  const [customDecision, setCustomDecision] = useState(false);
+  const [customMinutes, setCustomMinutes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const decisionOptions = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     return [
-      { label: 'In 2 hours', value: now + TWO_HOURS },
-      { label: 'Tomorrow morning', value: now + DAY },
-      { label: 'In 3 days', value: now + 3 * DAY },
+      { label: '15 minutes', value: now + FIFTEEN_MINUTES },
+      { label: '30 minutes', value: now + THIRTY_MINUTES },
+      { label: '1 hour', value: now + ONE_HOUR },
+      { label: '3 hours', value: now + THREE_HOURS },
+      { label: '24 hours', value: now + DAY },
     ];
   }, [visible]);
 
@@ -62,7 +78,9 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
     setStep(1);
     setCounter('');
     setStakeAmount('25');
-    setDecisionTs(decisionOptions[1]?.value || Math.floor(Date.now() / 1000) + DAY);
+    setDecisionTs(decisionOptions[4]?.value || Math.floor(Date.now() / 1000) + DAY);
+    setCustomDecision(false);
+    setCustomMinutes('');
     setError(null);
   }, [take?.id, visible, decisionOptions]);
 
@@ -80,6 +98,7 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
     if (step >= 2) {
       const stake = Number(stakeAmount);
       if (!Number.isFinite(stake) || stake <= 0) return 'Choose a stake above zero.';
+      if (customDecision && (!Number.isFinite(Number(customMinutes)) || Number(customMinutes) < 15)) return 'Choose a custom time of at least 15 minutes.';
       if (!Number.isFinite(decisionTs)) return 'Choose when this should be decided.';
     }
     return null;
@@ -92,6 +111,7 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
       return;
     }
     setError(null);
+    if (step === 2 && customDecision) setDecisionTs(Math.floor(Date.now() / 1000) + Number(customMinutes) * 60);
     setStep((current) => (current === 1 ? 2 : 3));
   };
 
@@ -103,6 +123,9 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
     }
     setLoading(true);
     setError(null);
+    const submitDecisionTs = customDecision
+      ? Math.floor(Date.now() / 1000) + Number(customMinutes) * 60
+      : decisionTs;
     try {
       const created = await api.proposeChallenge({
         takeId: take.id,
@@ -111,7 +134,7 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
         propositionB: counter.trim(),
         category: take.category,
         stakeAmountUsd: Number(stakeAmount),
-        decisionTs: Math.floor(decisionTs),
+        decisionTs: Math.floor(submitDecisionTs),
         resolutionMode: 'MUTUAL',
         fallbackMode: 'REFUND',
       });
@@ -199,7 +222,7 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
                     <TouchableOpacity
                       key={option.label}
                       style={[styles.decisionOption, decisionTs === option.value && styles.decisionActive]}
-                      onPress={() => setDecisionTs(option.value)}
+                      onPress={() => { setCustomDecision(false); setDecisionTs(option.value); }}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: decisionTs === option.value }}
                     >
@@ -207,11 +230,31 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
                       <Text style={styles.decisionTime}>{formatDecisionTime(option.value)}</Text>
                     </TouchableOpacity>
                   ))}
+                  <TouchableOpacity
+                    style={[styles.decisionOption, customDecision && styles.decisionActive]}
+                    onPress={() => setCustomDecision(true)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: customDecision }}
+                  >
+                    <Text style={[styles.decisionLabel, customDecision && styles.decisionLabelActive]}>Custom</Text>
+                    <Text style={styles.decisionTime}>Choose 15 minutes or more</Text>
+                  </TouchableOpacity>
                 </View>
+                {customDecision && (
+                  <TextInput
+                    style={styles.customTimeInput}
+                    value={customMinutes}
+                    onChangeText={setCustomMinutes}
+                    placeholder="Minutes from now"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="numeric"
+                    accessibilityLabel="Custom decision time in minutes"
+                  />
+                )}
 
                 <View style={styles.explanation}>
                   <Text style={styles.explanationTitle}>Settle together</Text>
-                  <Text style={styles.explanationText}>You both confirm who won. If you can't agree, everyone gets their money back.</Text>
+                  <Text style={styles.explanationText}>Same choice pays the winner. Different choices return both stakes.</Text>
                 </View>
               </>
             )}
@@ -228,8 +271,8 @@ export const ChallengeModalV1: React.FC<ChallengeModalProps> = ({
                 </View>
                 <View style={styles.summaryLine}>
                   <Text style={styles.summaryValue}>${Number(stakeAmount).toFixed(0)} each</Text>
-                  <Text style={styles.summaryValue}>{formatDecisionTime(decisionTs)}</Text>
-                  <Text style={styles.summaryValue}>Settle together · Money back if no agreement</Text>
+                  <Text style={styles.summaryValue}>Ends in {formatDecisionDistance(customDecision ? Math.floor(Date.now() / 1000) + Number(customMinutes) * 60 : decisionTs)}</Text>
+                  <Text style={styles.summaryValue}>Same choice pays the winner · Different choices return both stakes</Text>
                 </View>
               </>
             )}
@@ -285,6 +328,7 @@ const styles = StyleSheet.create({
   decisionLabel: { ...typography.bodyBold, color: colors.textPrimary },
   decisionLabelActive: { color: colors.brandPrimary },
   decisionTime: { ...typography.caption, marginTop: 2 },
+  customTimeInput: { minHeight: touchMin, marginTop: spacing.sm, borderRadius: 12, backgroundColor: colors.surfaceLight, color: colors.textPrimary, paddingHorizontal: spacing.md, fontSize: 16 },
   explanation: { marginTop: spacing.xl, paddingVertical: spacing.lg, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.divider },
   explanationTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.xs },
   explanationText: { ...typography.body, color: colors.textSecondary },

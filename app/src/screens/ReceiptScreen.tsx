@@ -118,7 +118,7 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
 
         <View style={styles.figuresRow}>
           <View style={styles.figure}>
-            <Text style={styles.figureLabel}>Pool settled</Text>
+        <Text style={styles.figureLabel}>Amount settled</Text>
             <Text style={styles.figureValue}>
               ${(Number(receipt.total_pool) || 0).toFixed(2)}
             </Text>

@@ -13,7 +13,7 @@ import { Header } from './src/components/Header';
 import { FeedScreen } from './src/screens/FeedScreen';
 import { DuelsScreen } from './src/screens/DuelsScreen';
 import { CreateTakeScreen } from './src/screens/CreateTakeScreen';
-import { DuelDetailScreen } from './src/screens/DuelDetailScreen';
+import { DuelDetailV1Screen } from './src/screens/DuelDetailV1Screen';
 import { TakeDetailScreen } from './src/screens/TakeDetailScreen';
 import { ReceiptScreen } from './src/screens/ReceiptScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -329,7 +329,7 @@ export default function App() {
         )}
         {selectedDuelId && (
           <View style={styles.overlay}>
-            <DuelDetailScreen
+            <DuelDetailV1Screen
               duelId={selectedDuelId}
               userWallet={walletState.publicKey}
               onBack={() => setSelectedDuelId(null)}

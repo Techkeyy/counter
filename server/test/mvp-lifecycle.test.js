@@ -67,7 +67,7 @@ async function run() {
     const { deriveChallengeTiming } = require('../routes/challenges');
     const timingNow = Math.floor(Date.now() / 1000);
     const clampedTiming = deriveChallengeTiming(timingNow - 60, timingNow);
-    assert(clampedTiming.ok && clampedTiming.resolutionTs === timingNow + 2 * 3600, 'past decision time clamps to the two-hour minimum');
+    assert(clampedTiming.ok && clampedTiming.resolutionTs === timingNow + 15 * 60, 'past decision time clamps to the fifteen-minute minimum');
     assert(clampedTiming.cutoffTs > timingNow && clampedTiming.cutoffTs < clampedTiming.resolutionTs, 'derived cutoff stays inside the valid timing boundary');
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Take Author', 'takeauthor', A.wallet]);
     execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Challenger B', 'challengerb', B.wallet]);
@@ -115,7 +115,7 @@ async function run() {
     assert(challenge.resolution_mode === 'MUTUAL' && challenge.fallback_mode === 'REFUND', 'generic Mutual contract persists');
     assert(challenge.source_type === null && challenge.source_config === null, 'generic Mutual has no oracle config');
     assert(Number(challenge.cutoff_ts) > createdBefore, 'cutoff is server-derived and in the future');
-    assert(Number(challenge.resolution_ts) - Number(challenge.cutoff_ts) === 3600, 'cutoff is one hour before resolution');
+    assert(Number(challenge.cutoff_ts) > createdBefore && Number(challenge.cutoff_ts) < Number(challenge.resolution_ts), 'cutoff is strictly inside the resolution window');
     assert(Number(challenge.mutual_deadline_ts) - Number(challenge.resolution_ts) === 24 * 3600, 'mutual deadline is server-derived');
 
     response = await api('GET', '/api/challenges', B.token);

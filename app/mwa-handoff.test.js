@@ -5,7 +5,7 @@ const path = require('node:path');
 const read = (relativePath) => fs.readFileSync(path.join(__dirname, relativePath), 'utf8');
 const chain = read('src/chain.ts');
 const diagnostics = read('src/diagnostics.ts');
-const duelDetail = read('src/screens/DuelDetailScreen.tsx');
+const duelDetail = read('src/screens/DuelDetailV1Screen.tsx');
 const app = read('App.tsx');
 const protocolNative = read('node_modules/@solana-mobile/mobile-wallet-adapter-protocol/lib/cjs/index.native.js');
 const protocolAndroid = read('node_modules/@solana-mobile/mobile-wallet-adapter-protocol/android/src/main/java/com/solanamobile/mobilewalletadapter/reactnative/SolanaMobileWalletAdapterModule.kt');
@@ -61,14 +61,14 @@ assert.match(chain, /handoffSignatures/);
 assert.match(chain, /WalletFlowError/);
 assert.doesNotMatch(chain, /cluster:\s*'devnet'/);
 
-assert.match(duelDetail, /walletStage\('DUEL_INIT', 'CHAIN_ACCOUNTS_OK'\)/);
+assert.match(duelDetail, /walletStage\(attempt, 'CHAIN_ACCOUNTS_OK'\)/);
 assert.match(duelDetail, /Couldn't get the transaction from your wallet\./);
 assert.match(duelDetail, /Your wallet approved, but the transaction wasn't submitted\./);
 assert.match(duelDetail, /Transaction submitted but not confirmed yet\./);
-assert.match(duelDetail, /accessibilityLabel=\{initializationRecovery === 'CHECK_STATUS' \? 'Check status' : 'Try again'\}/);
+assert.match(duelDetail, /accessibilityLabel=\{pendingSignature \? 'Check status' : 'Set up this Duel'\}/);
 
-const confirmedPosition = duelDetail.indexOf("walletStage('DUEL_INIT', 'TX_CONFIRMED')");
-const backendStartPosition = duelDetail.indexOf("walletStage('DUEL_INIT', 'BACKEND_VERIFY_START')", confirmedPosition);
+const confirmedPosition = duelDetail.indexOf("walletStage(attempt, 'TX_CONFIRMED')");
+const backendStartPosition = duelDetail.indexOf("walletStage(attempt, 'BACKEND_VERIFY_START')", confirmedPosition);
 const initRequestPosition = duelDetail.indexOf('await api.initOnChainDuel', backendStartPosition);
 assert(confirmedPosition >= 0, 'status recovery must record confirmation');
 assert(backendStartPosition > confirmedPosition, 'backend verification must follow confirmed transaction');
