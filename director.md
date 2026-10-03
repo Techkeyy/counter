@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — MINIMUM MVP UAT APK READY / OWNER INSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — V1 EXPERIENCE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; the accepted minimum MVP, production alignment, and fresh MVP UAT APK artifact ledger are complete, with final push closure recorded in §55
+**Repository State:** On branch `master`; Director-accepted V1 source and production alignment are complete; normal push closure and evidence preservation are recorded in §56. Fresh V1 APK build remains pending.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `147ea2bec51e9577ead4fc6ced13136302133a2d` (accepted minimum MVP source; fresh MVP UAT APK artifact recorded in §55)
-**Last Updated:** 2026-10-02T17:18:17Z
+**Authoritative Packaged-Source Commit:** No V1 APK has been built. `147ea2bec51e9577ead4fc6ced13136302133a2d` identifies the previous minimum MVP artifact in §55; it does not package the accepted V1 runtime commit `e44917b01014b0033f9452f2bf837cf287e7ec6b`.
+**Last Updated:** 2026-10-03T00:43:16Z
 
 ---
 
@@ -2474,3 +2474,166 @@ The artifact is not installed, no `adb` operation has been performed, and no
 physical or economic UAT has been performed.
 
 Target status: **`BUILDING — MINIMUM MVP UAT APK READY / OWNER INSTALL REQUIRED`**.
+
+## 56. V1 EXPERIENCE PRODUCTION ALIGNMENT + GIT CLOSURE — 2026-10-03
+
+Director accepted V1 runtime commit
+`e44917b01014b0033f9452f2bf837cf287e7ec6b`
+(`Rebase mobile flow onto V1 duel experience`). The prior physical Phantom
+failure remains an unresolved observation; this phase does not claim device
+or economic UAT. No APK build or install was performed.
+
+### 56.A — Source history and evidence preservation
+
+- Starting HEAD: `e44917b01014b0033f9452f2bf837cf287e7ec6b`.
+- Starting origin/master: `64a6d6bdfdf987f9bb5208c74eef17b21665258f`.
+- Added only `/uat-evidence/` to the root `.gitignore`, in commit
+  `615a0946ea9804265a5632b3d0ec1fdc896fec62`
+  (`chore: preserve local UAT evidence outside Git`). This anchored rule does
+  not ignore similarly named directories elsewhere.
+- Existing evidence stayed in place: 13 files, aggregate 1,907,124 bytes.
+  No evidence file was moved, rewritten, or deleted. Operational probe and
+  regression scripts/reports were generated separately under already-ignored
+  `.uat/`; tokens, private signing keys, and JWT values were not persisted.
+- Normal `git push origin master` advanced origin from `64a6d6b` to
+  `615a094`. No squash, rebase, reset, or force push was used. After this push,
+  HEAD and origin/master both equaled `615a0946ea9804265a5632b3d0ec1fdc896fec62`
+  and `git status --porcelain` was empty.
+
+### 56.B — Production precheck and verified backup
+
+- Counter service active; working directory `/opt/counter/server`.
+- HTTPS `/api/health` returned 200 before deployment.
+- Production DB `/opt/counter/server/data/counter.sqlite` exists/non-empty.
+- Actual running-process JWT presence/non-empty: **true**. Checked through
+  the service MainPID environment, printing only the boolean, never the value.
+- Verified database backup:
+  `/opt/counter/backups/counter-v1-predeploy-20261003003718.sqlite`.
+- Backup bytes: **184320**.
+- Backup SHA-256:
+  `0fe67946abb9212cc279fa77a99392c0c149178652bff774a0d43f25f8fe3668`.
+- Backup created through SQLite backup API and reopened with integrity check
+  result `ok`; backup permissions 0600. Previous route rollback copy retained
+  at the same basename with `.challenges.js` suffix, permissions 0600.
+- Baseline counts: users 8, takes 8, comments 2, challenges 5, counteroffers
+  12, duels 2, positions 0, receipts 0, mutual_votes 0, activity 8,
+  auth_nonces 0, blocks 3, faucet_claims 8, reports 7.
+
+### 56.C — Single-file deployment and service readback
+
+- Only runtime file deployed:
+  `/opt/counter/server/routes/challenges.js`.
+- Local on-disk bytes, local committed blob, and deployed remote bytes all
+  share SHA-256:
+  `8ae2fe3204b362016a9c2c8f4c292a34980831337101dc6da9bc8b80572062e3`.
+- Remote `node --check` passed. Only `counter-backend.service` restarted.
+  A second Counter-only stop/start occurred for exact-ID cleanup, to prevent
+  the SQL.js in-memory database from overwriting external cleanup changes.
+- Post-deploy and post-cleanup service active, JWT presence/non-empty true,
+  HTTPS health 200. No temporary 502 was observed in the checks performed;
+  this is not a continuous zero-downtime measurement.
+- Service journal showed the two expected stop/start cycles, no process exit
+  or restart loop. Existing bigint native-binding warning uses the pure JS
+  implementation; no dependency/runtime changes were made.
+
+### 56.D — Live disposable creator-only acceptance and timing proof
+
+Three newly generated disposable identities authenticated through normal
+SIWS nonce/signature API flow. No production JWT secret was used by the
+probe. No initialize, funding, settlement, faucet, or claim call occurred.
+
+- User A created Take `take_1790987952524_d55002d3`.
+- User B challenged A: `chal_1790987952900_bc689775`.
+- B accepting outgoing Challenge: **403**.
+- Unrelated C accepting Challenge: **403**.
+- Creator A accepting: **200**, Duel
+  `duel_1790987954917_b4526c5d`.
+- A retry: **200**, the same Duel ID.
+- Public Duel list showed exactly one linked Duel for this Challenge;
+  Take detail returned `duels_count = 1`.
+- Returned Duel was `UNINITIALIZED`; zero positions and receipts were
+  independently verified in the database before cleanup.
+
+Challenge creation sent only `decisionTs` as its timing input. The selected
+time was deliberately in the past to exercise the minimum lead clamp:
+
+```text
+request_time = 1790987952
+decisionTs = 1790987892
+resolution_ts = 1790995152 = request_time + 7200
+cutoff_ts = 1790991552 = resolution_ts - 3600
+mutual_deadline_ts = 1791081552 = resolution_ts + 86400
+```
+
+Each independent hidden-field attempt (`cutoffTs`, `resolutionTs`,
+`mutualDeadlineTs`) returned **400**. Counteroffer cutoff override also
+returned **400**. No database mutation manufactured acceptance or timing
+results; all result-producing operations were normal API calls.
+
+### 56.E — Exact-ID cleanup and genuine-data preservation
+
+Cleanup used only the manifest's exact Take/Challenge/Duel IDs and these
+new disposable wallets:
+
+```text
+8frPy58s6c5rdcnUzM3aubfR7JJHDLhZWtyd8vWBqGRG
+23C8JgygZs2zcMiRra4jJQkJdVZ1cEhpiLhASWStjETw
+74EMZgNdf7QtaCr7pyHdWSiYjWxqQ8vcdV13vFrenUQP
+```
+
+The cleanup guard verified Take marker/author, Challenge parties/reference,
+Duel parties/reference, uninitialized chain state, zero pools, zero
+positions, and zero receipts. The transaction removed only the probe's
+rows and associated exact-target/identity activity/auth-nonce rows.
+
+After cleanup and service restart, a fresh read-only database inspection
+compared every row in every application table with the pre-deploy backup.
+All keys and row-content hashes matched exactly; all table counts were
+restored, with zero disposable rows remaining. No genuine user row was
+changed. Public API returned 404 for the disposable Take and Duel.
+
+The original active feed Take IDs remained visible:
+
+```text
+take_1790967068579_a49ce41f
+take_1790940639772_33bf0656
+take_1790852614546_6d2cc8de
+take_1790803407293_d2c55120
+```
+
+### 56.F — Full local post-deploy regression
+
+All eleven commands exited 0: TypeScript no-emit, V1 experience guardrails,
+auth boundary, sessions **5/5**, profile boundaries **12 cases** with zero
+fixture leftovers, Challenge lifecycle, Take identity/deletion, resolution
+boundaries, portfolio, chain vectors **11/11**, and backend adversarial
+**8/8**. Auth configured/missing-secret/old-fallback rejection checks passed.
+HTTP test servers used process-only random test secrets, never persisted or
+printed. These suites used local data, not the production database.
+
+The adversarial suite's external Crypto/Weather/Sports resolver requests
+completed successfully in this run; no SKIP was emitted. Its broad success
+banner is not evidence of a new live economic settlement or physical UAT.
+No on-chain transaction was submitted in this phase.
+
+Source scans covered 59 application files, excluding tests/dependencies.
+Zero matches for the tested JWT fallback literal/operator, private-key PEM,
+mock wallet/session runtime, obsolete Counter host/tunnel, and mobile
+localhost-backend patterns. Pattern scans are bounded evidence, not a claim
+of exhaustive secret detection. `git diff --check` passed.
+
+### 56.G — Final docs closure and APK boundary
+
+This section and the ledger header are the only changes in the final
+docs-only commit (`docs: close V1 production alignment`). Normal push and
+final HEAD/origin equality plus empty porcelain status are verified after
+that commit; its exact hash is reported in the final handoff because a
+commit cannot embed its own hash.
+
+Fresh APK build is safe to authorize against the accepted V1 source and
+aligned production route. The APK has not been built. Device wallet
+behavior and complete economic/physical UAT remain to be checked on the
+next explicitly authorized artifact. The old APK does not contain this V1
+rebase and is not a substitute for a fresh V1 build.
+
+Target: **`BUILDING — V1 EXPERIENCE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`**.
