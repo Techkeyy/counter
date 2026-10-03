@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "test:experience": "node experience-rebase.test.js"
+    "test:experience": "node experience-rebase.test.js",
+    "test:mwa": "node mwa-handoff.test.js"
   },
   "dependencies": {
     "@solana-mobile/mobile-wallet-adapter-protocol": "^2.1.4",

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  AppState,
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Header } from './src/components/Header';
@@ -33,6 +34,7 @@ import {
 } from './src/session';
 import { api } from './src/api';
 import { Take, Duel, Receipt, Challenge } from './src/types';
+import { lifecycleStage } from './src/diagnostics';
 
 type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
 
@@ -66,6 +68,21 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   // Other-user profile viewing (overlay; own profile lives on the tab).
   const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
+
+  // Capture the app-side of the wallet handoff without recording any wallet
+  // payload. This makes a background/resume gap visible in physical UAT logs.
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (previousState === 'active' && nextState !== 'active') {
+        lifecycleStage('APP_BACKGROUND');
+      } else if (previousState !== 'active' && nextState === 'active') {
+        lifecycleStage('APP_RESUME');
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Restore the securely stored session on cold start. The stored token is
   // validated against the backend; invalid/expired sessions are cleared and

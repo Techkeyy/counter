@@ -14,7 +14,13 @@ import {
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Buffer } from 'buffer';
 import { getConnection, DEVNET_RPC } from './wallet';
-import { isWalletCancellation, walletStage } from './diagnostics';
+import {
+  isWalletCancellation,
+  isWalletNotSubmitted,
+  isWalletTimeout,
+  WalletFlowError,
+  walletStage,
+} from './diagnostics';
 import type { WalletOperation } from './diagnostics';
 
 // Canonical chain constants — MUST match server/chain.js and program/src/lib.rs.
@@ -228,39 +234,122 @@ export async function mwaSignSendConfirm(
   operation: WalletOperation = 'STAKE'
 ): Promise<string> {
   const conn = connection || getConnection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+  const {
+    context: { slot: minContextSlot },
+    value: { blockhash, lastValidBlockHeight },
+  } = await conn.getLatestBlockhashAndContext('confirmed');
   const tx = new Transaction({ feePayer, recentBlockhash: blockhash });
   tx.add(...instructions);
 
   walletStage(operation, 'MWA_OPEN');
+  let authorizationSucceeded = false;
+  let signSendStarted = false;
+  let handoffSignatures: string[] | null = null;
+
+  const parseSignature = (value: unknown): string | null => {
+    if (!Array.isArray(value)) return null;
+    const candidate = value[0];
+    return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
+  };
+
   try {
-    const signatures = await transact(async (wallet) => {
-      await wallet.authorize({
-        cluster: 'devnet',
-        identity: {
-          name: 'Counter Mobile',
-          uri: 'https://counter.103-195-188-198.sslip.io',
-          icon: 'favicon.ico',
-        },
+    walletStage(operation, 'MWA_TRANSACT_START');
+    let signatures: string[] | null = null;
+    try {
+      signatures = await transact(async (wallet) => {
+        walletStage(operation, 'MWA_CALLBACK_ENTER');
+        walletStage(operation, 'MWA_AUTHORIZE_START');
+        await wallet.authorize({
+          chain: 'solana:devnet',
+          identity: {
+            name: 'Counter Mobile',
+            uri: 'https://counter.103-195-188-198.sslip.io',
+            icon: 'favicon.ico',
+          },
+        });
+        authorizationSucceeded = true;
+        walletStage(operation, 'MWA_AUTHORIZE_OK');
+        signSendStarted = true;
+        walletStage(operation, 'MWA_SIGN_SEND_START');
+        handoffSignatures = await wallet.signAndSendTransactions({
+          minContextSlot,
+          transactions: [tx],
+        });
+        walletStage(operation, 'MWA_SIGN_SEND_RETURN');
+        return handoffSignatures;
       });
-      return await wallet.signAndSendTransactions({ transactions: [tx] });
-    });
+    } catch (error) {
+      // The installed transact() closes the native session in a finally block.
+      // Preserve a signature that was already returned by signAndSendTransactions
+      // if that cleanup rejects, so the app never loses a submitted transaction.
+      if (!handoffSignatures) throw error;
+      signatures = handoffSignatures;
+    }
+
+    walletStage(operation, 'MWA_TRANSACT_RETURN');
 
     walletStage(operation, 'MWA_APPROVED');
-    const signature = signatures[0];
+    const signature = parseSignature(signatures);
+    if (!signature) {
+      walletStage(operation, 'MWA_ERROR');
+      throw new WalletFlowError(
+        signSendStarted ? 'NOT_SUBMITTED' : 'PRE_SUBMIT',
+        signSendStarted
+          ? 'Your wallet approved, but the transaction was not submitted.'
+          : "Couldn't get the transaction from your wallet."
+      );
+    }
+    walletStage(operation, 'TX_SIGNATURE_PARSED');
     walletStage(operation, 'TX_SUBMITTED');
-    const confirmation = await conn.confirmTransaction(
-      { signature, blockhash, lastValidBlockHeight },
-      'confirmed'
-    );
-    if (confirmation.value.err) {
-      throw new Error('Devnet transaction failed');
+    walletStage(operation, 'TX_CONFIRM_START');
+    try {
+      const confirmation = await conn.confirmTransaction(
+        { signature, blockhash, lastValidBlockHeight },
+        'confirmed'
+      );
+      if (confirmation.value.err) {
+        throw new Error('Devnet transaction failed');
+      }
+    } catch (error) {
+      walletStage(operation, 'TX_CONFIRM_FAILED');
+      throw new WalletFlowError(
+        'CONFIRMATION_FAILED',
+        'Transaction submitted but not confirmed yet.',
+        signature,
+        error
+      );
     }
     walletStage(operation, 'TX_CONFIRMED');
     return signature;
   } catch (error) {
+    if (error instanceof WalletFlowError) throw error;
     walletStage(operation, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
-    throw error;
+    if (isWalletCancellation(error)) throw error;
+    if (isWalletTimeout(error)) {
+      walletStage(operation, 'MWA_TIMEOUT');
+      throw new WalletFlowError(
+        'TIMEOUT',
+        'Wallet response timed out; check transaction status before retrying.',
+        parseSignature(handoffSignatures),
+        error
+      );
+    }
+    if (isWalletNotSubmitted(error) || authorizationSucceeded || signSendStarted) {
+      walletStage(operation, 'MWA_ERROR');
+      throw new WalletFlowError(
+        'NOT_SUBMITTED',
+        'Your wallet approved, but the transaction was not submitted.',
+        undefined,
+        error
+      );
+    }
+    walletStage(operation, 'MWA_ERROR');
+    throw new WalletFlowError(
+      'PRE_SUBMIT',
+      "Couldn't get the transaction from your wallet.",
+      undefined,
+      error
+    );
   }
 }
 
@@ -290,7 +379,7 @@ export async function mwaSignMessage(
   try {
     const out = await transact(async (wallet) => {
       await wallet.authorize({
-        cluster: 'devnet',
+        chain: 'solana:devnet',
         identity: {
           name: 'Counter Mobile',
           uri: 'https://counter.103-195-188-198.sslip.io',

@@ -26,7 +26,7 @@ import {
 } from '../chain';
 import { formatDeadline } from '../utils/criteria';
 import { formatUserDisplayName, formatRelativeTime, isRealSignature } from '../utils/identity';
-import { isWalletCancellation, walletStage } from '../diagnostics';
+import { isWalletCancellation, WalletFlowError, walletStage } from '../diagnostics';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -47,6 +47,8 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [initializing, setInitializing] = useState(false);
+  const [pendingInitializationSignature, setPendingInitializationSignature] = useState<string | null>(null);
+  const [initializationRecovery, setInitializationRecovery] = useState<'RETRY' | 'CHECK_STATUS' | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -80,11 +82,14 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
     }
     setInitializing(true);
     setMessage(null);
+    setPendingInitializationSignature(null);
+    setInitializationRecovery(null);
     walletStage('DUEL_INIT', 'START');
     let backendVerifyStarted = false;
     try {
       setMessage('Preparing this Duel.');
       const acct = (await api.getChainAccounts(duelId, userWallet)) as ChainAccounts;
+      walletStage('DUEL_INIT', 'CHAIN_ACCOUNTS_OK');
       if (acct.chainStatus === 'INITIALIZED') {
         throw new Error('Duel is already initialized on-chain.');
       }
@@ -117,7 +122,66 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
       await loadDuelData();
     } catch (err: any) {
       if (backendVerifyStarted) walletStage('DUEL_INIT', 'BACKEND_VERIFY_FAILED');
-      setMessage(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't create the Duel on Solana. Try again.");
+      if (isWalletCancellation(err)) {
+        setMessage('Approval cancelled. Nothing was changed.');
+        setInitializationRecovery(null);
+      } else if (err instanceof WalletFlowError) {
+        if (err.signature) setPendingInitializationSignature(err.signature);
+        if (err.kind === 'CONFIRMATION_FAILED' || err.signature) {
+          setMessage('Transaction submitted but not confirmed yet.');
+          setInitializationRecovery('CHECK_STATUS');
+        } else if (err.kind === 'NOT_SUBMITTED') {
+          setMessage("Your wallet approved, but the transaction wasn't submitted.");
+          setInitializationRecovery('RETRY');
+        } else {
+          setMessage("Couldn't get the transaction from your wallet.");
+          setInitializationRecovery('RETRY');
+        }
+      } else {
+        setMessage("Couldn't create the Duel on Solana. Try again.");
+        setInitializationRecovery('RETRY');
+      }
+    } finally {
+      setInitializing(false);
+    }
+  };
+
+  const handleCheckInitializationStatus = async () => {
+    const signature = pendingInitializationSignature;
+    if (!signature || !userWallet) {
+      setMessage("Couldn't get the transaction from your wallet.");
+      setInitializationRecovery('RETRY');
+      return;
+    }
+
+    setInitializing(true);
+    setMessage('Checking transaction status…');
+    let backendVerifyStarted = false;
+    try {
+      const conn = getConnection();
+      const result = await conn.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const status = result.value[0];
+      if (!status || status.err || (status.confirmationStatus !== 'confirmed' && status.confirmationStatus !== 'finalized')) {
+        walletStage('DUEL_INIT', 'TX_CONFIRM_FAILED');
+        setMessage('Transaction submitted but not confirmed yet.');
+        setInitializationRecovery('CHECK_STATUS');
+        return;
+      }
+
+      walletStage('DUEL_INIT', 'TX_CONFIRMED');
+      backendVerifyStarted = true;
+      walletStage('DUEL_INIT', 'BACKEND_VERIFY_START');
+      await api.initOnChainDuel(duelId, signature);
+      walletStage('DUEL_INIT', 'BACKEND_VERIFY_OK');
+      walletStage('DUEL_INIT', 'UI_SUCCESS');
+      setPendingInitializationSignature(null);
+      setInitializationRecovery(null);
+      setMessage('Duel ready');
+      await loadDuelData();
+    } catch (err: any) {
+      if (backendVerifyStarted) walletStage('DUEL_INIT', 'BACKEND_VERIFY_FAILED');
+      setMessage('Transaction confirmed, but Counter could not verify it yet. Check status again.');
+      setInitializationRecovery('CHECK_STATUS');
     } finally {
       setInitializing(false);
     }
@@ -399,6 +463,20 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
         {message && (
           <View style={styles.messageBox}>
             <Text style={styles.messageText}>{message}</Text>
+            {initializationRecovery && (
+              <TouchableOpacity
+                style={styles.messageAction}
+                onPress={initializationRecovery === 'CHECK_STATUS' ? handleCheckInitializationStatus : handleInitialize}
+                disabled={initializing}
+                activeOpacity={0.8}
+                accessibilityLabel={initializationRecovery === 'CHECK_STATUS' ? 'Check status' : 'Try again'}
+                accessibilityRole="button"
+              >
+                <Text style={styles.messageActionText}>
+                  {initializationRecovery === 'CHECK_STATUS' ? 'Check status' : 'Try again'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -520,19 +598,21 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
 
       {!isResolved && !isRefunded && !isInitialized && isCaptain && (
         <View style={styles.ctaBar}>
-          <Text style={styles.ctaNote}>This creates the Duel on Solana.</Text>
+          <Text style={styles.ctaNote}>
+            {pendingInitializationSignature ? 'A transaction is awaiting confirmation.' : 'This creates the Duel on Solana.'}
+          </Text>
           <TouchableOpacity
             style={styles.ctaPrimary}
-            onPress={handleInitialize}
+            onPress={pendingInitializationSignature ? handleCheckInitializationStatus : handleInitialize}
             disabled={initializing}
             activeOpacity={0.85}
-            accessibilityLabel="Set up this Duel"
+            accessibilityLabel={pendingInitializationSignature ? 'Check status' : 'Set up this Duel'}
             accessibilityRole="button"
           >
             {initializing ? (
               <ActivityIndicator color="#000000" />
             ) : (
-              <Text style={styles.ctaPrimaryText}>Set up this Duel</Text>
+              <Text style={styles.ctaPrimaryText}>{pendingInitializationSignature ? 'Check status' : 'Set up this Duel'}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -676,6 +756,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3, borderColor: colors.brandPrimary,
   },
   messageText: { color: colors.textPrimary, fontSize: 13, lineHeight: 19 },
+  messageAction: {
+    alignSelf: 'flex-start', minHeight: touchMin, justifyContent: 'center',
+    marginTop: spacing.xs, paddingHorizontal: spacing.sm,
+  },
+  messageActionText: { color: colors.brandPrimary, fontSize: 13, fontWeight: '700' },
   sectionTitle: { ...typography.captionBold, color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm, marginTop: spacing.md },
   criteriaText: { ...typography.body, color: colors.textPrimary, fontSize: 14, lineHeight: 21, marginBottom: spacing.sm },
   modeRow: {
