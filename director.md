@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — V1 EXPERIENCE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`
+**Current Authoritative Status:** `BUILDING — FROZEN V1 PHYSICAL-UAT APK READY / OWNER INSTALL REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; Director-accepted V1 source and production alignment are complete; normal push closure and evidence preservation are recorded in §56. Fresh V1 APK build remains pending.
+**Repository State:** On branch `master`; Director-accepted V1 source and production alignment are complete (§56). Exactly one fresh frozen V1 release APK was built and inspected (§57). Owner explicitly approved public publication of this docs-only artifact ledger; normal commit/push closure and final readback are recorded in the closure handoff. Physical installation/UAT remains pending.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** No V1 APK has been built. `147ea2bec51e9577ead4fc6ced13136302133a2d` identifies the previous minimum MVP artifact in §55; it does not package the accepted V1 runtime commit `e44917b01014b0033f9452f2bf837cf287e7ec6b`.
-**Last Updated:** 2026-10-03T00:43:16Z
+**Authoritative Packaged-Source Commit:** `6429b7ec58aca89635f459ec1518949ffbc64170`; accepted runtime implementation `e44917b01014b0033f9452f2bf837cf287e7ec6b`. The sole current APK SHA-256 is `98f842401e3c3b4fbf317ad3525c3be5c7cd23d6c1f35b42e05bc28ff3c15138`; all earlier APK hashes are superseded.
+**Last Updated:** 2026-10-03
 
 ---
 
@@ -2637,3 +2637,317 @@ next explicitly authorized artifact. The old APK does not contain this V1
 rebase and is not a substitute for a fresh V1 build.
 
 Target: **`BUILDING — V1 EXPERIENCE PRODUCTION ALIGNED / FRESH APK BUILD AUTHORIZED`**.
+
+---
+
+## 57. Frozen V1 Physical-UAT APK — Single Build and Compiled Artifact Proof (2026-10-03)
+
+### 57.A — Freeze, signing, and exactly one build
+
+Director authorized the frozen release build, artifact inspection, and docs-only
+ledger/push. Initial `HEAD` and `origin/master` both equalled
+`6429b7ec58aca89635f459ec1518949ffbc64170`; porcelain status was empty.
+The required diff from runtime implementation
+`e44917b01014b0033f9452f2bf837cf287e7ec6b` over `app/ server/ program/`
+was empty before and after build/inspection. No runtime source, backend,
+database, or dependency change was made. No installation or physical UAT
+was performed.
+
+The established `counter` alias, release keystore, and raw binary CurrentUser
+DPAPI vault were reused. The password was decrypted only in-process, never
+printed or persisted; keytool read the temporary environment rather than a
+password argument. Certificate precheck matched the required identity.
+The four temporary signing variables were cleared in `finally`, and the
+decrypted byte array was cleared. No key regeneration/debug signing occurred.
+
+The prior output APK was preserved as:
+
+```text
+C:\Users\HomePC\Desktop\Counter\.uat\apk-archive\fcaaf86967871c58711fd908d9c4b7a104ce4a29f49cf3bfb40a3abd01105f62-20261003075520.apk
+```
+
+Only one Gradle invocation was made, from `app/android`:
+
+```text
+.\gradlew.bat assembleRelease --no-daemon
+BUILD SUCCESSFUL in 15m 3s
+exit 0
+703 actionable tasks: 31 executed, 672 up-to-date
+release output APK count: 1
+```
+
+Native tasks were legitimately up-to-date; Metro rebuilt its empty cache,
+bundled 1,086 modules, and Hermes generated the new release bytecode. Existing
+NDK/NODE_ENV, dependency-export/file-resolution, color-environment, and
+React Native global-variable warnings were not repaired by changing frozen
+source or dependencies. The build completed successfully despite warnings.
+
+### 57.B — Sole current artifact identity
+
+```text
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+Bytes: 62509523
+SHA-256: 98f842401e3c3b4fbf317ad3525c3be5c7cd23d6c1f35b42e05bc28ff3c15138
+Package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+Signers: 1
+Certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+APK Signature Scheme v2: verifies
+Packaged-source HEAD: 6429b7ec58aca89635f459ec1518949ffbc64170
+Runtime implementation: e44917b01014b0033f9452f2bf837cf287e7ec6b
+Build started UTC: 2026-10-03T07:55:20.8903315Z
+Build completed UTC: 2026-10-03T08:10:32.8046772Z
+```
+
+All previous APK hashes are **SUPERSEDED**, including the archived minimum
+MVP `fcaaf86967871c58711fd908d9c4b7a104ce4a29f49cf3bfb40a3abd01105f62`.
+An archived or earlier artifact is not authorized as a substitute.
+
+### 57.C — Evidence comes from the actual APK
+
+The ZIP member `assets/index.android.bundle` was extracted from this APK,
+not assumed from source. It is **2,566,520 bytes**, SHA-256
+`246b04c144b5acef047c2cc6a391ba12306d20a8f2e35597a9389a24dd1143c1`.
+It also matches the release build's generated Hermes bundle hash.
+Installed Hermes disassembly succeeded (bytecode version 96).
+
+The pretty dump abbreviates long operands and escapes UTF-16 strings. To
+avoid false negatives/ambiguous prefixes, a second read-only disassembly
+used `-b -dump-bytecode -pretty=false`. Numeric string IDs were resolved
+against that artifact's own ASCII/UTF-16 string table. The resolved dump
+retains each numeric instruction and adds its decoded string as a comment;
+line anchors below refer to `.uat/v1-artifact/hermes-resolved.txt`.
+Function IDs are compiled function ordinals, not source-line assertions.
+
+Local evidence (ignored operational outputs, not runtime changes):
+`.uat/build-frozen-v1-result.json`, `.uat/build-frozen-v1.log`,
+`.uat/v1-artifact/identity.json`, `hermes-disassembly.txt`, `hermes-raw.txt`,
+`hermes-resolved.txt`, `decoded-strings.json`, `compiled-evidence.json`,
+`proof-functions.json`, `manifest.txt`, `signer.txt`, `security-scan.json`,
+and `.uat/v1-assetlinks.json`.
+
+### 57.D — New Challenge and HTTP-only Accept paths
+
+Compiled App function **5782** references **ChallengeModalV1** at line
+239527 and **ChallengeSheetV1** at line 239542. The legacy `ChallengeModal`
+and `ChallengeSheet` component functions are absent from the compiled bundle.
+
+**17080 / line 594936**, `ChallengeModalV1`, contains the three-step flow's
+actual rendered labels: `Challenge @`, `Your counter`, `Stake each`,
+`When should this be decided?`, `Settle together`, `Review challenge`, and
+`Send challenge`. Exact explanation:
+
+> You both confirm who won. If you can't agree, everyone gets their money back.
+
+The review copy includes `Settle together · Money back if no agreement`.
+**17088 / line 595747** constructs the `api.proposeChallenge` payload:
+Take/target, propositions, social category, stake amount, `decisionTs`,
+`resolutionMode = MUTUAL`, `fallbackMode = REFUND`. No oracle/source,
+Weather/Sports/Crypto configuration or the old hidden cutoff/resolution/
+mutual-deadline inputs are constructed by this handler.
+
+App callback **5844 / line 240545** retains the returned Challenge in state,
+closes the Challenge target, sets the tab to `DUELS`, and increments the
+refresh/focus state. App passes `createdChallenge`/`focusSignal` to Duels.
+**7184 / line 281571** merges a newly returned pending Challenge when its
+ID is not already present; **7188 / line 282019** refreshes on changed focus.
+**7186 / line 281883** calls both `getDuels` and `getChallenges`;
+**7190/7191** compare `creator_wallet`/`challenger_wallet` with the user.
+Incoming, Sent, Active, Claimable, Completed remain compiled.
+
+**17099 / line 596373**, `ChallengeSheetV1`, renders `challenged your Take`,
+`You said`, `They say`, `Accept challenge`, `Counter`, and `Decline`.
+Its Accept async handler **17103 / line 596914** references exact
+`Accepting challenge…`, `api.acceptChallenge`, and `Duel created`; it
+schedules callback **17104**, which passes the returned `duel` to
+`onDecided`. App callback **5847 / line 240577** clears the sheet, refreshes,
+and sets the selected Duel ID from the returned Duel. App renders
+`DuelDetailScreen` with that selected ID.
+
+The Accept API implementation **7035 / line 276473** constructs authenticated
+`POST /challenges/:id/accept`; shared request generator **6991 / line 275595**
+adds `Authorization: Bearer <session token>` and uses `fetch`. The active
+Accept handler contains **zero** transact/authorize/signMessages/
+signAndSendTransactions/mwaSignMessage/mwaSignSendConfirm identifiers.
+Acceptance is an HTTP operation, not a wallet transaction.
+
+### 57.E — Intended first wallet boundary and later wallet states
+
+`DuelDetailScreen` **7222 / line 284329** includes `Set up this Duel` and
+`This creates the Duel on Solana.` Setup handler **7230 / line 286028**
+references `DUEL_INIT`, `buildInitializeDuelIx`, `mwaSignSendConfirm`, and
+`api.initOnChainDuel`, with exact copy:
+
+```text
+Phantom will open for approval.
+Waiting for wallet approval…
+Creating Duel on Solana…
+Duel ready
+Approval cancelled. Nothing was changed.
+Couldn't create the Duel on Solana. Try again.
+```
+
+This is the intended explicit wallet/on-chain boundary after HTTP Accept;
+artifact analysis does not prove physical Phantom behavior.
+
+Stake handler **9830 / line 373338** calls `buildDepositStakeIx`,
+`mwaSignSendConfirm`, and `recordStake`, and includes `Phantom will open to
+stake $<amount>.`, `Waiting for wallet approval…`, `Submitting your stake…`,
+`Stake confirmed`, cancellation, and `Couldn't submit your stake. Try again.`
+
+Settlement UI in **7222** includes `What happened?`, `Choose the winner`,
+`Your choice isn't final until both of you choose the same result.`, and
+`You couldn't agree. Everyone gets their stake back.` Handler **7241 /
+line 286512** calls `settlementMessage`, `mwaSignMessage`, and `postMutualVote`;
+it branches on the returned match's `matched` flag. Exact staged copy:
+
+```text
+Your wallet will open to confirm your choice.
+Waiting for wallet approval…
+Recording your choice…
+Choice recorded. Waiting for @other.
+Result confirmed.
+Couldn't record your choice. Try again.
+```
+
+Claim handler **7235 / line 286297** references `CLAIM`, `buildClaimPayoutIx`,
+`mwaSignSendConfirm`, and `claimDuel`; UI/handler includes `Claim winnings`,
+`Phantom will open to claim your winnings.`, `Waiting for wallet approval…`,
+`Claiming your winnings…`, `Winnings claimed`, cancellation, and
+`Couldn't claim your winnings. Try again.` All four handlers contain the
+shared explicit cancellation copy and retryable failure copy.
+
+### 57.F — Safe release diagnostics are retained
+
+Compiled wallet logger **16668 / line 577327** (`walletStage`) actually
+calls `console.info` with a concatenation of `[COUNTER][WALLET][`, operation,
+`_`, stage, and `]`. It has only operation/stage inputs; it does not log
+signature/token/wallet-secret/private-key/password values.
+
+Setup, stake, settlement, and claim handler bodies reference respectively
+`DUEL_INIT`, `STAKE`, `SETTLEMENT`, `CLAIM`, with `START`,
+`BACKEND_VERIFY_START`, `BACKEND_VERIFY_OK`, `BACKEND_VERIFY_FAILED`, and
+`UI_SUCCESS`. Transaction wrapper **16650 / line 576848** invokes the
+logger around `transact`/confirmation with `MWA_OPEN`, `MWA_APPROVED`,
+`TX_SUBMITTED`, `TX_CONFIRMED`, and cancellation/error `MWA_CANCELLED`/`FAILED`.
+Message wrapper **16659 / line 577106** emits MWA open/approved/cancelled/
+failed staging for settlement. Message signing correctly has no transaction
+submission/confirmation stage. These are compiled staging paths, not a
+claim that any stage has been observed on the physical device.
+
+### 57.G — Narrow scope and preserved features
+
+The resolved function audit reports zero references for `Counter Verified`,
+Weather decider, Arena-publishing labels, Take-image-upload labels, and old
+`Staking closes`/`Agreement window` UI. Active V1 Challenge payload is
+unconditionally Mutual + Refund, with only decision time exposed; no
+reachable Weather/Sports/Crypto/Politics/Culture resolver configuration UI
+was found. Generic social category labels are not resolver controls.
+
+Unused legacy API `publishArena` and `describeCriteria` remain exported in
+compiled modules. The artifact contains their implementations, including
+weather/Open-Meteo helper strings: neither has a compiled property-read
+consumer in the UI. They are not reachable publishing/resolver controls;
+this report does **not** claim whole-bundle absence of all legacy strings.
+
+The active Take composer **7212 / line 283037** renders `Your Take` and
+`Why? (optional)`; **7215** calls only the text creation path. API **7011 /
+line 276088** serializes `topic`, `content`, `category` to `POST /takes`,
+with no image field/upload operation. Image-picker callers **16988/17130**
+belong to profile editing/onboarding; their adjacent save handlers use
+`uploadAvatar`, preserving avatar handling without Take-image UI.
+
+Returning session restoration is read by App **5785**, and profile hydration
+by App **5797** and restore generator **17161**. Canonical `author_name`,
+`author_handle`, `author_avatar`, `avatar_url`, and `displayName` are read
+in SocialPostCard/IdentityHeader/TakeDetail/Profile/save handlers. Profile
+save **16992** constructs `displayName` semantics and uses `uploadAvatar`.
+Take deletion caller **16695 / line 579219** retains `api.deleteTake` and
+its UX. Duels lifecycle home, Portfolio, Get test funds, Permanent Receipt,
+receipt navigation, and real MWA transaction/message functions remain
+compiled and referenced. This proves packaging, not physical no-regression
+or completed economic outcomes.
+
+The intended packaged loop remains:
+`TAKE → CHALLENGE → ACCEPT → SET UP DUEL → FUND → SETTLE TOGETHER → CLAIM → RECEIPT`.
+
+### 57.H — Configuration, bounded scans, and App Links
+
+API module **6984 / line 275389** assigns
+`https://counter.103-195-188-198.sslip.io/api`; request **6991** uses that
+base. Application chain modules **11579 / line 432408** and **16634 /
+line 576116** assign the required public keys:
+
+```text
+Program: 52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT
+Mint: AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC
+RPC: https://api.devnet.solana.com
+MWA network: devnet
+```
+
+The bounded scan inspected **60** owned app/server/program source files
+(tests/dependencies/data excluded) and **all 740 APK ZIP members**. Zero
+matches for former JWT fallback, unsafe `JWT_SECRET ||` application default,
+private-key PEM, tested mock wallet/session patterns, obsolete backend/tunnel
+patterns, mobile localhost backend, or exact signing password (UTF-8 and
+UTF-16LE, tested without printing it). No packaged keystore/JKS/DPAPI/
+release-signing-properties member. APK obsolete `3Ztkj` prefix hits: zero.
+
+The broader source prefix scan truthfully found `3Ztkj` in two explanatory
+chain comments and legacy seed wallet/author/captain fields. It is a public
+upgrade-authority wallet, **not** the configured mint; those reviewed hits
+are retained in the scan report rather than disguised as zero. Hermes
+`isRealSignature` **6983** rejects `simulated_`/`devnet_` signatures rather
+than providing a mock fallback. Retained localhost URLs belong to third-party
+URL parsing/rpc-websockets/Solana network constants, not Counter's API or
+Devnet connection assignment. Scans are bounded evidence, not exhaustive
+proof that arbitrary secret formats cannot exist.
+
+The actual binary manifest dump preserves `counter` + `duel` and `receipt`
+hosts, and HTTPS host `counter.103-195-188-198.sslip.io` with `/d` and `/r`
+path prefixes. Both HTTPS filters contain `android:autoVerify=true`.
+Live `/.well-known/assetlinks.json` returned **HTTP 200**, package
+`app.counter.mobile`, `delegate_permission/common.handle_all_urls`, and
+the current release certificate. Its statement also retains prior
+certificate entries; this build did not modify production assetlinks.
+
+### 57.I — Binding, closure, and limits
+
+APK SHA after inspection equals the original new-artifact SHA above; APK
+bytes and the generated/extracted Hermes bundle hash agree. Before this
+docs-only edit, HEAD/origin remained `6429b7e`, porcelain status remained
+empty, and runtime drift from `e44917b` was zero. Only this ledger/header
+is changed by the documentation closure commit. Auto-review initially
+rejected the commit/push command before execution pending explicit approval
+to publish build, local-path, and infrastructure details to the public
+repository; no workaround was attempted. The owner then explicitly approved
+public ledger closure, including the recorded public configuration,
+certificate, artifact identities, and local evidence paths, while excluding
+all credential material. The final diff was reviewed as documentation-only
+with no password, private key, DPAPI contents, JWT secret value, seed phrase,
+raw wallet signature, or authentication token added. Commit and push use
+normal master history, without squash, rebase, or force push. Final
+HEAD/origin equality, empty porcelain status, and empty runtime diff from
+`6429b7ec58aca89635f459ec1518949ffbc64170` are verified in the closure handoff
+after commit/push; its exact docs commit hash is reported there because a
+commit cannot embed its own hash. Packaged-source identity remains `6429b7e`,
+not the later documentation commit. No APK rebuild or installation occurs
+during public ledger closure.
+
+Existing accepted regression evidence is §56.F. Those database-writing
+local regression suites were **not rerun** in this no-DB-change build phase;
+the successful frozen build and actual artifact audit are new evidence.
+Production-alignment dependency remains §56: only the authorized Challenge
+route was deployed there. No backend deployment, DB operation, wallet prompt,
+device action, or on-chain transaction occurred in this phase.
+
+Only APK **98f842401e3c3b4fbf317ad3525c3be5c7cd23d6c1f35b42e05bc28ff3c15138**
+at the release path above is authorized for the next explicit owner
+installation step. **DO NOT INSTALL in this phase.** Physical UAT, actual
+Phantom behavior, cancellation/retry behavior on-device, and complete
+fund/settle/claim/Receipt economic verification remain pending. Previous
+physical Phantom observations are not claimed fixed/proven by a static audit.
+Economic **Core Outcome NOT yet proven**; no RC/submission-readiness claim.
+
+Target: **`BUILDING — FROZEN V1 PHYSICAL-UAT APK READY / OWNER INSTALL REQUIRED`**.
