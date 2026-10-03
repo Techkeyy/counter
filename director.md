@@ -2951,3 +2951,140 @@ physical Phantom observations are not claimed fixed/proven by a static audit.
 Economic **Core Outcome NOT yet proven**; no RC/submission-readiness claim.
 
 Target: **`BUILDING — FROZEN V1 PHYSICAL-UAT APK READY / OWNER INSTALL REQUIRED`**.
+
+## 58 — MWA diagnostic APK after accepted handoff remediation
+
+The accepted source patch is commit `c32adda52201770e530f36d554029e3e7450c45b`
+(`fix: harden MWA pre-submit handoff`). The accepted commit was pushed normally
+to `master`; no squash, rebase, or force push was used.
+
+The required classification remains: **MWA pre-submit boundary hardened and
+instrumented; physical Phantom confirmation still required.** This ledger does
+not claim that the physical MWA issue is fixed or proven.
+
+### 58.A — One diagnostic release artifact
+
+Exactly one APK exists in the release output directory:
+
+```text
+Path: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+Bytes: 62512411
+SHA-256: 4f1995685dada5ad493b85b5971fd90947658968543db69d498fad6190a955ac
+Package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+Certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+Packaged source: c32adda52201770e530f36d554029e3e7450c45b
+Build: BUILD SUCCESSFUL in 30m 54s; exit 0
+```
+
+The existing rotated Counter signing identity was used:
+
+```text
+Keystore: C:\Users\HomePC\.counter-secrets\counter-release.keystore
+DPAPI: C:\Users\HomePC\.counter-secrets\counter-release-password.dpapi
+Alias: counter
+```
+
+The DPAPI value was used only in-process for Gradle signing, was never printed,
+and was cleared from the process environment after the build. No key was
+regenerated.
+
+### 58.B — Compiled diagnostic evidence
+
+The APK contains `assets/index.android.bundle` with **2,571,296** bytes. The
+compiled bundle contains the following literal diagnostic markers:
+
+```text
+CHAIN_ACCOUNTS_OK
+MWA_OPEN
+MWA_TRANSACT_START
+MWA_CALLBACK_ENTER
+MWA_AUTHORIZE_START
+MWA_AUTHORIZE_OK
+MWA_SIGN_SEND_START
+MWA_SIGN_SEND_RETURN
+MWA_TRANSACT_RETURN
+TX_SIGNATURE_PARSED
+TX_SUBMITTED
+TX_CONFIRM_START
+TX_CONFIRMED
+BACKEND_VERIFY_START
+BACKEND_VERIFY_OK
+UI_SUCCESS
+MWA_CANCELLED
+MWA_ERROR
+MWA_TIMEOUT
+TX_CONFIRM_FAILED
+BACKEND_VERIFY_FAILED
+FAILED
+APP_BACKGROUND
+APP_RESUME
+```
+
+`DUEL_INIT_START` is emitted through the compiled runtime marker template
+`[COUNTER][WALLET][${operation}_${stage}]`; the bundle contains the compiled
+`DUEL_INIT` operation, `START` stage, and wallet marker template. It is therefore
+runtime-equivalent to `[COUNTER][WALLET][DUEL_INIT_START]`, but it is not present
+as one contiguous string literal after Hermes bundling.
+
+The compiled artifact also contains:
+
+```text
+solana:devnet
+minContextSlot
+Check status
+init-onchain
+Duel ready
+```
+
+The exact literal `cluster: devnet` is absent from the bundle and from the active
+application MWA authorization path. A separate `cluster=devnet` string remains
+inside dependency/library string data; it is not the app authorization object.
+The active app path uses `chain: 'solana:devnet'`.
+
+### 58.C — Security ordering and source binding
+
+The packaged source sequence remains:
+
+```text
+wallet opens
+→ callback enters
+→ authorize
+→ sign/send
+→ returned signature
+→ signature parsed
+→ confirmation
+→ /init-onchain backend verification
+→ UI_SUCCESS / Duel ready
+```
+
+The app contains no `/init-onchain` call before confirmed transaction evidence,
+and no `Duel ready` success state before backend verification succeeds. A
+signature returned inside the MWA callback is preserved if the installed
+library's final session cleanup rejects after signing has already returned.
+
+After the build:
+
+```text
+HEAD: c32adda52201770e530f36d554029e3e7450c45b
+origin/master: c32adda52201770e530f36d554029e3e7450c45b
+git status --porcelain: empty
+git diff c32adda52201770e530f36d554029e3e7450c45b HEAD -- app/ server/ program/: empty
+```
+
+The APK SHA-256 was re-read after artifact inspection and remained
+`4f1995685dada5ad493b85b5971fd90947658968543db69d498fad6190a955ac`.
+
+No backend, database, program, mint, production service, failed incident Duel,
+or device was touched. No APK was installed. The incident Duel
+`duel_1791021497753_a8d707b6` remains preserved. The next physical run must use
+a fresh Take → Challenge → Duel and capture event-specific logcat before the
+single `Set up this Duel` tap.
+
+Only the APK identified in §58.A is authorized for the subsequent diagnostic
+installation step. Physical Phantom confirmation, on-chain initialization,
+backend initialization, and the resulting observed marker sequence remain
+pending.
+
+Target: **`BUILDING — MWA DIAGNOSTIC APK READY / OWNER INSTALL + EVENT-SPECIFIC UAT REQUIRED`**.
