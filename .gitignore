@@ -12,5 +12,6 @@ app/android/app/release-signing.properties
 # Physical UAT evidence (local only, never committed)
 .uat/
 /uat-evidence/
+/evidence/
 # Runtime user uploads (avatars live on the host, never in Git)
 server/uploads/
