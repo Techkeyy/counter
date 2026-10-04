@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — FROZEN V1 PHYSICAL-UAT APK READY / OWNER INSTALL REQUIRED`
+**Current Authoritative Status:** `BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; Director-accepted V1 source and production alignment are complete (§56). Exactly one fresh frozen V1 release APK was built and inspected (§57). Owner explicitly approved public publication of this docs-only artifact ledger; normal commit/push closure and final readback are recorded in the closure handoff. Physical installation/UAT remains pending.
+**Repository State:** On branch `master`; visual-foundation remediation commit `3fe92c6` is pushed and clean. Production historical Duel/Activity visibility alignment is deployed Counter-only; the fresh visual-remediation APK is built and artifact-inspected. Economic/core physical UAT remains deferred pending Director second native review.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `6429b7ec58aca89635f459ec1518949ffbc64170`; accepted runtime implementation `e44917b01014b0033f9452f2bf837cf287e7ec6b`. The sole current APK SHA-256 is `98f842401e3c3b4fbf317ad3525c3be5c7cd23d6c1f35b42e05bc28ff3c15138`; all earlier APK hashes are superseded.
-**Last Updated:** 2026-10-03
+**Authoritative Packaged-Source Commit:** `3fe92c642d5101131312a571d660c626090d9210`. The sole current visual-remediation APK SHA-256 is `1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5`; all earlier APK hashes are superseded for the next native visual review.
+**Last Updated:** 2026-10-04
 
 ---
 
@@ -3408,5 +3408,160 @@ was reverted. No mockup-only screenshots are claimed, and no APK was built or
 installed. Native rendered evidence for the 19 requested states remains a
 Director visual-review gate before the final APK.
 
-Target: **`BUILDING — COUNTER FULL EXPERIENCE RECONSTRUCTED / DIRECTOR VISUAL + FINAL APK REVIEW REQUIRED`**.
-**DO NOT BUILD APK until Director review.**
+Target: **`BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`**.
+Economic/core physical UAT is not started by this remediation pass. Owner/Director native review of the fresh APK remains required before any economic flow.
+
+---
+
+## 61. VISUAL FOUNDATION REMEDIATION + FRESH PRODUCT VISIBILITY — 2026-10-04
+
+### 61.A — Accepted scope and source binding
+
+The bounded remediation was implemented and pushed as source commit
+`3fe92c642d5101131312a571d660c626090d9210` (`master == origin/master` at
+build time). Runtime changes are limited to the reconstructed mobile visual
+surfaces, human Activity copy, explicit historical visibility fields/filters,
+and their regression guards. No Solana program, wallet/MWA handoff,
+authentication, stake, settlement, mutual-vote, claim, refund, receipt, or
+timing mechanism was changed.
+
+The mobile changes include:
+
+- compact one-line horizontal Home category chips with a default `All` filter;
+- one empty-feed `Post a Take` CTA and no empty-feed floating `+`;
+- the simple coral conversation dash empty mark;
+- coral-consistent onboarding mark and raised muted-text contrast;
+- removal of redundant Home/Duels/Activity/Profile eyebrows and duplicate own
+  profile identity; `Your balance` replaces `YOUR MONEY`;
+- bottom-navigation/safe-area padding on Home, Duels, Activity, Profile, Take
+  detail, Duel detail, and Receipt scroll surfaces;
+- human faucet Activity copy: `Test funds added` / `250 cUSD was added to your
+  test balance.`; no active `betting` copy.
+
+### 61.B — Production historical visibility boundary
+
+Before mutation, the live Counter SQLite database was stopped, copied, and
+verified:
+
+```text
+backup: /opt/counter/backups/counter-visual-remediation-prearchive-20261004205200.sqlite
+bytes: 184320
+mode: 600
+SHA-256: 4d7b46ab74fb4a8f214cf665eae81c18d02efdf2547401b2ab3097850d8c0989b
+integrity_check: ok
+```
+
+The pre-archive inventory contained 4 Takes (all already `ARCHIVED`), 4
+Duels, 6 Activity rows, 8 users, 0 positions, and 0 receipts. The exact
+pre-reconstruction Duels were explicitly marked `is_archived=1` without
+deleting or rewriting their chain/proof fields:
+
+```text
+duel_1790967323333_405c0728
+duel_1790967562092_97b6b24b
+duel_1791021497753_a8d707b6   # INITIALIZED; signature/PDA/vault preserved
+duel_1791032209504_00ad7c7b
+```
+
+The six pre-reconstruction Activity rows were explicitly marked
+`is_archived=1`, including both stale faucet entries and the four legacy
+challenge notifications. No user, Take, Challenge, Duel, position, receipt,
+transaction, or proof row was deleted. The post-mutation database readback
+was: users `8`, Takes `4` (`0` active), Duels `4` (`0` visible / `4` archived),
+Activity `6` (`6` archived), positions `0`, receipts `0`, with
+`PRAGMA integrity_check = ok`.
+
+The deployed server files were only `server/db.js`,
+`server/routes/activity.js`, `server/routes/duels.js`,
+`server/routes/faucet.js`, `server/routes/takes.js`, and
+`server/routes/users.js`; syntax checks passed and local/remote SHA-256 hashes
+matched. Only `counter-backend.service` was stopped/restarted. Final service
+state was active and `/api/health` returned HTTP `200`.
+
+Public readback proves the boundary: normal `GET /api/duels?isArena=false`
+returns `0`, normal `GET /api/takes` returns `0`, and the owner Profile stats
+return `totalDuels=0`. Direct `GET /api/duels/duel_1791021497753_a8d707b6`
+still returns HTTP `200` with `is_archived=1`, `chain_status=INITIALIZED`, the
+existing public initialization signature, Duel PDA, and Vault PDA. The live
+asset links endpoint remains HTTP `200` and still names `app.counter.mobile`
+with the current release certificate.
+
+### 61.C — Regression gate
+
+```text
+TypeScript: PASS
+V1 experience/product guardrails: PASS
+fresh visibility regression: PASS
+auth boundary: PASS
+profile boundaries: PASS
+Take deletion boundaries: PASS
+portfolio: PASS
+mutual closure: PASS
+MVP lifecycle: PASS
+resolution boundaries: PASS
+chain vectors: 11/11 PASS
+backend adversarial: 8/8 PASS
+git diff --check: PASS
+```
+
+The first local attempts of server suites that require token issuance were
+correctly refused when no local `JWT_SECRET` was supplied; they were rerun
+with an ephemeral test-process-only secret, never printed, and passed. This
+is expected fail-closed behavior, not a production secret disclosure.
+
+### 61.D — Sole fresh APK artifact
+
+Exactly one Gradle release build was run from `app/android`:
+
+```text
+.\gradlew.bat assembleRelease --no-daemon
+BUILD SUCCESSFUL in 13m 14s
+exit: 0
+release APK count: 1
+```
+
+```text
+packaged source: 3fe92c642d5101131312a571d660c626090d9210
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62502355
+SHA-256: 1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+```
+
+The existing rotated `counter` signing identity and current-user DPAPI vault
+were reused. No key was regenerated. The password was decrypted only in the
+build process, was not printed or persisted, and all temporary signing
+environment variables were cleared after Gradle exited.
+
+### 61.E — Compiled-artifact proof
+
+The APK was extracted read-only to
+`.uat/visual-remediation-artifact-3fe92c6/`; the packaged Hermes bundle is
+`assets/index.android.bundle` (2,553,096 bytes). Compiled string/pattern
+evidence includes `The room is quiet`, `Be the first person to post a Take
+worth arguing about.`, `Post a Take`, `Your balance`, `Test funds added`,
+`250 cUSD was added to your test balance.`, `No conversation yet`, `Duels`,
+`Profile`, `filterList`, `onHasVisibleTakesChange`, `textMuted`, and the coral
+onboarding color. Retired strings `money between people`, `social
+predictions`, `YOUR MONEY`, `Devnet cUSD Airdropped`, and `betting` are absent
+from the bundle. `is_archived` is intentionally a server-side visibility
+boundary and is not expected in the mobile bundle.
+
+The built manifest retains `counter://duel/:id`, `counter://receipt/:id`,
+`https://counter.103-195-188-198.sslip.io/d...`, and
+`https://counter.103-195-188-198.sslip.io/r...`, with `autoVerify=true` on both
+HTTPS filters. The APK bundle contains the production backend, program, and
+Devnet mint exactly once each; no mock session token, former JWT fallback,
+private-key header, or seed-phrase string was found. Three `localhost` and one
+`127.0.0.1` occurrences are known dependency/runtime constants; no
+application-owned production backend fallback was introduced.
+
+No app launch, tap-through, wallet interaction, economic UAT, or physical core
+flow was performed in this remediation pass. Native screenshots for Home,
+Duels, Activity, and Profile remain owner/Director review evidence; the fresh
+APK above is the only artifact authorized for the next native visual review.
+
+Target: **`BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`**.
