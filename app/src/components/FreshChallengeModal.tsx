@@ -6,6 +6,14 @@ import { colors, spacing, typography, touchMin } from '../theme';
 import { Avatar, PrimaryButton, Rule, StatusPill } from './CounterUI';
 import { formatUserDisplayName } from '../utils/identity';
 
+const DURATION_OPTIONS = [
+  { minutes: 15, label: '15m' },
+  { minutes: 30, label: '30m' },
+  { minutes: 60, label: '1h' },
+  { minutes: 180, label: '3h' },
+  { minutes: 1440, label: '24h' },
+];
+
 export const FreshChallengeModal: React.FC<{ visible: boolean; take: Take | null; onClose: () => void; onChallengeCreated: (challenge: Challenge) => void }> = ({ visible, take, onClose, onChallengeCreated }) => {
   const [step, setStep] = useState(1);
   const [counter, setCounter] = useState('');
@@ -18,7 +26,13 @@ export const FreshChallengeModal: React.FC<{ visible: boolean; take: Take | null
   const name = formatUserDisplayName({ display_name: take?.author_name, handle: take?.author_handle, wallet: take?.author_wallet });
   const original = (take?.topic || '').trim();
   const finalMinutes = customMinutes ? Number(customMinutes) : minutes;
-  const dueLabel = useMemo(() => finalMinutes >= 1440 ? '24 hours' : `${finalMinutes} minutes`, [finalMinutes]);
+  const dueLabel = useMemo(() => {
+    if (finalMinutes >= 60 && finalMinutes % 60 === 0) {
+      const hours = finalMinutes / 60;
+      return `${hours} hour${hours === 1 ? '' : 's'}`;
+    }
+    return `${finalMinutes} minutes`;
+  }, [finalMinutes]);
   const next = () => { if (!counter.trim()) { setError('Write the counter you want to stand behind.'); return; } if (step === 2 && (!Number(stake) || Number(stake) <= 0 || !Number.isFinite(finalMinutes) || finalMinutes < 15)) { setError('Choose a stake and at least 15 minutes.'); return; } setError(null); setStep((s) => Math.min(3, s + 1)); };
   const submit = async () => {
     if (!take) return;
@@ -31,7 +45,7 @@ export const FreshChallengeModal: React.FC<{ visible: boolean; take: Take | null
   return <Modal visible={visible} transparent animationType="slide"><View style={styles.backdrop}><View style={styles.sheet}><View style={styles.sheetTop}><View><Text style={styles.eyebrow}>CHALLENGE · {step}/3</Text><Text style={styles.title}>{step === 1 ? `Disagree with ${name}` : step === 2 ? 'Make it fair' : 'Check the terms'}</Text></View><TouchableOpacity onPress={onClose} style={styles.close}><Text style={styles.closeText}>×</Text></TouchableOpacity></View><ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
     {error ? <Text style={styles.error}>{error}</Text> : null}
     {step === 1 ? <><View style={styles.original}><View style={styles.person}><Avatar uri={take.author_avatar} wallet={take.author_wallet} size={36} /><View><Text style={styles.author}>{name}</Text><StatusPill label="Their Take" tone="accent" /></View></View><Text style={styles.originalText}>{original}</Text></View><Text style={styles.label}>Your counter</Text><TextInput style={styles.bigInput} value={counter} onChangeText={setCounter} placeholder="Say what you believe instead…" placeholderTextColor={colors.textMuted} multiline textAlignVertical="top" /></> : null}
-    {step === 2 ? <><Text style={styles.label}>Stake each</Text><View style={styles.optionRow}>{['10','25','30','50'].map((value) => <TouchableOpacity key={value} style={[styles.option, stake === value && styles.optionActive]} onPress={() => setStake(value)}><Text style={[styles.optionText, stake === value && styles.optionTextActive]}>${value}</Text></TouchableOpacity>)}<TextInput style={[styles.customStake, !['10','25','30','50'].includes(stake) && styles.optionActive]} value={['10','25','30','50'].includes(stake) ? '' : stake} onChangeText={setStake} placeholder="Other" placeholderTextColor={colors.textMuted} keyboardType="numeric" /></View><Text style={styles.label}>Decide in</Text><View style={styles.optionRow}>{[15,30,60,1440].map((value) => <TouchableOpacity key={value} style={[styles.option, minutes === value && !customMinutes && styles.optionActive]} onPress={() => { setMinutes(value); setCustomMinutes(''); }}><Text style={[styles.optionText, minutes === value && !customMinutes && styles.optionTextActive]}>{value === 1440 ? '24h' : `${value}m`}</Text></TouchableOpacity>)}<TextInput style={styles.customStake} value={customMinutes} onChangeText={setCustomMinutes} placeholder="Custom" placeholderTextColor={colors.textMuted} keyboardType="numeric" /></View><View style={styles.ruleBox}><Text style={styles.ruleTitle}>Settle together</Text><Text style={styles.ruleBody}>Same choice = winner. Different choices return both stakes.</Text></View></> : null}
+    {step === 2 ? <><Text style={styles.label}>Stake each</Text><View style={styles.optionRow}>{['10','25','30','50'].map((value) => <TouchableOpacity key={value} style={[styles.option, stake === value && styles.optionActive]} onPress={() => setStake(value)}><Text style={[styles.optionText, stake === value && styles.optionTextActive]}>${value}</Text></TouchableOpacity>)}<TextInput style={[styles.customStake, !['10','25','30','50'].includes(stake) && styles.optionActive]} value={['10','25','30','50'].includes(stake) ? '' : stake} onChangeText={setStake} placeholder="Other" placeholderTextColor={colors.textMuted} keyboardType="numeric" /></View><Text style={styles.label}>Decide in</Text><View style={styles.optionRow}>{DURATION_OPTIONS.map(({ minutes: value, label }) => <TouchableOpacity key={value} style={[styles.option, minutes === value && !customMinutes && styles.optionActive]} onPress={() => { setMinutes(value); setCustomMinutes(''); }}><Text style={[styles.optionText, minutes === value && !customMinutes && styles.optionTextActive]}>{label}</Text></TouchableOpacity>)}<TextInput style={styles.customStake} value={customMinutes} onChangeText={setCustomMinutes} placeholder="Custom" placeholderTextColor={colors.textMuted} keyboardType="numeric" /></View><View style={styles.ruleBox}><Text style={styles.ruleTitle}>Settle together</Text><Text style={styles.ruleBody}>Same choice = winner. Different choices return both stakes.</Text></View></> : null}
     {step === 3 ? <><View style={styles.review}><Text style={styles.reviewLabel}>{name} says</Text><Text style={styles.reviewText}>{original}</Text><Rule /><Text style={styles.reviewLabel}>You say</Text><Text style={styles.reviewText}>{counter.trim()}</Text></View><View style={styles.summary}><Text style={styles.summaryBig}>${Number(stake).toFixed(0)} cUSD each</Text><Text style={styles.summaryText}>Ends in {dueLabel}</Text><Text style={styles.summaryText}>Same result → winner · different results → refund</Text></View></> : null}
   </ScrollView><View style={styles.actions}>{step > 1 ? <TouchableOpacity style={styles.backBtn} onPress={() => setStep((s) => s - 1)}><Text style={styles.backText}>Back</Text></TouchableOpacity> : null}<View style={styles.primaryWrap}><PrimaryButton label={step === 3 ? 'Send challenge' : 'Continue'} onPress={step === 3 ? submit : next} loading={working} /></View></View></View></View></Modal>;
 };

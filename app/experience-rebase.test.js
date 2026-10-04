@@ -44,6 +44,11 @@ excludes(modal, 'cutoffTs', 'composer cannot submit a cutoff override');
 excludes(modal, 'mutualDeadlineTs', 'composer cannot submit a mutual deadline override');
 includes(modal, 'Settle together', 'composer explains the mutual settlement');
 includes(modal, "Different choices return both stakes", 'composer explains the refund outcome');
+for (const [minutes, label] of [[15, '15m'], [30, '30m'], [60, '1h'], [180, '3h'], [1440, '24h']]) {
+  includes(modal, `{ minutes: ${minutes}, label: '${label}' }`, `Challenge Terms exposes the ${label} option`);
+}
+includes(modal, 'finalMinutes * 60', 'selected duration becomes the requested resolution time');
+excludes(modal, 'Ready to settlement', 'active challenge composer has no broken settlement copy');
 
 for (const label of ['Incoming', 'Sent', 'Active', 'Claimable', 'Completed']) {
   includes(duels, label, `Duels home contains ${label} state/tab`);
@@ -106,6 +111,7 @@ const activeSurface = [app, modal, sheet, duels, activity, receipt, read('src/sc
 for (const forbidden of ['odds', 'probability', 'Side A', 'Side B', 'Counter Verified']) {
   excludes(activeSurface, forbidden, `active V1 surfaces do not expose ${forbidden}`);
 }
+excludes(activeSurface, 'Ready to settlement', 'active reconstructed surfaces use the grammatical Ready to settle copy');
 includes(activeSurface, 'Get test funds', 'profile provides the direct test-funds action');
 includes(detail, 'Get SOL', 'Duel preflight provides the direct SOL action');
 includes(detail, 'hasFeeBalance', 'Duel action is blocked before wallet handoff when fees are insufficient');
