@@ -9,17 +9,16 @@ import {
   AppState,
 } from 'react-native';
 import * as Linking from 'expo-linking';
-import { Header } from './src/components/Header';
-import { FeedScreen } from './src/screens/FeedScreen';
-import { DuelsScreen } from './src/screens/DuelsScreen';
-import { CreateTakeScreen } from './src/screens/CreateTakeScreen';
+import { FreshFeedScreen } from './src/screens/FreshFeedScreen';
+import { FreshDuelsScreen } from './src/screens/FreshDuelsScreen';
+import { FreshCreateTakeScreen } from './src/screens/FreshCreateTakeScreen';
 import { DuelDetailV1Screen } from './src/screens/DuelDetailV1Screen';
-import { TakeDetailScreen } from './src/screens/TakeDetailScreen';
-import { ReceiptScreen } from './src/screens/ReceiptScreen';
-import { ProfileScreen } from './src/screens/ProfileScreen';
-import { ActivityScreen } from './src/screens/ActivityScreen';
-import { ChallengeModalV1 } from './src/components/ChallengeModalV1';
-import { ChallengeSheetV1 } from './src/components/ChallengeSheetV1';
+import { FreshTakeDetailScreen } from './src/screens/FreshTakeDetailScreen';
+import { FreshReceiptScreen } from './src/screens/FreshReceiptScreen';
+import { FreshProfileScreen } from './src/screens/FreshProfileScreen';
+import { FreshActivityScreen } from './src/screens/FreshActivityScreen';
+import { FreshChallengeModal } from './src/components/FreshChallengeModal';
+import { FreshChallengeSheet } from './src/components/FreshChallengeSheet';
 import { OnboardingModal } from './src/components/OnboardingModal';
 import { Icon, IconName } from './src/components/Icon';
 import { colors, spacing, borderRadius, touchMin } from './src/theme';
@@ -239,12 +238,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
-
-      <Header
-        wallet={walletState.publicKey}
-        onAvatarPress={() => openTab('PROFILE')}
-      />
+      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
 
       <View style={styles.content}>
         {linkNotice ? (
@@ -258,7 +252,7 @@ export default function App() {
         {/* Tabs stay mounted (display none) so scroll position and loaded
             content survive detail navigation. */}
         <View style={[styles.fill, currentTab === 'HOME' ? null : styles.hidden]}>
-          <FeedScreen
+          <FreshFeedScreen
             onSelectTake={(take: Take) => setSelectedTake(take)}
             onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
             onChallengePress={(take: Take) => setChallengeTargetTake(take)}
@@ -274,7 +268,7 @@ export default function App() {
           />
         </View>
         <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
-          <DuelsScreen
+          <FreshDuelsScreen
             userWallet={walletState.publicKey}
             onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
@@ -284,7 +278,7 @@ export default function App() {
           />
         </View>
         <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
-          <ActivityScreen
+          <FreshActivityScreen
             onSelectNotification={(notif) => {
               if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
                 setSelectedDuelId(notif.target_id.replace('receipt_', ''));
@@ -296,7 +290,7 @@ export default function App() {
           />
         </View>
         <View style={[styles.fill, currentTab === 'PROFILE' ? null : styles.hidden]}>
-          <ProfileScreen
+          <FreshProfileScreen
             wallet={walletState.publicKey}
             ownWallet={walletState.publicKey}
             onDisconnect={handleDisconnectWallet}
@@ -309,7 +303,7 @@ export default function App() {
         </View>
         {showComposer && (
           <View style={styles.overlay}>
-            <CreateTakeScreen
+            <FreshCreateTakeScreen
               onSuccess={() => {
                 setShowComposer(false);
                 setCurrentTab('HOME');
@@ -321,7 +315,7 @@ export default function App() {
         )}
         {selectedTake && (
           <View style={styles.overlay}>
-            <TakeDetailScreen
+            <FreshTakeDetailScreen
               take={selectedTake}
               onBack={() => setSelectedTake(null)}
               onSelectDuel={(duel) => {
@@ -350,7 +344,7 @@ export default function App() {
         )}
         {selectedReceipt && (
           <View style={styles.overlay}>
-            <ReceiptScreen
+            <FreshReceiptScreen
               receipt={selectedReceipt}
               onBack={() => setSelectedReceipt(null)}
               onViewDuel={(duelId) => {
@@ -362,7 +356,7 @@ export default function App() {
         )}
         {viewProfileWallet && (
           <View style={styles.overlay}>
-            <ProfileScreen
+            <FreshProfileScreen
               wallet={viewProfileWallet}
               ownWallet={walletState.publicKey}
               onBack={() => setViewProfileWallet(null)}
@@ -396,7 +390,7 @@ export default function App() {
         </TouchableOpacity>
       )}
 
-      <ChallengeModalV1
+      <FreshChallengeModal
         visible={!!challengeTargetTake}
         take={challengeTargetTake}
         onClose={() => setChallengeTargetTake(null)}
@@ -410,7 +404,7 @@ export default function App() {
         }}
       />
 
-      <ChallengeSheetV1
+      <FreshChallengeSheet
         challenge={reviewChallenge}
         userWallet={walletState.publicKey}
         onClose={() => setReviewChallenge(null)}
@@ -531,9 +525,9 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     minHeight: 64,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
+    borderTopColor: colors.divider,
     alignItems: 'stretch',
     justifyContent: 'space-around',
     paddingBottom: spacing.xs,

@@ -14,26 +14,26 @@ const includes = (source, text, message) => assert(source.includes(text), messag
 const excludes = (source, text, message) => assert(!source.includes(text), message);
 
 const app = read('App.tsx');
-const modal = read('src/components/ChallengeModalV1.tsx');
-const sheet = read('src/components/ChallengeSheetV1.tsx');
+const modal = read('src/components/FreshChallengeModal.tsx');
+const sheet = read('src/components/FreshChallengeSheet.tsx');
 const stake = read('src/components/BackModal.tsx');
-const duels = read('src/screens/DuelsScreen.tsx');
+const duels = read('src/screens/FreshDuelsScreen.tsx');
 const stateMachine = read('src/utils/duelState.js');
 const detail = read('src/screens/DuelDetailV1Screen.tsx');
-const receipt = read('src/screens/ReceiptScreen.tsx');
+const receipt = read('src/screens/FreshReceiptScreen.tsx');
 const api = read('src/api.ts');
 const chain = read('src/chain.ts');
 const diagnostics = read('src/diagnostics.ts');
 
-includes(app, "ChallengeModalV1", 'App reaches the V1 challenge composer');
-includes(app, "ChallengeSheetV1", 'App reaches the V1 incoming challenge sheet');
+includes(app, "FreshChallengeModal", 'App reaches the reconstructed challenge composer');
+includes(app, "FreshChallengeSheet", 'App reaches the reconstructed incoming challenge sheet');
 includes(app, "setCurrentTab('DUELS')", 'successful Challenge routes to Duels');
 includes(app, 'setCreatedChallenge(created)', 'returned Challenge is retained locally');
 includes(app, 'setTabFocus((n) => n + 1)', 'successful Challenge triggers the Duels refresh/focus mechanism');
 includes(app, 'duelsActionableCount', 'Duels exposes an actionable lifecycle count');
 includes(app, 'activityActionableCount', 'Activity exposes an actionable lifecycle count');
 
-for (const [name, source] of [['ChallengeModalV1', modal], ['ChallengeSheetV1', sheet]]) {
+for (const [name, source] of [['FreshChallengeModal', modal], ['FreshChallengeSheet', sheet]]) {
   excludes(source, 'mwaSign', `${name} does not open the wallet during challenge review/accept`);
   excludes(source, 'transact', `${name} does not invoke MWA during challenge review/accept`);
 }
@@ -48,12 +48,12 @@ includes(modal, "Different choices return both stakes", 'composer explains the r
 for (const label of ['Incoming', 'Sent', 'Active', 'Claimable', 'Completed']) {
   includes(duels, label, `Duels home contains ${label} state/tab`);
 }
-for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Ready to stake', 'Funding in progress', 'Duel live', 'Ready to settle', 'Refund available']) {
+for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Ready to stake', 'Funding in progress', 'Duel live', 'Ready to settle', 'Make refund available']) {
   includes(duels + detail + stateMachine, label, `V1 lifecycle contains ${label}`);
 }
 includes(sheet, 'challenged your Take', 'incoming challenge copy identifies the Take');
 includes(sheet, 'You said', 'incoming challenge shows the creator proposition');
-includes(sheet, 'They say', 'incoming challenge shows the challenger proposition');
+includes(sheet, 'challenge.proposition_b', 'incoming challenge shows the challenger proposition');
 includes(sheet, 'Accept challenge', 'incoming challenge exposes the authenticated accept action');
 includes(sheet, 'Counter', 'incoming challenge exposes the counter path');
 includes(sheet, 'Decline', 'incoming challenge exposes the decline path');
@@ -69,7 +69,7 @@ includes(detail, 'The other captain has been notified.', 'settlement exposes the
 includes(detail, 'submitted their result', 'settlement exposes the opponent-first-vote state');
 includes(duels, 'otherVoteSubmitted', 'Duels lifecycle consumes private vote presence without exposing the choice');
 includes(duels, 'onActionableCountChange', 'Duels reports actionable lifecycle count');
-const activity = read('src/screens/ActivityScreen.tsx');
+const activity = read('src/screens/FreshActivityScreen.tsx');
 includes(activity, 'READY_TO_SETTLE', 'Activity recognizes derived ready-to-settle lifecycle items');
 includes(activity, 'OPPONENT_SUBMITTED_RESULT', 'Activity recognizes opponent-result lifecycle items');
 includes(activity, 'REFUND_READY', 'Activity recognizes refund lifecycle items');
@@ -97,5 +97,18 @@ for (const marker of ['START', 'MWA_OPEN', 'MWA_APPROVED', 'MWA_CANCELLED', 'TX_
 for (const operation of ['DUEL_INIT', 'STAKE', 'SETTLEMENT', 'CLAIM']) {
   includes(chain + detail + stake, operation, `wallet diagnostics cover ${operation}`);
 }
+
+// The old dashboard shell is intentionally no longer reachable from App.
+for (const legacy of ['./src/screens/FeedScreen', './src/screens/DuelsScreen', './src/screens/ActivityScreen', './src/screens/ProfileScreen', './src/screens/TakeDetailScreen', './src/components/ChallengeModalV1', './src/components/ChallengeSheetV1', './src/screens/ReceiptScreen']) {
+  excludes(app, legacy, `${legacy} is not imported by the active graph`);
+}
+const activeSurface = [app, modal, sheet, duels, activity, receipt, read('src/screens/FreshFeedScreen.tsx'), read('src/screens/FreshProfileScreen.tsx')].join('\n');
+for (const forbidden of ['odds', 'probability', 'Side A', 'Side B', 'Counter Verified']) {
+  excludes(activeSurface, forbidden, `active V1 surfaces do not expose ${forbidden}`);
+}
+includes(activeSurface, 'Get test funds', 'profile provides the direct test-funds action');
+includes(detail, 'Get SOL', 'Duel preflight provides the direct SOL action');
+includes(detail, 'hasFeeBalance', 'Duel action is blocked before wallet handoff when fees are insufficient');
+includes(activeSurface, 'Settle together', 'the new product language explains mutual settlement');
 
 console.log('V1 experience rebase source guardrails passed');
