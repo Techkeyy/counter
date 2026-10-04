@@ -629,7 +629,7 @@ const InfoRow: React.FC<{ label: string; value: string; mono?: boolean }> = ({ l
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl * 2 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 112 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl, backgroundColor: colors.background },
   centerText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },

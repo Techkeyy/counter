@@ -61,6 +61,7 @@ export default function App() {
   const [tabFocus, setTabFocus] = useState(0);
   const [duelsActionableCount, setDuelsActionableCount] = useState(0);
   const [activityActionableCount, setActivityActionableCount] = useState(0);
+  const [hasVisibleTakes, setHasVisibleTakes] = useState(false);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -255,6 +256,7 @@ export default function App() {
           <FreshFeedScreen
             onSelectTake={(take: Take) => setSelectedTake(take)}
             onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onHasVisibleTakesChange={setHasVisibleTakes}
             onChallengePress={(take: Take) => setChallengeTargetTake(take)}
             onCreateTakePress={() => {
               clearDetailViews();
@@ -375,7 +377,7 @@ export default function App() {
         )}
       </View>
 
-      {currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && !viewProfileWallet && (
+      {hasVisibleTakes && currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && !viewProfileWallet && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => {

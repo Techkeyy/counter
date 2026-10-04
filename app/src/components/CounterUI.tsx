@@ -52,7 +52,7 @@ export const PreflightRow: React.FC<{ label: string; value: string; ready?: bool
 
 export const EmptyState: React.FC<{ title: string; body: string; action?: string; onAction?: () => void }> = ({ title, body, action, onAction }) => (
   <View style={styles.empty}>
-    <View style={styles.emptyMark}><Text style={styles.emptyMarkText}>—</Text></View>
+    <View style={styles.emptyMark} accessibilityLabel="No conversation yet"><Text style={styles.emptyMarkText}>—</Text></View>
     <Text style={styles.emptyTitle}>{title}</Text>
     <Text style={styles.emptyBody}>{body}</Text>
     {action ? <PrimaryButton label={action} onPress={onAction} /> : null}
@@ -91,8 +91,9 @@ const styles = StyleSheet.create({
   inlineAction: { minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.sm },
   inlineActionText: { color: colors.brandPrimary, ...typography.captionBold },
   empty: { alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, flex: 1 },
-  emptyMark: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surfaceLight, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg },
-  emptyMarkText: { color: colors.brandPrimary, fontSize: 32, fontWeight: '300' },
+  // A quiet conversation mark, not a generic circular illustration.
+  emptyMark: { width: 56, height: 32, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.lg },
+  emptyMarkText: { color: colors.brandPrimary, fontSize: 42, lineHeight: 32, fontWeight: '300' },
   emptyTitle: { ...typography.h2, textAlign: 'center', marginBottom: spacing.sm },
   emptyBody: { ...typography.bodyMuted, textAlign: 'center', maxWidth: 300, marginBottom: spacing.lg },
 });

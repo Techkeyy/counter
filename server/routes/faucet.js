@@ -94,8 +94,8 @@ router.post('/cusd', requireAuth, async (req, res) => {
 
     // Record activity notification
     execute(
-      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
-       VALUES (?, ?, 'FAUCET_AIRDROP', 'system', ?, 'TOKEN', 'Devnet cUSD Airdropped', 'Received 250 Devnet cUSD test tokens for duels & betting.', 0, ?)`,
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, is_archived, created_at)
+       VALUES (?, ?, 'FAUCET_AIRDROP', 'system', ?, 'TOKEN', 'Test funds added', '250 cUSD was added to your test balance.', 0, 0, ?)`,
       [`act_faucet_${Date.now()}`, wallet, DEVNET_CUSD_MINT.toBase58(), new Date().toISOString()]
     );
 

@@ -35,7 +35,9 @@ export const colors = {
 
   textPrimary: '#FFF7EA',
   textSecondary: '#B8BAC8',
-  textMuted: '#777B8E',
+  // Keep secondary labels readable on Samsung displays without flattening
+  // the hierarchy between body copy and contextual metadata.
+  textMuted: '#9295A6',
   overlay: 'rgba(8, 9, 14, 0.82)',
 };
 

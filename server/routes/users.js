@@ -51,7 +51,7 @@ router.get('/:wallet', async (req, res) => {
 
   // Aggregate stats
   const totalDuelsAsCaptain = queryOne(
-    `SELECT COUNT(*) as count FROM duels WHERE captain_a_wallet = ? OR captain_b_wallet = ?`,
+    `SELECT COUNT(*) as count FROM duels WHERE COALESCE(is_archived, 0) = 0 AND (captain_a_wallet = ? OR captain_b_wallet = ?)`,
     [wallet, wallet]
   )?.count || 0;
 
@@ -61,7 +61,7 @@ router.get('/:wallet', async (req, res) => {
   )?.count || 0;
 
   const totalResolved = queryOne(
-    `SELECT COUNT(*) as count FROM receipts WHERE captain_a_wallet = ? OR captain_b_wallet = ?`,
+    `SELECT COUNT(*) as count FROM receipts r INNER JOIN duels d ON d.id = r.duel_id AND COALESCE(d.is_archived, 0) = 0 WHERE r.captain_a_wallet = ? OR r.captain_b_wallet = ?`,
     [wallet, wallet]
   )?.count || 0;
 
@@ -148,8 +148,10 @@ router.get('/:wallet/rivalry/:opponentWallet', (req, res) => {
     `SELECT d.*, r.winner_wallet, r.resolution_summary, r.created_at as resolved_at
      FROM duels d
      LEFT JOIN receipts r ON d.id = r.duel_id
-     WHERE (d.captain_a_wallet = ? AND d.captain_b_wallet = ?)
+     WHERE COALESCE(d.is_archived, 0) = 0
+       AND ((d.captain_a_wallet = ? AND d.captain_b_wallet = ?)
         OR (d.captain_a_wallet = ? AND d.captain_b_wallet = ?)
+       )
      ORDER BY d.created_at DESC`,
     [walletA, walletB, walletB, walletA]
   );

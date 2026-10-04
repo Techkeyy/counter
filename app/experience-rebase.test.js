@@ -14,6 +14,12 @@ const includes = (source, text, message) => assert(source.includes(text), messag
 const excludes = (source, text, message) => assert(!source.includes(text), message);
 
 const app = read('App.tsx');
+const feed = read('src/screens/FreshFeedScreen.tsx');
+const profile = read('src/screens/FreshProfileScreen.tsx');
+const counterUi = read('src/components/CounterUI.tsx');
+const theme = read('src/theme.ts');
+const activity = read('src/screens/FreshActivityScreen.tsx');
+const faucet = fs.readFileSync(path.join(root, '..', 'server/routes/faucet.js'), 'utf8');
 const modal = read('src/components/FreshChallengeModal.tsx');
 const sheet = read('src/components/FreshChallengeSheet.tsx');
 const stake = read('src/components/BackModal.tsx');
@@ -32,6 +38,25 @@ includes(app, 'setCreatedChallenge(created)', 'returned Challenge is retained lo
 includes(app, 'setTabFocus((n) => n + 1)', 'successful Challenge triggers the Duels refresh/focus mechanism');
 includes(app, 'duelsActionableCount', 'Duels exposes an actionable lifecycle count');
 includes(app, 'activityActionableCount', 'Activity exposes an actionable lifecycle count');
+includes(app, 'hasVisibleTakes && currentTab === \'HOME\'', 'Home FAB is only reachable when the feed has visible Takes');
+includes(feed, "useState<CategoryFilter>('ALL')", 'fresh Home selects All categories by default');
+includes(feed, 'onHasVisibleTakesChange', 'Home reports whether the current feed has visible Takes');
+includes(feed, 'filterList', 'Home category controls use a compact horizontal strip');
+includes(feed, 'numberOfLines={1}', 'Home category labels stay on one line');
+assert((feed.match(/action="Post a Take"/g) || []).length === 1, 'empty Home exposes one create-Take CTA');
+excludes(feed, 'eyebrow="social predictions"', 'Home does not use a redundant eyebrow');
+excludes(duels, 'money between people', 'Duels does not use the redundant money eyebrow');
+excludes(profile, 'YOUR MONEY', 'Profile uses human balance copy');
+includes(profile, "title={isOwn ? 'Profile' : displayName}", 'own Profile header does not duplicate the display name');
+excludes(activity, 'Devnet cUSD Airdropped', 'Activity does not expose stale faucet title copy');
+excludes(activity, 'betting', 'Activity does not expose betting copy');
+excludes(faucet, 'betting', 'future faucet Activity copy does not mention betting');
+includes(counterUi, 'emptyMarkText}>—', 'empty states use the simple conversation dash mark');
+excludes(counterUi, 'borderRadius: 28', 'empty states do not wrap the dash in a generic circle');
+includes(theme, "textMuted: '#9295A6'", 'muted text contrast is raised for Samsung readability');
+for (const screen of [feed, duels, activity, profile, read('src/screens/FreshTakeDetailScreen.tsx'), detail, read('src/screens/FreshReceiptScreen.tsx')]) {
+  includes(screen, 'paddingBottom: 112', 'scroll surfaces leave room for bottom navigation and safe area');
+}
 
 for (const [name, source] of [['FreshChallengeModal', modal], ['FreshChallengeSheet', sheet]]) {
   excludes(source, 'mwaSign', `${name} does not open the wallet during challenge review/accept`);
@@ -74,7 +99,6 @@ includes(detail, 'The other captain has been notified.', 'settlement exposes the
 includes(detail, 'submitted their result', 'settlement exposes the opponent-first-vote state');
 includes(duels, 'otherVoteSubmitted', 'Duels lifecycle consumes private vote presence without exposing the choice');
 includes(duels, 'onActionableCountChange', 'Duels reports actionable lifecycle count');
-const activity = read('src/screens/FreshActivityScreen.tsx');
 includes(activity, 'READY_TO_SETTLE', 'Activity recognizes derived ready-to-settle lifecycle items');
 includes(activity, 'OPPONENT_SUBMITTED_RESULT', 'Activity recognizes opponent-result lifecycle items');
 includes(activity, 'REFUND_READY', 'Activity recognizes refund lifecycle items');

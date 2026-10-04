@@ -24,6 +24,7 @@ function derivedDuelActivity(userWallet) {
        LEFT JOIN users ua ON d.captain_a_wallet = ua.wallet_address
        LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
       WHERE (d.captain_a_wallet = ? OR d.captain_b_wallet = ?)
+        AND COALESCE(d.is_archived, 0) = 0
         AND (d.resolution_mode = 'MUTUAL' OR d.resolution_mode IS NULL)`,
     [userWallet, userWallet]
   );
@@ -76,7 +77,7 @@ function derivedDuelActivity(userWallet) {
 router.get('/', requireAuth, (req, res) => {
   const userWallet = req.userWallet;
   const persisted = queryAll(
-    `SELECT * FROM activity WHERE user_wallet = ? ORDER BY created_at DESC LIMIT 50`,
+    `SELECT * FROM activity WHERE user_wallet = ? AND COALESCE(is_archived, 0) = 0 ORDER BY created_at DESC LIMIT 50`,
     [userWallet]
   );
   const existingKeys = new Set(persisted.map((item) => `${item.type}|${item.target_id}`));
@@ -92,7 +93,7 @@ router.get('/', requireAuth, (req, res) => {
 // POST /api/activity/read-all
 router.post('/read-all', requireAuth, (req, res) => {
   const userWallet = req.userWallet;
-  execute(`UPDATE activity SET is_read = 1 WHERE user_wallet = ?`, [userWallet]);
+  execute(`UPDATE activity SET is_read = 1 WHERE user_wallet = ? AND COALESCE(is_archived, 0) = 0`, [userWallet]);
   res.json({ success: true });
 });
 

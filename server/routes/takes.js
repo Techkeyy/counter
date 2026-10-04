@@ -80,7 +80,7 @@ router.get('/:id', (req, res) => {
      FROM duels d
      LEFT JOIN users ua ON d.captain_a_wallet = ua.wallet_address
      LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
-     WHERE d.take_id = ? ORDER BY d.created_at DESC`,
+     WHERE d.take_id = ? AND COALESCE(d.is_archived, 0) = 0 ORDER BY d.created_at DESC`,
     [req.params.id]
   );
 

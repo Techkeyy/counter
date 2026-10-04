@@ -48,7 +48,7 @@ router.get('/', optionalAuth, (req, res) => {
     LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
     LEFT JOIN challenges c ON d.challenge_id = c.id
     LEFT JOIN takes t ON d.take_id = t.id
-    WHERE 1=1
+    WHERE COALESCE(d.is_archived, 0) = 0
   `;
   const params = [];
 

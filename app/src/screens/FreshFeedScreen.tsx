@@ -14,6 +14,7 @@ interface FreshFeedScreenProps {
   onCreateTakePress?: () => void;
   onOpenProfile?: () => void;
   onOpenAuthorProfile?: (wallet: string | null) => void;
+  onHasVisibleTakesChange?: (hasVisibleTakes: boolean) => void;
   userWallet?: string | null;
   refreshSignal?: number;
   focusSignal?: number;
@@ -21,7 +22,7 @@ interface FreshFeedScreenProps {
 
 export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
   onSelectTake, onSelectDuel, onChallengePress, onCreateTakePress, onOpenProfile,
-  onOpenAuthorProfile, userWallet, refreshSignal, focusSignal,
+  onOpenAuthorProfile, onHasVisibleTakesChange, userWallet, refreshSignal, focusSignal,
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
@@ -38,7 +39,9 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
         api.getTakes(category === 'ALL' ? undefined : category),
         api.getDuels(category === 'ALL' ? {} : { category }),
       ]);
-      setTakes(Array.isArray(nextTakes) ? nextTakes : []);
+      const visibleTakes = Array.isArray(nextTakes) ? nextTakes : [];
+      setTakes(visibleTakes);
+      onHasVisibleTakesChange?.(visibleTakes.length > 0);
       setDuels(Array.isArray(nextDuels) ? nextDuels : []);
       if (userWallet) {
         try {
@@ -49,7 +52,7 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
     } catch (err: any) {
       setError(isUnreachable(err) ? 'NETWORK_UNREACHABLE' : 'The feed could not load.');
     } finally { setLoading(false); setRefreshing(false); }
-  }, [category, userWallet]);
+  }, [category, onHasVisibleTakesChange, userWallet]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { if (refreshSignal) { setRefreshing(true); loadData(); } }, [refreshSignal, loadData]);
@@ -84,9 +87,9 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScreenHeader eyebrow="social predictions" title="Home" right={<TouchableOpacity onPress={onOpenProfile} style={styles.avatarButton} accessibilityLabel="Open profile"><Avatar wallet={userWallet} size={36} /></TouchableOpacity>} />
+      <ScreenHeader title="Home" right={<TouchableOpacity onPress={onOpenProfile} style={styles.avatarButton} accessibilityLabel="Open profile"><Avatar wallet={userWallet} size={36} /></TouchableOpacity>} />
       <View style={styles.intro}><Text style={styles.introTitle}>Say what you think.</Text><Text style={styles.introBody}>Make a Take. Let someone challenge it.</Text></View>
-      <FlatList horizontal data={ALL_CATEGORIES} keyExtractor={(x) => x} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} renderItem={({ item }) => <TouchableOpacity onPress={() => setCategory(item)} style={[styles.filter, category === item && styles.filterActive]} accessibilityRole="tab" accessibilityState={{ selected: category === item }}><Text style={[styles.filterText, category === item && styles.filterTextActive]}>{categoryLabel(item)}</Text></TouchableOpacity>} />
+      <FlatList style={styles.filterList} horizontal data={ALL_CATEGORIES} keyExtractor={(x) => x} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} renderItem={({ item }) => <TouchableOpacity onPress={() => setCategory(item)} style={[styles.filter, category === item && styles.filterActive]} accessibilityRole="tab" accessibilityState={{ selected: category === item }}><Text numberOfLines={1} ellipsizeMode="clip" style={[styles.filterText, category === item && styles.filterTextActive]}>{categoryLabel(item)}</Text></TouchableOpacity>} />
       {loading ? <View style={styles.loading}><Text style={styles.loadingText}>Finding fresh Takes…</Text></View> : error ? <EmptyState title={error} body="Check your connection and try again." action="Retry" onAction={loadData} /> : <FlatList data={takes} keyExtractor={(x) => x.id} renderItem={renderTake} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={colors.brandPrimary} />} contentContainerStyle={takes.length ? styles.list : styles.emptyList} ListEmptyComponent={<EmptyState title="The room is quiet" body="Be the first person to post a Take worth arguing about." action="Post a Take" onAction={onCreateTakePress} />} />}
       {profileIncomplete && !loading && !error ? <TouchableOpacity style={styles.profileNudge} onPress={onOpenProfile} accessibilityRole="button"><Text style={styles.profileNudgeText}>Finish your profile so people recognize you</Text><Text style={styles.profileNudgeArrow}>›</Text></TouchableOpacity> : null}
     </View>
@@ -94,5 +97,5 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background }, avatarButton: { minWidth: touchMin, minHeight: touchMin, justifyContent: 'center', alignItems: 'flex-end' }, intro: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md }, introTitle: { ...typography.display, fontSize: 29 }, introBody: { ...typography.bodyMuted, marginTop: spacing.xs }, filters: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, gap: spacing.xs }, filter: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: 18 }, filterActive: { backgroundColor: colors.surfaceHighlight }, filterText: { ...typography.captionBold, color: colors.textMuted }, filterTextActive: { color: colors.warmIvory }, list: { paddingBottom: 90 }, emptyList: { flexGrow: 1 }, post: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg }, authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }, authorCopy: { flex: 1, marginLeft: spacing.sm }, name: { ...typography.bodyBold }, meta: { ...typography.caption, marginTop: 2 }, topic: { ...typography.h1, fontSize: 24, lineHeight: 29, marginBottom: spacing.sm }, why: { ...typography.body, color: colors.textSecondary }, whyLabel: { color: colors.textMuted, fontWeight: '800' }, duelHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: 'rgba(124,140,255,0.1)', borderRadius: 12 }, duelHintText: { color: colors.cobalt, ...typography.captionBold }, duelHintArrow: { color: colors.cobalt, fontSize: 22 }, actions: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, minHeight: touchMin }, actionText: { ...typography.caption, color: colors.textMuted }, actionDot: { color: colors.textMuted, paddingHorizontal: spacing.sm }, actionSpacer: { flex: 1 }, challenge: { minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.md }, challengeText: { color: colors.brandPrimary, ...typography.captionBold }, rule: { marginLeft: spacing.lg }, loading: { padding: spacing.xl, alignItems: 'center' }, loadingText: { ...typography.bodyMuted }, profileNudge: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.md, minHeight: 50, backgroundColor: colors.surfaceLight, borderRadius: 16, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center' }, profileNudgeText: { flex: 1, ...typography.bodyBold, fontSize: 13 }, profileNudgeArrow: { color: colors.brandPrimary, fontSize: 24 },
+  container: { flex: 1, backgroundColor: colors.background }, avatarButton: { minWidth: touchMin, minHeight: touchMin, justifyContent: 'center', alignItems: 'flex-end' }, intro: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md }, introTitle: { ...typography.display, fontSize: 29 }, introBody: { ...typography.bodyMuted, marginTop: spacing.xs }, filterList: { flexGrow: 0 }, filters: { paddingHorizontal: spacing.lg, paddingRight: spacing.lg, paddingBottom: spacing.md, gap: spacing.xs }, filter: { height: 36, minHeight: 36, minWidth: 46, flexShrink: 0, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: 18 }, filterActive: { backgroundColor: colors.surfaceHighlight }, filterText: { ...typography.captionBold, color: colors.textMuted }, filterTextActive: { color: colors.warmIvory }, list: { paddingBottom: 112 }, emptyList: { flexGrow: 1, paddingBottom: 112 }, post: { paddingHorizontal: spacing.lg, paddingVertical: spacing.lg }, authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }, authorCopy: { flex: 1, marginLeft: spacing.sm }, name: { ...typography.bodyBold }, meta: { ...typography.caption, marginTop: 2 }, topic: { ...typography.h1, fontSize: 24, lineHeight: 29, marginBottom: spacing.sm }, why: { ...typography.body, color: colors.textSecondary }, whyLabel: { color: colors.textMuted, fontWeight: '800' }, duelHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: 'rgba(124,140,255,0.1)', borderRadius: 12 }, duelHintText: { color: colors.cobalt, ...typography.captionBold }, duelHintArrow: { color: colors.cobalt, fontSize: 22 }, actions: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, minHeight: touchMin }, actionText: { ...typography.caption, color: colors.textMuted }, actionDot: { color: colors.textMuted, paddingHorizontal: spacing.sm }, actionSpacer: { flex: 1 }, challenge: { minHeight: touchMin, justifyContent: 'center', paddingHorizontal: spacing.md }, challengeText: { color: colors.brandPrimary, ...typography.captionBold }, rule: { marginLeft: spacing.lg }, loading: { padding: spacing.xl, alignItems: 'center' }, loadingText: { ...typography.bodyMuted }, profileNudge: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.md, minHeight: 50, backgroundColor: colors.surfaceLight, borderRadius: 16, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center' }, profileNudgeText: { flex: 1, ...typography.bodyBold, fontSize: 13 }, profileNudgeArrow: { color: colors.brandPrimary, fontSize: 24 },
 });

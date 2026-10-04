@@ -124,6 +124,7 @@ async function getDb() {
       resolution_data TEXT,
       resolution_tx TEXT,
       is_arena INTEGER DEFAULT 0,
+      is_archived INTEGER DEFAULT 0,
       share_slug TEXT UNIQUE,
       created_at TEXT
     );
@@ -165,6 +166,7 @@ async function getDb() {
       title TEXT,
       message TEXT,
       is_read INTEGER DEFAULT 0,
+      is_archived INTEGER DEFAULT 0,
       created_at TEXT
     );
 
@@ -194,9 +196,13 @@ async function getDb() {
   ensureColumn('duels', 'onchain_mint', 'TEXT');
   ensureColumn('duels', 'init_tx_signature', 'TEXT');
   ensureColumn('duels', 'chain_status', "TEXT DEFAULT 'UNINITIALIZED'");
+  // Historical UAT/evidence rows stay immutable and retrievable, but are
+  // excluded from normal social surfaces by an explicit visibility flag.
+  ensureColumn('duels', 'is_archived', 'INTEGER DEFAULT 0');
   ensureColumn('positions', 'stake_tx_signature', 'TEXT');
   ensureColumn('positions', 'payout_amount', 'REAL');
   ensureColumn('takes', 'record_origin', "TEXT DEFAULT 'USER'");
+  ensureColumn('activity', 'is_archived', 'INTEGER DEFAULT 0');
   // Settlement-mode columns (explicit duel terms; legacy rows default to the
   // historical Counter Verified behavior).
   ensureColumn('duels', 'resolution_mode', "TEXT DEFAULT 'COUNTER_VERIFIED'");
