@@ -3,12 +3,12 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`
+**Current Authoritative Status:** `BUILT — FINAL SURGICAL REMEDIATION / THIRD NATIVE REVIEW INSTALL PENDING DEVICE`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; visual-foundation remediation commit `3fe92c6` is pushed and clean. Production historical Duel/Activity visibility alignment is deployed Counter-only; the fresh visual-remediation APK is built and artifact-inspected. Economic/core physical UAT remains deferred pending Director second native review.
+**Repository State:** On branch `master`; final surgical Duels-load and Home-mark remediation commit `41e36f2` is pushed and clean before this docs-only update. Production historical Duel/Activity visibility alignment is deployed Counter-only; the final surgical APK is built and artifact-inspected. The third native review install is pending because the owner-authorized device was not present in normal ADB at the builder check. Economic/core physical UAT remains deferred.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `3fe92c642d5101131312a571d660c626090d9210`. The sole current visual-remediation APK SHA-256 is `1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5`; all earlier APK hashes are superseded for the next native visual review.
-**Last Updated:** 2026-10-04
+**Authoritative Packaged-Source Commit:** `41e36f2995d5290eaba16a3b5182f0ace6e34143`. The sole current final-surgical APK SHA-256 is `6e8bc6e46e223ce469778db7d874f15a61745cba012c56c647f4f1cf01b9c7bd`; the prior visual-review APK `1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5` is superseded.
+**Last Updated:** 2026-10-05
 
 ---
 
@@ -3409,6 +3409,148 @@ installed. Native rendered evidence for the 19 requested states remains a
 Director visual-review gate before the final APK.
 
 Target: **`BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`**.
+
+## 62. FINAL SURGICAL NATIVE REMEDIATION — 2026-10-05
+
+### 62.A — Director-bounded diagnosis and exact repair
+
+The second native review's Duels failure was diagnosed before changing source.
+The production journal showed the base Duels request succeeding while the
+auxiliary portfolio request failed:
+
+```text
+GET /api/duels?                 200, then 304
+GET /api/challenges             304 after the initial session/auth 401
+GET /api/users/portfolio        503
+portfolio read failure          upstream Solana RPC 429 Too Many Requests
+```
+
+The active `FreshDuelsScreen` previously used one `Promise.all` for Duels,
+Challenges, and Portfolio, so a transient/upstream portfolio balance failure
+was surfaced as the generic `Duels could not load` error. The base Duels route
+was healthy, its archived-row filter was intact, the normal response shape was
+valid, and persistent authenticated challenge requests were succeeding. This
+was therefore classified as an auxiliary portfolio RPC-rate-limit failure
+masked as a screen-wide Duels failure—not an archive-filter, serialization,
+route, or transport defect.
+
+The bounded repair is source commit `41e36f2995d5290eaba16a3b5182f0ace6e34143`
+(`Fix Duels auxiliary load isolation`), pushed normally to `master`:
+
+- `app/src/utils/duelsLoad.ts` uses settled request handling so the base Duels
+  list and required challenge inbox remain usable when Portfolio is unavailable.
+- Portfolio becomes explicitly unavailable (`portfolio: null` and
+  `portfolioUnavailable: true`) instead of turning an otherwise valid empty
+  Duels surface into an error.
+- A genuine base Duels or challenge failure still rejects and remains visible.
+- No backend, database, Solana program, wallet, MWA, settlement, claim,
+  refund, receipt, or economic mechanism was changed.
+
+The owner had manually selected `CRYPTO` and then `SPORTS` during the review;
+production requests include those category filters. The Home source already
+defaults to `ALL` and does not persist the filter, so no speculative
+zero-content normalization logic was added. The accepted compact category row
+already had trailing `paddingRight: spacing.lg`; no category redesign was made.
+
+The only additional visual surgical change is the Home fallback mark: the
+optional avatar placeholder color now receives the existing coral brand token
+(`brandPrimary`). Persisted/user-provided avatar behavior is unchanged, and
+Activity/Profile accepted surfaces were not modified.
+
+### 62.B — Regression evidence
+
+The final local regression run passed:
+
+```text
+TypeScript: PASS
+Duels load regression: PASS (portfolio 503 does not mask successful empty Duels)
+V1 experience/product guardrails: PASS
+MWA handoff source contract: PASS
+Canonical Duel mapper: PASS (14/14)
+fresh visibility regression: PASS (normal surfaces hide archived rows; direct evidence remains retrievable)
+profile boundaries: PASS
+portfolio: PASS
+chain vectors: PASS (11/11)
+resolution boundaries: PASS
+backend adversarial: PASS (8/8)
+git diff --check: PASS
+```
+
+The fresh-visibility regression includes the Activity archived-visibility
+boundary; no separate activity test file exists. No production deployment or
+database mutation was required for this client-only repair. Read-only
+production checks remained healthy: `/api/health` returned `200` and normal
+`GET /api/duels?isArena=false` returned `200` with `{"duels":[]}`.
+
+### 62.C — Sole final-surgical APK artifact
+
+Exactly one release APK build was run after source commit `41e36f2`:
+
+```text
+command: .\\gradlew.bat assembleRelease --no-daemon --console=plain
+result: BUILD SUCCESSFUL in 27m
+exit: 0
+actionable tasks: 703 (28 executed, 675 up-to-date)
+release APK count: 1
+```
+
+```text
+packaged source: 41e36f2995d5290eaba16a3b5182f0ace6e34143
+APK: C:\\Users\\HomePC\\Desktop\\Counter\\app\\android\\app\\build\\outputs\\apk\\release\\app-release.apk
+bytes: 62503007
+SHA-256: 6e8bc6e46e223ce469778db7d874f15a61745cba012c56c647f4f1cf01b9c7bd
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+```
+
+The existing rotated `counter` signing identity and current-user DPAPI vault
+were reused. No key was regenerated. The password was decrypted only inside
+the build process, was not printed or persisted, and the temporary signing
+environment was cleared after Gradle exited. The prior APK
+`1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5` is
+superseded.
+
+### 62.D — Packaged-artifact evidence
+
+The final APK was extracted read-only to
+`.uat/final-surgical-apk-6e8bc6e4/`; its packaged Hermes asset is
+`assets/index.android.bundle` (2,554,012 bytes). The artifact contains the
+new client contract evidence, including:
+
+- the exact diagnostic marker `portfolio unavailable; base Duel list remains
+  usable`;
+- compiled request-path tokens for `/duels`, `/challenges`, and
+  `/users/portfolio`, plus the compiled `getDuels`, `getChallenges`, and
+  `getPortfolio` client symbols;
+- the Duels lifecycle labels `Incoming`, `Sent`, `Active`, `Claimable`, and
+  `Completed`, and the empty-state string `Nothing here yet`;
+- the compiled `placeholderColor` token and coral `#FF725E` color evidence.
+
+Hermes bytecode does not retain the TypeScript method name `Promise.allSettled`
+as a source-level literal; the artifact proof therefore uses the exact
+compiled repair marker together with the compiled request symbols and paths,
+and the release was built from the verified source commit above. The APK is
+not being treated as source text merely because source tests passed.
+
+The embedded production configuration remains the accepted Counter backend,
+program, and Devnet mint. No source or artifact scan in this pass added or
+exposed passwords, private keys, DPAPI contents, JWT secret values, seed
+phrases, raw wallet signatures, authentication tokens, or other credential
+material.
+
+### 62.E — Native review boundary
+
+The builder queried the normal ADB path at the final install check. The device
+list was empty, so no installation was attempted and no fallback device
+control was used. No app launch, tap-through, wallet interaction, economic UAT,
+or screenshot was fabricated. Once `R38M10L6J9V` returns in normal ADB
+`device` state, the owner/Director third review is limited to installing this
+exact SHA-256 and opening Home and Duels only. Core economic UAT remains
+blocked until that tiny visual review is accepted.
+
+Target: **`BUILT — FINAL SURGICAL REMEDIATION / THIRD NATIVE REVIEW INSTALL PENDING DEVICE`**.
 Economic/core physical UAT is not started by this remediation pass. Owner/Director native review of the fresh APK remains required before any economic flow.
 
 ---
