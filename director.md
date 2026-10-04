@@ -3258,3 +3258,155 @@ uses `DuelDetailV1Screen`.
 
 Target: **`BUILDING — FINAL V1 MECHANISM CLOSED / FRESH APK BUILD AUTHORIZED`**.
 **DO NOT BUILD APK in this closure phase.**
+
+## 60 — Counter full experience reconstruction + fresh product state
+
+### 60.A — Design direction and interaction research
+
+The approved reconstruction brief and the owner-provided Juggle reference were
+used as the primary interaction brief. The implemented direction is:
+
+- midnight ink background;
+- warm ivory type;
+- electric coral as the single primary action accent;
+- muted cobalt as a supporting identity/context accent;
+- separate success, warning, and danger semantics;
+- no permanent green/purple participant sides.
+
+The interaction model incorporates the requested prerequisite → live value →
+direct action → automatic refresh → continue pattern. External reference
+research also used the Solana Mobile dApp scaffold's Devnet balance/airdrop
+boundary and Kalshi's human-readable participant/settlement explanations. No
+third-party branding, logo, font, or layout was copied. The local named
+`Audit-skill`, `build-process`, `perfect-readme`, `design-skill`,
+`project-understanding`, `project-edge`, and `hackathon-onboarding` instruction
+packages were not installed in this environment; no unavailable skill was
+represented as applied.
+
+### 60.B — Active client reconstruction
+
+The active `App.tsx` graph now reaches the fresh surfaces:
+
+- `FreshFeedScreen`: editorial social feed, quiet filters, identity-first rows,
+  one Challenge action, clean empty state;
+- `FreshCreateTakeScreen`: one-sheet social composer with no blockchain terms;
+- `FreshChallengeModal`: three-step Disagree → terms → review flow with
+  `MUTUAL` + `REFUND`, no wallet handoff, and immediate Duels routing;
+- `FreshChallengeSheet`: incoming review with HTTP-only accept/counter/decline;
+- `FreshDuelsScreen`: Incoming, Sent, Active, Claimable, and Completed views;
+- `FreshActivityScreen`: Today/Earlier actionable human copy;
+- `FreshProfileScreen`: identity, compact balances, history, and direct test
+  funds action;
+- `FreshTakeDetailScreen`: conversation, replies, challenge action, and safe
+  deletion boundary;
+- `FreshReceiptScreen`: human settlement story first, technical proof second.
+
+The proven `DuelDetailV1Screen` remains the wallet/chain mechanism boundary,
+with the new theme applied and its state story preserved: Ready to Duel,
+preflight, stake, waiting, live, private result, match, mismatch, timeout,
+claim, refund, and technical proof. Existing MWA recovery, pending-signature
+status checks, backend verification, duplicate protection, claims/refunds,
+receipts, and App Links were not replaced.
+
+The active graph no longer imports the predecessor Home, Duels, Activity,
+Profile, Take, Challenge, or Receipt screens. Those legacy files remain only as
+repository history/mechanism reference until a later dead-code deletion pass.
+
+### 60.C — Fresh production data cleanup
+
+Before mutation, the exact production DB was copied and verified:
+
+```text
+/opt/counter/backups/counter-product-reconstruction-20261004004553.sqlite
+bytes: 184320
+SHA-256: d940bc0a537f217e38939e7e60c66eb6e4c02497e1313336cea4f4124f3a36a4
+```
+
+The backup hash exactly matched the live DB hash immediately before cleanup.
+The service was stopped during the transaction and restarted afterward. The
+pre-cleanup inventory was 10 Takes, 2 comments, 7 Challenges, 12
+counteroffers, 10 Activity rows, 4 Duels, 0 positions, 0 receipts, and 8
+users.
+
+Exact Take classification:
+
+```text
+DUEL/RECEIPT-REFERENCED → tombstoned as ARCHIVED (4)
+take_1790803407293_d2c55120
+take_1790852614546_6d2cc8de
+take_1791021237247_49c735cb
+take_1791031988790_83433c69
+
+CHALLENGE-ONLY → challenge state removed and Take removed (3)
+take_1790868368789_4ac355de
+take_1790868977515_453bb4b7
+take_1790967068579_a49ce41f
+
+UNREFERENCED → Take removed (3)
+take_1790868977458_86c67821
+take_1790868977482_f5090bd0
+take_1790940639772_33bf0656
+```
+
+The 3 challenge-only rows had no Duel, position, or receipt references. Their
+pending/proposed challenge rows were removed after safe cancellation semantics,
+their dependent challenge Activity was removed, and their Takes were removed.
+The 3 unreferenced Takes were removed with dependent comments/Take Activity.
+The 4 Duel-referenced Takes were not deleted: each remains with immutable
+topic/author content and `status=ARCHIVED`; their non-economic comments were
+removed so they do not repopulate social conversation surfaces.
+
+Post-cleanup readback:
+
+```text
+takes total: 4
+active Takes: 0
+archived Takes: 4
+deleted Takes: 0
+comments: 0
+challenges: 4
+counteroffers: 12
+activity: 6
+duels: 4
+positions: 0
+receipts: 0
+users: 8
+```
+
+Normal `GET /api/takes` and profile Take reads filter `status='ACTIVE'`, so the
+normal Home/profile/discovery surfaces now show zero old Takes. All 4 existing
+Duels remain present and linked to their archived Take rows; their current
+backend chain statuses and PDA fields were read back unchanged. There were no
+production receipts or positions to mutate. No user/profile row, chain
+transaction, Duel, position, receipt, or proof row was deleted.
+
+Production readback after cleanup: `counter-backend.service=active`, public
+`/api/health=200`, and the response still identifies the authoritative Devnet
+program. No backend source deployment was required for this data-only cleanup.
+
+### 60.D — Verification and render boundary
+
+Final local client checks after the reconstruction passed:
+
+```text
+TypeScript: PASS
+V1 experience/product guardrails: PASS
+MWA handoff source contract: PASS
+Canonical Duel mapper: PASS (14/14)
+```
+
+The guard suite checks that the fresh active graph contains the required
+Incoming/Sent/Active/Claimable/Completed lifecycle, human mutual/refund copy,
+pre-wallet SOL/test-funds actions, no odds/probability/side language, no
+generic Counter Verified UI, and no predecessor-screen imports.
+
+The actual React Native source components are the design evidence. A web
+renderer was attempted for screenshot inspection, but this Expo project does
+not carry web dependencies and the standard install failed in the existing
+workspace because `expo-module` was unavailable. The temporary package change
+was reverted. No mockup-only screenshots are claimed, and no APK was built or
+installed. Native rendered evidence for the 19 requested states remains a
+Director visual-review gate before the final APK.
+
+Target: **`BUILDING — COUNTER FULL EXPERIENCE RECONSTRUCTED / DIRECTOR VISUAL + FINAL APK REVIEW REQUIRED`**.
+**DO NOT BUILD APK until Director review.**
