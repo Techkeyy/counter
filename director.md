@@ -3088,3 +3088,173 @@ backend initialization, and the resulting observed marker sequence remain
 pending.
 
 Target: **`BUILDING — MWA DIAGNOSTIC APK READY / OWNER INSTALL + EVENT-SPECIFIC UAT REQUIRED`**.
+
+## 59 — FINAL TWO V1 MECHANISM CLOSURES — 2026-10-04
+
+The Director-approved V1 social-Duel architecture is now closed at the source
+and backend boundaries. No Solana program change, APK build, APK installation,
+wallet prompt, physical UAT action, or real economic transaction occurred in
+this phase.
+
+### 59.A — Ready-to-settle discovery and private lifecycle state
+
+The accepted source commit is
+`1cf007c` (`Close V1 settlement discovery and refund paths`), pushed normally
+to `origin/master`.
+
+The mobile transaction home now consumes viewer-scoped lifecycle facts from
+`GET /api/duels`: `myVoteSubmitted`, `otherVoteSubmitted`, and coarse
+`mutualState`. The canonical mapper therefore exposes `READY_TO_SETTLE`,
+`WAITING_FOR_OTHER_RESULT`, `MATCHED_RESULT`, `MISMATCH`, and `TIMEOUT` without
+ever receiving the other captain's winner choice.
+
+`GET /api/activity` derives deterministic, non-persisted lifecycle items from
+authoritative Duel/vote data when time crosses the resolution boundary. The
+derived item ID is stable for `(type, duel, viewer)`, so app open, resume,
+Duels focus, Activity focus, and refresh do not create duplicates. The app
+reports actionable counts on both Duels and Activity tabs. The supported
+in-app action copy includes:
+
+```text
+Ready to settle
+Your Duel with @other is ready. Choose who won.
+
+Waiting for @other
+@other submitted their result.
+```
+
+The existing persisted lifecycle events remain available for Challenge
+received/accepted, setup, stake required, opponent funded, Duel live, result
+confirmed, winnings ready, claimed, and refunded. V1 notifications are
+**in-app; OS push notifications are deferred**.
+
+### 59.B — Authoritative early-vote boundary
+
+`server/mutual.js` rejects a Mutual vote while
+`now < resolution_ts` before signature persistence. The HTTP test proves:
+
+- HTTP 400;
+- zero stored `mutual_votes` rows;
+- zero settlement/receipt mutation.
+
+This is an API boundary, not only a UI affordance.
+
+### 59.C — Explicit mismatch cancellation and idempotence
+
+After resolution, the second valid private vote that differs from the first
+causes `POST /api/duels/:id/mutual-vote` to invoke the existing resolver's
+`ResolveDuel(3)` cancellation path automatically when the Duel is initialized
+on-chain. No third operator action or disagreement button is introduced.
+
+The new `duel_settlement_attempts` table is a durable one-row-per-Duel guard:
+
+- the first cancellation/settlement attempt owns the side effect;
+- retries see `SUBMITTING`, `SUCCEEDED`, or `FAILED` and do not submit another
+  transaction;
+- receipts and terminal activity use deterministic IDs with `INSERT OR IGNORE`;
+- a terminal Duel cannot be resolved/cancelled again.
+
+The local closure test uses a counted submitter and proves one cancellation
+submission, one terminal receipt, four deterministic captain lifecycle items
+(one No agreement and one Refund ready per captain), and no duplicate on retry.
+It also proves the separate no-second-vote timeout cancellation path.
+
+Refund claims now fail before chain inspection for a wrong wallet or an already
+claimed position. For a cancelled Duel, the server additionally requires the
+chain-observed payout to equal that captain's stored principal exactly. The
+actual Devnet refund transactions remain a physical-UAT economic proof.
+
+### 59.D — Local regression evidence
+
+The final local run passed:
+
+```text
+TypeScript: PASS
+V1 experience guardrails: PASS
+MWA handoff source contract: PASS
+Canonical Duel mapper: PASS (14/14)
+Challenge timing vectors: PASS (6/6)
+Auth boundary: PASS
+Profile boundaries: PASS
+Take deletion: PASS
+Portfolio: PASS
+Chain vectors: PASS (11/11)
+Resolution boundaries: PASS
+V1 mutual closure: PASS
+MVP lifecycle: PASS
+Backend adversarial: PASS (8/8)
+git diff --check: PASS
+bounded secret/mock scan: PASS
+```
+
+The bounded application-owned scan found zero former JWT fallback literals,
+zero `JWT_SECRET ||` operators, zero embedded private-key PEM markers, zero
+mock wallet/session fallback patterns, and zero obsolete `counter.app` host
+references in the scanned runtime roots. No secret value was printed.
+
+### 59.E — Production deployment and readback
+
+Before deployment, the running process was checked without printing the JWT
+value: `JWT_SECRET_RUNTIME_PRESENT=true`. A Counter-only SQLite backup was
+created at:
+
+```text
+/opt/counter/backups/counter-v1-closure-20261004002936.sqlite
+bytes: 184320
+SHA-256: b25c795454943a87e79d6556a75ddd895b13ba12f4fc58f530fc4823c2a577c
+```
+
+Only these five Counter backend runtime files were deployed, at their exact
+relative paths:
+
+```text
+server/auth.js
+server/db.js
+server/resolvers/index.js
+server/routes/activity.js
+server/routes/duels.js
+```
+
+The first restart exposed that the pre-existing production `auth.js` did not
+export the new read-only `optionalAuth` dependency; it failed closed before
+serving requests. The already-tested `auth.js` was then deployed at the exact
+path and only `counter-backend.service` was restarted again. No unrelated
+service was touched. Final local/production SHA-256 equality is:
+
+```text
+auth.js:             cc1b19c75c1b41dc4ad82d751df92bbe9c602981755af72c825de11240c62bd7
+db.js:               c6d7c1b1458971cea6bac47e1741df569278c9717450f57490b11f979932ef3b
+resolvers/index.js:  6c00384bdaf2c68f77bb3fba5b7c40db624140c6be5cf762f62597b2f32f695e
+routes/activity.js:  a9c7b8f7c776077b15dc1947b6ffc1f3690cef530abb2a622fbdf4b593664ad3
+routes/duels.js:     2c61bb691d7d6e947b101f815f5769b70bcd1c220f87108a632421cdff06e876
+```
+
+Final production readback: `counter-backend.service=active`, runtime JWT
+presence `true` only, `/api/health=200`, and the new
+`duel_settlement_attempts` table exists. Counts remain
+`users=8 takes=10 challenges=7 duels=4 positions=0 receipts=0`; no genuine
+owner data was mutated. The remote checkout remains pre-existing dirty state;
+it was not reset, rebased, squashed, or cleaned.
+
+The full chain-economic production probes were not fabricated: no disposable
+production Duel was funded or initialized merely to produce a report. Early
+vote rejection, match/mismatch transitions, automatic cancellation, timeout,
+and idempotence are proven in the local authoritative API/resolver suite;
+real Devnet initialization, stake, cancellation, refund claims, and receipt
+readback remain physical UAT gates.
+
+### 59.F — Visual evidence and final boundary
+
+No screenshots are claimed from source strings or tests. Accurate rendered
+evidence for Incoming Challenge, Ready to Duel/preflight, Ready to stake,
+Waiting for opponent, Duel live, Ready to settle, Waiting for the other result,
+Result confirmed/claim, No agreement/refund, and Receipt requires the built APK
+or a real runtime session. No fabricated product screenshots were created.
+
+Known limitations are therefore explicit: OS push is deferred; full economic
+chain paths remain hardware/UAT work; and the legacy unreferenced V1-predecessor
+screen files remain in the repository although the active App import graph
+uses `DuelDetailV1Screen`.
+
+Target: **`BUILDING — FINAL V1 MECHANISM CLOSED / FRESH APK BUILD AUTHORIZED`**.
+**DO NOT BUILD APK in this closure phase.**
