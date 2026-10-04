@@ -120,7 +120,7 @@ export function formatUserHandle(user?: UserIdentityInput | null): string | null
   return null;
 }
 
-export function getAvatarUri(avatarUrl?: string | null, seed?: string | null): string {
+export function getAvatarUri(avatarUrl?: string | null, seed?: string | null, placeholderColor = '15171e'): string {
   if (avatarUrl && avatarUrl.startsWith('http')) {
     return avatarUrl;
   }
@@ -130,7 +130,8 @@ export function getAvatarUri(avatarUrl?: string | null, seed?: string | null): s
     return `${PRODUCTION_WEB_URL}${avatarUrl}`;
   }
   const effectiveSeed = seed || avatarUrl || 'counter-contender';
-  return `https://api.dicebear.com/7.x/identicon/png?seed=${encodeURIComponent(effectiveSeed)}&backgroundColor=15171e`;
+  const backgroundColor = placeholderColor.replace(/^#/, '');
+  return `https://api.dicebear.com/7.x/identicon/png?seed=${encodeURIComponent(effectiveSeed)}&backgroundColor=${encodeURIComponent(backgroundColor)}`;
 }
 
 export function formatCurrency(amount: number): string {

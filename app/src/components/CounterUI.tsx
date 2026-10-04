@@ -3,8 +3,8 @@ import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } fr
 import { colors, borderRadius, spacing, touchMin, typography } from '../theme';
 import { getAvatarUri } from '../utils/identity';
 
-export const Avatar: React.FC<{ uri?: string | null; wallet?: string | null; size?: number }> = ({ uri, wallet, size = 44 }) => (
-  <Image source={{ uri: getAvatarUri(uri, wallet || '') }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceLight }} />
+export const Avatar: React.FC<{ uri?: string | null; wallet?: string | null; size?: number; placeholderColor?: string }> = ({ uri, wallet, size = 44, placeholderColor }) => (
+  <Image source={{ uri: getAvatarUri(uri, wallet || '', placeholderColor) }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceLight }} />
 );
 
 export const ScreenHeader: React.FC<{ eyebrow?: string; title: string; right?: React.ReactNode; onBack?: () => void }> = ({ eyebrow, title, right, onBack }) => (

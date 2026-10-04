@@ -43,6 +43,7 @@ includes(feed, "useState<CategoryFilter>('ALL')", 'fresh Home selects All catego
 includes(feed, 'onHasVisibleTakesChange', 'Home reports whether the current feed has visible Takes');
 includes(feed, 'filterList', 'Home category controls use a compact horizontal strip');
 includes(feed, 'numberOfLines={1}', 'Home category labels stay on one line');
+includes(feed, 'placeholderColor={colors.brandPrimary}', 'Home placeholder mark uses the coral brand accent');
 assert((feed.match(/action="Post a Take"/g) || []).length === 1, 'empty Home exposes one create-Take CTA');
 excludes(feed, 'eyebrow="social predictions"', 'Home does not use a redundant eyebrow');
 excludes(duels, 'money between people', 'Duels does not use the redundant money eyebrow');
