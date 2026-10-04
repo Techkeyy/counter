@@ -163,7 +163,16 @@ async function run() {
     assert(r.status === 400, 'counter after accept rejected (config locked)');
     ok('post-accept config changes rejected');
 
-    // 5. mutual votes: non-captain rejected even with valid-shape sig
+    // 5. the authoritative boundary refuses a Mutual vote before resolution.
+    const earlySig = signSettlement(A.kp, duel.id, 1, Number(duel.resolution_ts));
+    r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, A.token, { winnerSide: 1, signature: earlySig.signature });
+    assert(r.status === 400, 'early mutual vote rejected by the API');
+    const earlyVotes = queryAll(`SELECT * FROM mutual_votes WHERE duel_id = ?`, [duel.id]);
+    assert(earlyVotes.length === 0, 'early mutual vote stores no vote');
+    assert(!queryAll(`SELECT * FROM receipts WHERE duel_id = ?`, [duel.id]).length, 'early mutual vote creates no receipt');
+    ok('early Mutual vote rejected authoritatively with zero state change');
+
+    // 6. mutual votes: non-captain rejected even with valid-shape sig
     const resTs = Math.floor(Date.now() / 1000) - 60;
     execute(
       `UPDATE duels SET resolution_ts = ?, mutual_deadline_ts = ? WHERE id = ?`,
@@ -182,7 +191,7 @@ async function run() {
     assert(r.status === 400, 'invalid side rejected');
     ok('non-captain, cross-duel, and bad-side votes rejected');
 
-    // 6. single captain vote -> no match, no settlement
+    // 7. single captain vote -> no match, no settlement
     const sigA1 = signSettlement(A.kp, duel.id, 1, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, A.token, { winnerSide: 1, signature: sigA1.signature });
     assert(r.status === 200 && r.data.match && r.data.match.matched === false, 'single vote unmatched');
@@ -193,7 +202,8 @@ async function run() {
     assert(!d1.data.receipt, 'no receipt without match');
     ok('one captain alone cannot settle (fail-closed, no receipt)');
 
-    // 7. opposing vote -> DISPUTED, still no settlement
+    // 8. opposing vote -> DISPUTED. This fixture is deliberately uninitialized,
+    // so the real-chain cancellation path is not invoked by the API probe.
     const sigB2 = signSettlement(B.kp, duel.id, 2, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, B.token, { winnerSide: 2, signature: sigB2.signature });
     assert(r.status === 200 && r.data.match.state === 'DISPUTED', 'opposing votes dispute');
@@ -205,7 +215,7 @@ async function run() {
     assert(r.status === 400, 'disputed pair cannot settle');
     ok('opposing votes dispute without settlement');
 
-    // 8. Once both captains disagree at/after resolution, the mismatch is
+    // 9. Once both captains disagree at/after resolution, the mismatch is
     // locked and the only valid path is refund. A late re-vote must not turn a
     // disputed pair into a winner after the decision boundary.
     const sigB1 = signSettlement(B.kp, duel.id, 1, resTs);
@@ -215,7 +225,7 @@ async function run() {
     assert(lockedVotes.some((vote) => vote.captain_wallet === B.wallet && Number(vote.winner_side) === 2), 'disputed vote remains locked');
     ok('post-resolution mismatch locks and opens only the refund path');
 
-    // 9. vote on VERIFIED-mode duel rejected
+    // 10. vote on VERIFIED-mode duel rejected
     r = await api('POST', '/api/challenges', B.token, { ...VALID_WEATHER, targetWallet: A.wallet });
     assert(r.status === 201, 'verified challenge proposes');
     tracked.challenges.push(r.data.challenge.id);
@@ -226,12 +236,12 @@ async function run() {
     assert(rv.status === 400, 'vote on verified-mode duel rejected');
     ok('verified-mode duels refuse mutual votes');
 
-    // 10. losing-side style wrong-winner claim attempt rejected without chain
+    // 11. losing-side style wrong-winner claim attempt rejected without chain
     r = await api('POST', `/api/duels/${duel.id}/claim`, A.token, { txSignature: 'FakeSig11111111111111111111111111111111111111111111111111111111111' });
     assert(r.status === 400, 'fabricated claim rejected pre-settlement');
     ok('fabricated claim rejected with zero state change');
 
-    // 11. serializeResolveDuel side=3 (Cancel) byte vector
+    // 12. serializeResolveDuel side=3 (Cancel) byte vector
     const chain = require('../chain');
     const buf = chain.serializeResolveDuel({ winningSide: 3 });
     assert(buf.length === 2 && buf[0] === 2 && buf[1] === 3, 'cancel discriminator vector exact');

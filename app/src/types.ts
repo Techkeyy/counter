@@ -136,6 +136,7 @@ export interface Duel {
   fallback_mode?: FallbackMode;
   mutual_deadline_ts?: number | null;
   mutualState?: 'AWAITING_VOTES' | 'AWAITING_COUNTERPARTY' | 'MATCHED' | 'DISPUTED';
+  myVoteSubmitted?: boolean;
   otherVoteSubmitted?: boolean;
   resolution_data?: string;
   resolution_tx?: string;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -60,6 +60,8 @@ export default function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [feedRefresh, setFeedRefresh] = useState(0);
   const [tabFocus, setTabFocus] = useState(0);
+  const [duelsActionableCount, setDuelsActionableCount] = useState(0);
+  const [activityActionableCount, setActivityActionableCount] = useState(0);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -228,6 +230,13 @@ export default function App() {
     if (tab === 'HOME') setFeedRefresh((n) => n + 1);
   };
 
+  const onDuelsActionableCountChange = useCallback((count: number) => {
+    setDuelsActionableCount(count);
+  }, []);
+  const onActivityActionableCountChange = useCallback((count: number) => {
+    setActivityActionableCount(count);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={colors.surface} />
@@ -271,6 +280,7 @@ export default function App() {
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
             createdChallenge={createdChallenge}
             focusSignal={tabFocus}
+            onActionableCountChange={onDuelsActionableCountChange}
           />
         </View>
         <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
@@ -282,6 +292,7 @@ export default function App() {
             }}
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
             focusSignal={tabFocus}
+            onActionableCountChange={onActivityActionableCountChange}
           />
         </View>
         <View style={[styles.fill, currentTab === 'PROFILE' ? null : styles.hidden]}>
@@ -441,6 +452,13 @@ export default function App() {
                 size={22}
                 color={active ? colors.brandPrimary : colors.textSecondary}
               />
+              {((tab.key === 'DUELS' ? duelsActionableCount : tab.key === 'ACTIVITY' ? activityActionableCount : 0) > 0) && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {Math.min(99, tab.key === 'DUELS' ? duelsActionableCount : activityActionableCount)}
+                  </Text>
+                </View>
+              )}
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
                 {tab.label}
               </Text>
@@ -536,5 +554,22 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: colors.brandPrimary,
     fontWeight: '700',
+  },
+  tabBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 18,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.brandPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: '900',
   },
 });

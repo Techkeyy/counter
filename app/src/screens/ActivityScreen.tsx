@@ -18,16 +18,27 @@ interface ActivityScreenProps {
   onSelectNotification: (notif: ActivityNotification) => void;
   onOpenChallenge: (challenge: Challenge) => void;
   focusSignal?: number;
+  onActionableCountChange?: (count: number) => void;
 }
 
 type FilterTab = 'ALL' | 'ACTION_REQUIRED';
 
-const ACTIONABLE = ['CHALLENGE_RECEIVED', 'COUNTEROFFER', 'COUNTEROFFER_RECEIVED', 'DUEL_RESOLVED'];
+const ACTIONABLE = [
+  'CHALLENGE_RECEIVED',
+  'COUNTEROFFER',
+  'COUNTEROFFER_RECEIVED',
+  'READY_TO_SETTLE',
+  'OPPONENT_SUBMITTED_RESULT',
+  'REFUND_READY',
+  'WINNINGS_READY',
+  'DUEL_RESOLVED',
+];
 
 export const ActivityScreen: React.FC<ActivityScreenProps> = ({
   onSelectNotification,
   onOpenChallenge,
   focusSignal,
+  onActionableCountChange,
 }) => {
   const [activities, setActivities] = useState<ActivityNotification[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -67,6 +78,10 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusSignal]);
 
+  useEffect(() => {
+    onActionableCountChange?.(activities.filter((item) => item.is_read === 0 && ACTIONABLE.includes(item.type)).length);
+  }, [activities, onActionableCountChange]);
+
   const onRefresh = () => {
     setRefreshing(true);
     loadActivities();
@@ -83,6 +98,13 @@ export const ActivityScreen: React.FC<ActivityScreenProps> = ({
         return { icon: 'flame', color: colors.error };
       case 'DUEL_RESOLVED':
         return { icon: 'trophy', color: colors.arenaBadge };
+      case 'READY_TO_SETTLE':
+      case 'OPPONENT_SUBMITTED_RESULT':
+        return { icon: 'swords', color: colors.brandPrimary };
+      case 'REFUND_READY':
+        return { icon: 'refresh-cw', color: colors.warning };
+      case 'WINNINGS_READY':
+        return { icon: 'trophy', color: colors.success };
       case 'BACKER_JOINED':
         return { icon: 'users', color: colors.success };
       default:

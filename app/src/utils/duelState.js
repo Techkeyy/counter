@@ -18,7 +18,16 @@ function positionFor(positions, wallet) {
   return (positions || []).find((position) => position.user_wallet === wallet) || null;
 }
 
-function mapDuelState({ duel, userWallet, positions = [], mutualVotes = [], mutualState = null, nowSec = Math.floor(Date.now() / 1000) }) {
+function mapDuelState({
+  duel,
+  userWallet,
+  positions = [],
+  mutualVotes = [],
+  mutualState = null,
+  myVoteSubmitted = false,
+  otherVoteSubmitted = false,
+  nowSec = Math.floor(Date.now() / 1000),
+}) {
   if (!duel) return 'PENDING_CHALLENGE';
 
   const side = captainSide(duel, userWallet);
@@ -28,9 +37,12 @@ function mapDuelState({ duel, userWallet, positions = [], mutualVotes = [], mutu
   const bothFunded = captainAStake > 0 && captainBStake > 0;
   const initialized = (duel.chain_status || 'UNINITIALIZED') === 'INITIALIZED';
   const resolutionReached = nowSec >= Number(duel.resolution_ts || 0);
-  const myVote = mutualVotes.find((vote) => vote.captain_wallet === userWallet) || null;
-  const otherVote = mutualVotes.find((vote) => vote.captain_wallet !== userWallet) || null;
-  const bothVoted = !!myVote && !!otherVote;
+  const myVote = mutualVotes.find((vote) => vote.captain_wallet === userWallet) ||
+    (myVoteSubmitted ? { captain_wallet: userWallet, winner_side: null } : null);
+  const otherVote = mutualVotes.find((vote) => vote.captain_wallet !== userWallet) ||
+    (otherVoteSubmitted ? { captain_wallet: '__other__', winner_side: null } : null);
+  const bothVoted = (Number(myVote?.winner_side) === 1 || Number(myVote?.winner_side) === 2)
+    && (Number(otherVote?.winner_side) === 1 || Number(otherVote?.winner_side) === 2);
 
   if (duel.status === 'CANCELLED') return 'MISMATCH';
   if (duel.status === 'RESOLVED_SIDE_A' || duel.status === 'RESOLVED_SIDE_B') return 'MATCHED_RESULT';

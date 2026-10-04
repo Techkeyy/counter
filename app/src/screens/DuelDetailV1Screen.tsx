@@ -135,7 +135,15 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
 
   const mySide = captainSide(duel, userWallet);
   const myPosition = positionFor(positions, userWallet);
-  const state = mapDuelState({ duel, userWallet, positions, mutualVotes, mutualState: duel.mutualState });
+  const state = mapDuelState({
+    duel,
+    userWallet,
+    positions,
+    mutualVotes,
+    mutualState: duel.mutualState,
+    myVoteSubmitted: duel.myVoteSubmitted,
+    otherVoteSubmitted: duel.otherVoteSubmitted,
+  });
   const isCaptain = mySide !== null;
   const isInitialized = duel.chain_status === 'INITIALIZED';
   const resolutionReached = Math.floor(Date.now() / 1000) >= Number(duel.resolution_ts || 0);
@@ -144,6 +152,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const agreedStake = Number(duel.stake_amount_usd || Math.max(Number(duel.side_a_total) || 0, Number(duel.side_b_total) || 0));
   const nameA = formatUserDisplayName({ display_name: duel.captain_a_name, handle: duel.captain_a_handle, wallet: duel.captain_a_wallet });
   const nameB = formatUserDisplayName({ display_name: duel.captain_b_name, handle: duel.captain_b_handle, wallet: duel.captain_b_wallet });
+  const otherName = userWallet === duel.captain_a_wallet ? nameB : nameA;
   const myVote = mutualVotes.find((vote) => vote.captain_wallet === userWallet) || null;
   const votesMatch = mutualVotes.length >= 2 && mutualVotes.every((vote) => Number(vote.winner_side) === Number(mutualVotes[0].winner_side));
   const canClaim = !!myPosition && duel.status.startsWith('RESOLVED') && myPosition.side === duel.winning_side && !myPosition.claimed;
@@ -493,10 +502,11 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     }
 
     if (state === 'READY_TO_SETTLE') {
+      const opponentSubmitted = !myVote && duel.otherVoteSubmitted;
       return (
         <View style={styles.stateBox}>
           <Text style={styles.stateTitle}>Who won?</Text>
-          <Text style={styles.stateCopy}>Both captains independently confirm the winner. If they do not agree by the deadline, the Duel refunds.</Text>
+          <Text style={styles.stateCopy}>{opponentSubmitted ? `${otherName} submitted their result. Choose who won.` : 'Both captains independently confirm the winner. If they do not agree by the deadline, the Duel refunds.'}</Text>
           {isCaptain ? (
             <View style={styles.voteColumn}>
               <TouchableOpacity style={[styles.voteButton, { borderColor: colors.sideA }]} onPress={() => handleVote(1)} disabled={voting} accessibilityRole="button" accessibilityLabel={`${nameA} won`}><Text style={styles.voteButtonText}>{nameA} won</Text></TouchableOpacity>

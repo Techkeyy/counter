@@ -30,6 +30,8 @@ includes(app, "ChallengeSheetV1", 'App reaches the V1 incoming challenge sheet')
 includes(app, "setCurrentTab('DUELS')", 'successful Challenge routes to Duels');
 includes(app, 'setCreatedChallenge(created)', 'returned Challenge is retained locally');
 includes(app, 'setTabFocus((n) => n + 1)', 'successful Challenge triggers the Duels refresh/focus mechanism');
+includes(app, 'duelsActionableCount', 'Duels exposes an actionable lifecycle count');
+includes(app, 'activityActionableCount', 'Activity exposes an actionable lifecycle count');
 
 for (const [name, source] of [['ChallengeModalV1', modal], ['ChallengeSheetV1', sheet]]) {
   excludes(source, 'mwaSign', `${name} does not open the wallet during challenge review/accept`);
@@ -64,6 +66,13 @@ includes(detail, 'Who won?', 'settlement asks for the real-world result');
 includes(detail, 'Both captains independently confirm the winner.', 'settlement explains mutual agreement');
 includes(detail, 'Claim', 'claim action uses V1 copy');
 includes(detail, 'The other captain has been notified.', 'settlement exposes the first-vote state');
+includes(detail, 'submitted their result', 'settlement exposes the opponent-first-vote state');
+includes(duels, 'otherVoteSubmitted', 'Duels lifecycle consumes private vote presence without exposing the choice');
+includes(duels, 'onActionableCountChange', 'Duels reports actionable lifecycle count');
+const activity = read('src/screens/ActivityScreen.tsx');
+includes(activity, 'READY_TO_SETTLE', 'Activity recognizes derived ready-to-settle lifecycle items');
+includes(activity, 'OPPONENT_SUBMITTED_RESULT', 'Activity recognizes opponent-result lifecycle items');
+includes(activity, 'REFUND_READY', 'Activity recognizes refund lifecycle items');
 excludes(detail, 'Counter Verified', 'reachable Duel detail does not expose deferred resolver UI');
 excludes(detail, 'Seeker Arena', 'reachable Duel detail does not expose deferred Arena UI');
 excludes(receipt, 'Counter Verified', 'reachable receipt does not expose deferred resolver UI');

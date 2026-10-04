@@ -215,6 +215,19 @@ async function getDb() {
     updated_at TEXT,
     PRIMARY KEY (duel_id, captain_wallet)
   )`);
+  // One durable settlement attempt per Duel. This is the backend idempotence
+  // boundary for automatic mismatch cancellation and normal mutual settlement:
+  // an API retry must never submit a second ResolveDuel transaction.
+  db.run(`CREATE TABLE IF NOT EXISTS duel_settlement_attempts (
+    duel_id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL,
+    state TEXT NOT NULL,
+    tx_signature TEXT,
+    result_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
   saveDb();
   return db;
 }

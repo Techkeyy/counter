@@ -33,7 +33,75 @@ function serializeResolveDuel(winningSide) {
   return buffer;
 }
 
-async function resolveDuel(duelId) {
+// A ResolveDuel submission is an economic side effect. Keep a durable, unique
+// attempt row so an HTTP retry (or two captains opening the same notification)
+// cannot submit a second cancellation/settlement transaction. A failed
+// attempt stays recorded as FAILED; recovery must inspect the chain rather
+// than blindly sending another transaction.
+function beginSettlementAttempt(duel, mode) {
+  const existing = queryOne(`SELECT * FROM duel_settlement_attempts WHERE duel_id = ?`, [duel.id]);
+  if (existing) return { acquired: false, existing };
+  const attemptToken = `${new Date().toISOString()}_${crypto.randomBytes(8).toString('hex')}`;
+  const now = new Date().toISOString();
+  execute(
+    `INSERT OR IGNORE INTO duel_settlement_attempts
+      (duel_id, mode, state, created_at, updated_at)
+     VALUES (?, ?, 'SUBMITTING', ?, ?)`,
+    [duel.id, mode, attemptToken, now]
+  );
+  const current = queryOne(`SELECT * FROM duel_settlement_attempts WHERE duel_id = ?`, [duel.id]);
+  // sql.js does not expose sqlite3_changes() consistently after a persisted
+  // statement. Comparing the unique creation token still gives an atomic
+  // insert winner under the single-process Counter service model.
+  const inserted = !!current && current.created_at === attemptToken;
+  return {
+    acquired: inserted,
+    existing: inserted ? null : current,
+  };
+}
+
+function finishSettlementAttempt(duelId, result) {
+  execute(
+    `UPDATE duel_settlement_attempts
+        SET state = ?, tx_signature = ?, result_json = ?, error = ?, updated_at = ?
+      WHERE duel_id = ?`,
+    [
+      result.success ? 'SUCCEEDED' : 'FAILED',
+      result.tx || result.resolution?.tx || null,
+      JSON.stringify(result),
+      result.success ? null : String(result.error || 'Settlement attempt failed'),
+      new Date().toISOString(),
+      duelId,
+    ]
+  );
+}
+
+async function settleOnce(duel, mode, operation) {
+  const attempt = beginSettlementAttempt(duel, mode);
+  if (!attempt.acquired) {
+    if (attempt.existing?.state === 'SUCCEEDED' && attempt.existing.result_json) {
+      return { ...JSON.parse(attempt.existing.result_json), idempotent: true };
+    }
+    return {
+      success: false,
+      error: attempt.existing?.state === 'FAILED'
+        ? 'A previous settlement attempt failed; inspect its transaction status before recovery.'
+        : 'Settlement is already in progress for this Duel',
+      idempotent: true,
+    };
+  }
+
+  let result;
+  try {
+    result = await operation();
+  } catch (err) {
+    result = { success: false, error: err?.message || 'Settlement attempt failed' };
+  }
+  finishSettlementAttempt(duel.id, result);
+  return result;
+}
+
+async function resolveDuel(duelId, dependencies = {}) {
   const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
   if (!duel) {
     return { success: false, error: 'Duel not found' };
@@ -55,12 +123,12 @@ async function resolveDuel(duelId) {
 
   const mode = duel.resolution_mode || 'COUNTER_VERIFIED';
   if (mode === 'MUTUAL') {
-    return resolveMutualDuel(duel);
+    return resolveMutualDuel(duel, dependencies);
   }
-  return resolveVerifiedDuel(duel);
+  return resolveVerifiedDuel(duel, undefined, dependencies);
 }
 
-async function resolveVerifiedDuel(duel, forcedConfig) {
+async function resolveVerifiedDuel(duel, forcedConfig, dependencies = {}) {
   const category = duel.category?.toLowerCase();
   let sourceConfig = {};
   try {
@@ -87,38 +155,42 @@ async function resolveVerifiedDuel(duel, forcedConfig) {
   }
 
   const winningSide = resolutionResult.winningSide;
-  const txSignature = await submitSettlementTx(duel, winningSide);
-  if (!txSignature.ok) return txSignature;
-  return recordSettlement(duel, winningSide, {
-    summary: resolutionResult.summary,
-    evidence: { ...(resolutionResult.evidence || {}), resolutionMode: 'COUNTER_VERIFIED' },
-    txSignature: txSignature.sig,
-  });
+    return settleOnce(duel, 'COUNTER_VERIFIED', async () => {
+      const txSignature = await (dependencies.submitSettlementTx || submitSettlementTx)(duel, winningSide);
+      if (!txSignature.ok) return txSignature;
+      return (dependencies.recordSettlement || recordSettlement)(duel, winningSide, {
+        summary: resolutionResult.summary,
+        evidence: { ...(resolutionResult.evidence || {}), resolutionMode: 'COUNTER_VERIFIED' },
+        txSignature: txSignature.sig,
+      });
+    });
 }
 
 // MUTUAL settlement: a verified captain-pair match settles that exact side;
 // past the agreement deadline the pre-agreed fallback executes (REFUND via
 // on-chain Cancel, or the locked verified template). One captain alone,
 // disputed pairs, and premature calls all fail closed with no state change.
-async function resolveMutualDuel(duel) {
+async function resolveMutualDuel(duel, dependencies = {}) {
   const mutual = require('../mutual');
   const match = mutual.checkMatch(duel);
   if (match.matched) {
-    const txSignature = await submitSettlementTx(duel, match.winnerSide);
-    if (!txSignature.ok) return txSignature;
-    return recordSettlement(duel, match.winnerSide, {
-      summary: `Settled together: both captains agreed Side ${match.winnerSide === 1 ? 'A' : 'B'}.`,
-      evidence: {
-        resolutionMode: 'MUTUAL',
-        agreedWinnerSide: match.winnerSide,
-        confirmations: match.votes.map((v) => ({
-          captainWallet: v.captain_wallet,
-          winnerSide: Number(v.winner_side),
-          signature: v.signature,
-          at: v.updated_at,
-        })),
-      },
-      txSignature: txSignature.sig,
+    return settleOnce(duel, 'MUTUAL', async () => {
+      const txSignature = await (dependencies.submitSettlementTx || submitSettlementTx)(duel, match.winnerSide);
+      if (!txSignature.ok) return txSignature;
+      return (dependencies.recordSettlement || recordSettlement)(duel, match.winnerSide, {
+        summary: `Settled together: both captains agreed Side ${match.winnerSide === 1 ? 'A' : 'B'}.`,
+        evidence: {
+          resolutionMode: 'MUTUAL',
+          agreedWinnerSide: match.winnerSide,
+          confirmations: match.votes.map((v) => ({
+            captainWallet: v.captain_wallet,
+            winnerSide: Number(v.winner_side),
+            signature: v.signature,
+            at: v.updated_at,
+          })),
+        },
+        txSignature: txSignature.sig,
+      });
     });
   }
 
@@ -137,16 +209,20 @@ async function resolveMutualDuel(duel) {
 
   const fallback = duel.fallback_mode || 'REFUND';
   if (fallback === 'COUNTER_VERIFIED') {
-    return resolveVerifiedDuel(duel);
+      return resolveVerifiedDuel(duel, undefined, dependencies);
   }
   // REFUND: on-chain Cancel returns every position principal (program-enforced).
-  const txSignature = await submitSettlementTx(duel, 3);
-  if (!txSignature.ok) return txSignature;
-  return recordSettlement(duel, 0, {
-    summary: 'No agreement by the deadline. Duel cancelled; every backer may reclaim principal.',
-    evidence: { resolutionMode: 'MUTUAL', fallback: 'REFUND', votes: match.votes },
-    txSignature: txSignature.sig,
-    cancelled: true,
+  return settleOnce(duel, 'MUTUAL_REFUND', async () => {
+    const txSignature = await (dependencies.submitSettlementTx || submitSettlementTx)(duel, 3);
+    if (!txSignature.ok) return txSignature;
+    return (dependencies.recordSettlement || recordSettlement)(duel, 0, {
+      summary: match.state === 'DISPUTED'
+        ? 'No agreement. Both stakes are being returned.'
+        : 'No agreement reached. Both stakes are being returned.',
+      evidence: { resolutionMode: 'MUTUAL', fallback: 'REFUND', votes: match.votes },
+      txSignature: txSignature.sig,
+      cancelled: true,
+    });
   });
 }
 
@@ -205,7 +281,7 @@ function recordSettlement(duel, winningSide, { summary, evidence, txSignature, c
   // Generate durable Receipt
   const receiptId = `receipt_${duelId}`;
   execute(
-    `INSERT OR REPLACE INTO receipts (id, duel_id, take_id, captain_a_wallet, captain_b_wallet, winner_wallet, total_pool, resolution_summary, resolution_evidence, onchain_signature, created_at)
+    `INSERT OR IGNORE INTO receipts (id, duel_id, take_id, captain_a_wallet, captain_b_wallet, winner_wallet, total_pool, resolution_summary, resolution_evidence, onchain_signature, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       receiptId,
@@ -223,37 +299,39 @@ function recordSettlement(duel, winningSide, { summary, evidence, txSignature, c
   );
 
   // Notify Captains
-  const notifA = `notif_${Date.now()}_a`;
-  const notifB = `notif_${Date.now()}_b`;
-  execute(
-    `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    [notifA, duel.captain_a_wallet, 'DUEL_RESOLVED', 'system', receiptId, 'RECEIPT', 'Duel Resolved', summary, new Date().toISOString()]
-  );
-  execute(
-    `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    [notifB, duel.captain_b_wallet, 'DUEL_RESOLVED', 'system', receiptId, 'RECEIPT', 'Duel Resolved', summary, new Date().toISOString()]
-  );
+  if (!cancelled) {
+    const notifA = `notif_${duelId}_resolved_a`;
+    const notifB = `notif_${duelId}_resolved_b`;
+    execute(
+      `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [notifA, duel.captain_a_wallet, 'DUEL_RESOLVED', 'system', receiptId, 'RECEIPT', 'Duel Resolved', summary, new Date().toISOString()]
+    );
+    execute(
+      `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [notifB, duel.captain_b_wallet, 'DUEL_RESOLVED', 'system', receiptId, 'RECEIPT', 'Duel Resolved', summary, new Date().toISOString()]
+    );
+  }
 
   if (cancelled) {
     for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
       execute(
-        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+        `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
          VALUES (?, ?, 'NO_AGREEMENT', 'system', ?, 'DUEL', 'No agreement', ?, 0, ?)`,
-        [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
-          'The captains did not choose the same result. Both stakes are refundable.', new Date().toISOString()]
+        [`notif_${duelId}_no_agreement_${wallet === duel.captain_a_wallet ? 'a' : 'b'}`, wallet, duelId,
+          'You and the other captain chose different results, so both stakes are being returned.', new Date().toISOString()]
       );
       execute(
-        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+        `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
          VALUES (?, ?, 'REFUND_READY', 'system', ?, 'DUEL', 'Refund ready', ?, 0, ?)`,
-        [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
-          'Your Duel stake can be refunded.', new Date().toISOString()]
+        [`notif_${duelId}_refund_ready_${wallet === duel.captain_a_wallet ? 'a' : 'b'}`, wallet, duelId,
+          'Get your principal cUSD back. Both stakes are refundable.', new Date().toISOString()]
       );
     }
   } else {
     execute(
-      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+      `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
        VALUES (?, ?, 'WINNINGS_READY', 'system', ?, 'DUEL', 'Winnings ready', ?, 0, ?)`,
-      [`notif_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, winnerWallet, duelId,
+      [`notif_${duelId}_winnings_ready`, winnerWallet, duelId,
         'Your winning payout is ready to claim.', new Date().toISOString()]
     );
   }

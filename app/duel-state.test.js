@@ -28,5 +28,7 @@ assert.equal(mapDuelState({ duel: duel(), userWallet: 'A', mutualVotes: [vote('A
 assert.equal(mapDuelState({ duel: duel(), userWallet: 'A', nowSec: 3_000 }), 'TIMEOUT');
 assert.equal(mapDuelState({ duel: duel({ status: 'RESOLVED_SIDE_A' }), userWallet: 'A', nowSec: 3_000 }), 'MATCHED_RESULT');
 assert.equal(mapDuelState({ duel: duel({ status: 'CANCELLED' }), userWallet: 'A', nowSec: 3_000 }), 'MISMATCH');
+assert.equal(mapDuelState({ duel: duel({ mutualState: 'AWAITING_COUNTERPARTY' }), userWallet: 'A', myVoteSubmitted: true, nowSec: 2_000 }), 'WAITING_FOR_OTHER_RESULT');
+assert.equal(mapDuelState({ duel: duel({ mutualState: 'AWAITING_COUNTERPARTY' }), userWallet: 'A', otherVoteSubmitted: true, nowSec: 2_000 }), 'READY_TO_SETTLE');
 
-console.log('V1 canonical Duel state mapper: PASS (12/12)');
+console.log('V1 canonical Duel state mapper: PASS (14/14)');

@@ -31,11 +31,12 @@ interface DuelsScreenProps {
   onOpenChallenge: (challenge: Challenge) => void;
   createdChallenge?: Challenge | null;
   focusSignal?: number;
+  onActionableCountChange?: (count: number) => void;
 }
 
 // Transaction home: pending challenge decisions first, then active and
 // resolved economic state from the existing duel/portfolio authorities.
-export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDuel, onOpenChallenge, createdChallenge, focusSignal }) => {
+export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDuel, onOpenChallenge, createdChallenge, focusSignal, onActionableCountChange }) => {
   const [duels, setDuels] = useState<Duel[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -97,6 +98,26 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
       .filter((position) => position.claim_state !== 'OPEN')
       .map((position) => position.duel_id)
   );
+  const duelUiState = (duel: Duel) => {
+    const ownPosition = (portfolio?.positions || []).find((position) => position.duel_id === duel.id);
+    return mapDuelState({
+      duel,
+      userWallet,
+      positions: ownPosition ? [ownPosition] : [],
+      mutualState: duel.mutualState,
+      myVoteSubmitted: duel.myVoteSubmitted,
+      otherVoteSubmitted: duel.otherVoteSubmitted,
+    });
+  };
+  const actionableCount = incoming.length + duels.filter((duel) => {
+    const uiState = duelUiState(duel);
+    return uiState === 'READY_TO_SETTLE'
+      || ((uiState === 'MATCHED_RESULT' || uiState === 'MISMATCH' || uiState === 'TIMEOUT')
+        && claimableIds.has(duel.id));
+  }).length;
+  useEffect(() => {
+    onActionableCountChange?.(actionableCount);
+  }, [actionableCount, onActionableCountChange]);
   const visible = filter === 'INCOMING'
     ? incoming
     : filter === 'SENT'
@@ -142,7 +163,7 @@ export const DuelsScreen: React.FC<DuelsScreenProps> = ({ userWallet, onSelectDu
     const isClaimable = claimableIds.has(duel.id);
     const ownPosition = (portfolio?.positions || []).find((position) => position.duel_id === duel.id);
     const isCaptain = duel.captain_a_wallet === userWallet || duel.captain_b_wallet === userWallet;
-    const uiState = mapDuelState({ duel, userWallet, positions: ownPosition ? [ownPosition] : [] });
+    const uiState = duelUiState(duel);
     const nameA = formatUserDisplayName({
       display_name: duel.captain_a_name,
       handle: duel.captain_a_handle,

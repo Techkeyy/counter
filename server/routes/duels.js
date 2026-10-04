@@ -36,7 +36,7 @@ function ensureCanonicalDuelId(duel) {
 }
 
 // GET /api/duels (Feed / Arena list)
-router.get('/', (req, res) => {
+router.get('/', optionalAuth, (req, res) => {
   const { isArena, category, status } = req.query;
   let sql = `
     SELECT d.*, c.stake_amount_usd AS stake_amount_usd,
@@ -67,18 +67,35 @@ router.get('/', (req, res) => {
   sql += ` ORDER BY d.created_at DESC LIMIT 50`;
   const duels = queryAll(sql, params);
 
-  // Compute parimutuel odds for each duel
+  const mutual = require('../mutual');
+  const viewerWallet = req.userWallet || null;
+
+  // Compute read-only viewer-scoped lifecycle facts. The other captain's
+  // winner choice never leaves the server; only submission presence is shared.
   const enrichedDuels = duels.map((d) => {
     const sideA = Number(d.side_a_total) || 0;
     const sideB = Number(d.side_b_total) || 0;
     const total = sideA + sideB;
     const oddsA = sideA > 0 ? (total / sideA).toFixed(2) : '1.00';
     const oddsB = sideB > 0 ? (total / sideB).toFixed(2) : '1.00';
+    let mutualState = null;
+    let myVoteSubmitted = false;
+    let otherVoteSubmitted = false;
+    if ((d.resolution_mode || 'COUNTER_VERIFIED') === 'MUTUAL') {
+      const match = mutual.checkMatch(d);
+      mutualState = match.matched ? 'MATCHED' : match.state;
+      const votes = Array.isArray(match.votes) ? match.votes : [];
+      myVoteSubmitted = !!viewerWallet && votes.some((vote) => vote.captain_wallet === viewerWallet);
+      otherVoteSubmitted = !!viewerWallet && votes.some((vote) => vote.captain_wallet !== viewerWallet);
+    }
     return {
       ...d,
       total_pool: total,
       odds_a: oddsA,
       odds_b: oddsB,
+      mutualState,
+      myVoteSubmitted,
+      otherVoteSubmitted,
     };
   });
 
@@ -375,6 +392,13 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
   if (!String(duel.status || '').startsWith('RESOLVED') && duel.status !== 'CANCELLED') {
     return res.status(400).json({ error: 'Duel is not settled yet' });
   }
+  const position = queryOne(`SELECT * FROM positions WHERE id = ?`, [`pos_${duelId}_${userWallet}`]);
+  if (!position) {
+    return res.status(403).json({ error: 'Only a captain with a funded position can claim this Duel' });
+  }
+  if (Number(position.claimed) === 1) {
+    return res.status(400).json({ error: 'This Duel position has already been claimed' });
+  }
 
   try {
     const verified = await chain.verifyClaimTx({
@@ -385,6 +409,15 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
     // Consistency: claim side must be the recorded winning side.
     if (Number(duel.winning_side) !== 0 && verified.side !== Number(duel.winning_side)) {
       return res.status(400).json({ error: 'Claim side does not match the settled winning side' });
+    }
+    if (duel.status === 'CANCELLED') {
+      if (verified.payoutBase === null || verified.payoutBase === undefined) {
+        return res.status(400).json({ error: 'Refund amount could not be verified from the confirmed transaction' });
+      }
+      const expectedPrincipal = chain.usdToBaseUnits(position.stake_amount);
+      if (BigInt(verified.payoutBase) !== BigInt(expectedPrincipal)) {
+        return res.status(400).json({ error: 'Refund does not equal this captain principal' });
+      }
     }
     const posId = `pos_${duelId}_${userWallet}`;
     execute(
@@ -457,7 +490,7 @@ router.post('/:id/resolve', requireAuth, async (req, res) => {
 // Body: { winnerSide: 1|2, signature } — signature must verify as
 // COUNTER_SETTLEMENT_V1 over (duel_id, winner_side) by the captain wallet.
 // Votes stay mutable until a matched pair settles; then they lock.
-router.post('/:id/mutual-vote', requireAuth, (req, res) => {
+router.post('/:id/mutual-vote', requireAuth, async (req, res) => {
   const duelId = req.params.id;
   const userWallet = req.userWallet;
   const { winnerSide, signature } = req.body || {};
@@ -481,23 +514,40 @@ router.post('/:id/mutual-vote', requireAuth, (req, res) => {
   const otherWallet = userWallet === duel.captain_a_wallet ? duel.captain_b_wallet : duel.captain_a_wallet;
   if (!match.matched && match.state === 'AWAITING_COUNTERPARTY') {
     execute(
-      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+      `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
        VALUES (?, ?, 'OPPONENT_SUBMITTED_RESULT', ?, ?, 'DUEL', 'Opponent submitted their result', ?, 0, ?)`,
-      [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, otherWallet, userWallet, duelId,
+      [`act_${duelId}_opponent_submitted_${otherWallet === duel.captain_a_wallet ? 'a' : 'b'}`, otherWallet, userWallet, duelId,
         'The other captain submitted their result.', new Date().toISOString()]
     );
+  }
+  let automaticResolution = null;
+  const resolutionReached = Math.floor(Date.now() / 1000) >= Number(duel.resolution_ts || 0);
+  // The second conflicting vote is the causal trigger. Only an initialized
+  // Duel can enter the real on-chain cancellation path; an uninitialized or
+  // otherwise invalid row remains fail-closed with the private votes stored.
+  if (match.state === 'DISPUTED' && resolutionReached
+    && duel.chain_status === 'INITIALIZED' && duel.onchain_duel_pda) {
+    automaticResolution = await resolveDuel(duelId);
+    if (!automaticResolution.success) {
+      return res.status(503).json({
+        success: false,
+        error: `Both votes are stored, but automatic refund could not complete: ${automaticResolution.error}`,
+        match,
+        automaticResolution,
+      });
+    }
   }
   if (match.matched) {
     for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
       execute(
-        `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+        `INSERT OR IGNORE INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
          VALUES (?, ?, 'RESULT_CONFIRMED', ?, ?, 'DUEL', 'Result confirmed', ?, 0, ?)`,
-        [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, 'system', duelId,
+        [`act_${duelId}_result_confirmed_${wallet === duel.captain_a_wallet ? 'a' : 'b'}`, wallet, 'system', duelId,
           'Both captains chose the same result.', new Date().toISOString()]
       );
     }
   }
-  res.json({ success: true, votes: result.votes, match });
+  res.json({ success: true, votes: result.votes, match, automaticResolution });
 });
 
 // POST /api/duels/:id/publish-arena (Verify Mainnet SKR stake and promote to Arena)
