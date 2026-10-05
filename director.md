@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILDING — DUEL DETAIL DATA-CONTRACT FIX BUILT / OWNER PHYSICAL UAT REQUIRED`
+**Current Authoritative Status:** `BUILDING — POWER-SAVING-RESILIENT MWA RECOVERY BUILT / READY FOR ONE PHYSICAL CONNECT TEST WITH POWER SAVING ON`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; the final Duel-detail data-contract/state-precedence runtime commit `80b5148` is pushed and clean before this docs-only update. The route-only production deployment is read back healthy, the fresh APK is built and artifact-inspected, and owner-driven physical UAT remains pending. No database or economic state was mutated.
+**Repository State:** On branch `master`; the client-only power-saving-resilient MWA recovery runtime commit `8740add` is pushed and clean before this docs-only update. No backend deployment or database/economic mutation was performed. The fresh signed APK is built and artifact-inspected; owner-driven physical Power Saving UAT remains pending.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `80b51487f6479d5f89b965c54c97671d1f7fa61f`. The sole current Duel-detail data-contract APK SHA-256 is `30e56fb67818a329e0c2e1c93653a357c2cb5220eb39d11d12218a351213766d`; all prior APKs, including `5c1e614ded1700805b97e02e115efe0c7300003ff85e42d69f2c519ff6881402`, are superseded.
+**Authoritative Packaged-Source Commit:** `8740addb0f0cff61e415218e987db7aa0217edb0`. The sole current wallet-recovery APK SHA-256 is `82d15d6a704cf25ccd73d7e07300add3ea6949e6d084578776eab5f76678cde6`; all prior APKs, including `30e56fb67818a329e0c2e1c93653a357c2cb5220eb39d11d12218a351213766d`, are superseded.
 **Last Updated:** 2026-10-05
 
 ---
@@ -3895,3 +3895,126 @@ performed by the builder in this pass. The exact APK above is the only artifact
 authorized for the next owner-driven physical UAT.
 
 Target: **`BUILDING — DUEL DETAIL DATA-CONTRACT PROVEN / OWNER PHYSICAL UAT REQUIRED`**.
+
+## 65. POWER-SAVING-RESILIENT MWA RECOVERY — 2026-10-05
+
+Director-authorized client-only implementation for Android Power Saving,
+activity recreation, process-death, and Counter → Phantom → Counter recovery.
+No VPS deployment, backend source change, database mutation, Solana program
+change, signing-identity rotation, or wallet/device interaction was performed.
+
+### 65.A — Runtime implementation
+
+- Source/runtime commit: `8740addb0f0cff61e415218e987db7aa0217edb0` (pushed to
+  `origin/master`).
+- MWA authorization is stored separately from the Counter backend session in
+  OS-backed SecureStore. The record contains the opaque `auth_token`, public
+  wallet, `wallet_uri_base` when returned, `chain`, version, and authorization
+  timestamp. The token is never logged, copied to evidence, or written to the
+  backend by the recovery layer.
+- Pending wallet work is stored in OS-backed SecureStore with `operationId`,
+  `operationType`, stage, resource id when applicable, expected public wallet,
+  optional public transaction signature, `createdAt`, and `updatedAt`.
+- Connect diagnostics now include one correlation id per operation and the
+  required start, state-save, MWA callback, authorize/reauthorize, sign-in,
+  verification, profile, session, completion, recovery, interruption, timeout,
+  cancellation, auth-failure, and error markers. `APP_BACKGROUND` and
+  `APP_RESUME` remain value-free lifecycle markers.
+- Resume/process recovery reuses a stored MWA authorization through a fresh
+  `transact()` and `reauthorize()`, persists replacement authorization state,
+  refuses an account change, and requires an explicit controlled reconnect when
+  no authorization result exists.
+- UI states are explicit: `Opening Phantom…`, `Waiting for wallet approval…`,
+  `Verifying your wallet…`, `Restoring your Counter account…`, `Connection
+  interrupted`, `Wallet changed`, and `Counter can safely reconnect to your
+  wallet.`. No power-saving, battery-optimization, or developer-setting
+  workaround is presented to users.
+- Duel initialization, stake, settlement, claim, and refund paths persist
+  resumable operation state. A known public transaction signature is checked
+  with chain status before backend retry; a pending settlement message is
+  authoritatively read back before another signing request is allowed.
+
+### 65.B — Regression closure
+
+- TypeScript: PASS.
+- Wallet-recovery contract tests: PASS.
+- Secure session/pending-operation harness: PASS, `7/7` cases.
+- MWA handoff: PASS.
+- Experience rebase: PASS.
+- Canonical Duel state: PASS, `18/18`.
+- Profile boundaries: PASS, `12/12`.
+- Take deletion: PASS.
+- Portfolio: PASS.
+- Chain vectors: PASS, `11/11`.
+- Resolution boundaries: PASS.
+- Backend adversarial suite: PASS, `8/8`.
+- Fresh visibility, Duel-detail HTTP contract, accept transition, and Duels
+  load isolation: PASS.
+- The first local integration attempts correctly failed closed because no
+  `JWT_SECRET` was present in those test processes. They were rerun with a
+  freshly generated in-memory test secret that was never printed or persisted;
+  Take deletion, resolution boundaries, MVP lifecycle, and adversarial tests
+  then passed. The dedicated auth-boundary test also passed configured auth,
+  missing-secret refusal, and former-fallback rejection.
+- Secret/mock scan: no application-owned former JWT fallback, mock session
+  token, private-key block, seed phrase, or mnemonic was found. The only
+  `JWT_SECRET ||` match is a test harness’s ephemeral local test-secret setup,
+  not runtime application code.
+
+### 65.C — Sole fresh release artifact
+
+Exactly one fresh signed release build was executed from the packaged source
+commit above using the existing DPAPI-backed rotated `counter` signing
+identity. The signing password was held in memory only and was not printed or
+persisted.
+
+```text
+BUILD SUCCESSFUL in 25m 13s
+exit: 0
+703 actionable tasks: 703 executed
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62513303
+SHA-256: 82d15d6a704cf25ccd73d7e07300add3ea6949e6d084578776eab5f76678cde6
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+APK signature: v2 verified; one signer
+```
+
+All earlier APK hashes, including `30e56fb67818a329e0c2e1c93653a357c2cb5220eb39d11d12218a351213766d`, are superseded by this artifact.
+
+### 65.D — Packaged artifact proof
+
+The extracted Hermes bundle is `assets/index.android.bundle`,
+`2,573,088` bytes, SHA-256
+`9f313c3006f1598af797cd1d58e0a5e6506aba25e1cf288ec307c5bbe170879b`.
+Compiled evidence contains the connect marker set, the two SecureStore keys,
+`auth_token`, `wallet_uri_base`, reauthorization markers, the production VPS
+URL, the Solana program id, and the Devnet cUSD mint. Hermes stores the new
+status labels in its UTF-16 string table; the exact packaged copy was verified
+there as `Opening Phantom…`, `Waiting for wallet approval…`, `Verifying your
+wallet…`, `Restoring your Counter account…`, and `Checking your transaction…`.
+The interruption, reconnect, and wallet-change copy was also present in the
+compiled bundle.
+
+The packaged manifest verifies package `app.counter.mobile`, scheme links
+`counter://duel/:id` and `counter://receipt/:id`, and HTTPS App Links for
+`/d` and `/r` on `counter.103-195-188-198.sslip.io` with `autoVerify=true`.
+The live Asset Links endpoint returned HTTP 200 for `app.counter.mobile` and
+includes the current release certificate fingerprint. The artifact contains
+no former JWT fallback literal, mock session token, private-key block, or
+`https://counter.app` runtime host. `http://localhost` appears only as a
+dependency/library diagnostic string; no localhost production backend URL is
+packaged, and the explicit API base is the VPS URL above.
+
+Source-to-APK binding is exact: the APK was built at source commit
+`8740addb0f0cff61e415218e987db7aa0217edb0`, and
+`git diff 8740addb0f0cff61e415218e987db7aa0217edb0 HEAD -- app/ server/ program/`
+is empty. The artifact inspection did not modify tracked files.
+
+No installation, app launch, Connect Wallet tap, Phantom approval, or physical
+Power Saving test has been performed. The exact APK above is staged for one
+owner-driven physical Connect Wallet test with Power Saving left on.
+
+Target: **`BUILDING — POWER-SAVING-RESILIENT MWA RECOVERY BUILT / READY FOR ONE PHYSICAL CONNECT TEST WITH POWER SAVING ON`**.
