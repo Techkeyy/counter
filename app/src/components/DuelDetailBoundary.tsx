@@ -45,10 +45,16 @@ export class DuelDetailBoundary extends React.Component<DuelDetailBoundaryProps,
   };
 
   private renderFailure() {
+    const detail = String(this.state.error?.message || '').toLowerCase();
+    const copy = /not found|404/.test(detail)
+      ? 'Counter could not find this Duel in its readable history. No Duel state was changed.'
+      : /network|request_failed|unreachable|fetch/.test(detail)
+        ? 'Counter could not reach the Duel record. Nothing was accepted or submitted again.'
+        : 'Counter could not render this Duel record. Nothing was accepted or submitted again.';
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Couldn't open this Duel</Text>
-        <Text style={styles.copy}>The existing Duel could not be loaded. Nothing was accepted or submitted again.</Text>
+        <Text style={styles.copy}>{copy}</Text>
         <TouchableOpacity style={styles.primaryButton} onPress={this.handleRetry} accessibilityRole="button" accessibilityLabel="Try again">
           <Text style={styles.primaryText}>Try again</Text>
         </TouchableOpacity>

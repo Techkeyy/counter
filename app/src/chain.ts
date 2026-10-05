@@ -22,6 +22,7 @@ import {
   walletStage,
 } from './diagnostics';
 import type { WalletAttempt } from './diagnostics';
+import { startWalletKeepalive, stopWalletKeepalive } from './walletKeepalive';
 
 // Canonical chain constants — MUST match server/chain.js and program/src/lib.rs.
 // The mobile client never derives PDAs independently: every address below is
@@ -241,6 +242,7 @@ export async function mwaSignSendConfirm(
   const tx = new Transaction({ feePayer, recentBlockhash: blockhash });
   tx.add(...instructions);
 
+  await startWalletKeepalive(attempt.operation, attempt.attemptId);
   walletStage(attempt, 'MWA_OPEN');
   let authorizationSucceeded = false;
   let signSendStarted = false;
@@ -350,6 +352,8 @@ export async function mwaSignSendConfirm(
       undefined,
       error
     );
+  } finally {
+    await stopWalletKeepalive(attempt.attemptId);
   }
 }
 
@@ -375,6 +379,7 @@ export async function mwaSignMessage(
 ): Promise<string> {
   const walletAddressB64 = Buffer.from(new PublicKey(walletBase58).toBytes()).toString('base64');
   const payload = Uint8Array.from(Buffer.from(message, 'utf-8'));
+  await startWalletKeepalive(attempt.operation, attempt.attemptId);
   walletStage(attempt, 'MWA_OPEN');
   try {
     const out = await transact(async (wallet) => {
@@ -398,5 +403,7 @@ export async function mwaSignMessage(
   } catch (error) {
     walletStage(attempt, isWalletCancellation(error) ? 'MWA_CANCELLED' : 'FAILED');
     throw error;
+  } finally {
+    await stopWalletKeepalive(attempt.attemptId);
   }
 }

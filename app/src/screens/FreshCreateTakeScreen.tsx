@@ -1,21 +1,36 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { api } from '../api';
+import { api, isAmbiguousMutationError } from '../api';
+import { Take } from '../types';
 import { ALL_CATEGORIES, CategoryFilter, categoryLabel } from '../topics';
 import { colors, spacing, typography, touchMin } from '../theme';
 import { PrimaryButton, ScreenHeader } from '../components/CounterUI';
 
-export const FreshCreateTakeScreen: React.FC<{ onSuccess: () => void; onCancel: () => void }> = ({ onSuccess, onCancel }) => {
+export const FreshCreateTakeScreen: React.FC<{ onSuccess: (take: Take) => void; onCancel: () => void }> = ({ onSuccess, onCancel }) => {
   const [topic, setTopic] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('ALL');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
   const submit = async () => {
     if (!topic.trim()) { setError('Start with the Take you want people to react to.'); return; }
+    if (working) return;
+    const currentAttemptId = attemptId || `take_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    if (!attemptId) setAttemptId(currentAttemptId);
     setWorking(true); setError(null);
-    try { await api.createTake(topic.trim(), content.trim(), category === 'ALL' ? 'CULTURE' : category); onSuccess(); }
-    catch (err: any) { setError(err?.message || 'Could not post this Take.'); }
+    try {
+      const take = await api.createTake(topic.trim(), content.trim(), category === 'ALL' ? 'CULTURE' : category, currentAttemptId);
+      onSuccess(take);
+    } catch (err: any) {
+      if (isAmbiguousMutationError(err)) {
+        try {
+          const existing = await api.getTakeByAttempt(currentAttemptId);
+          if (existing?.id) { onSuccess(existing); return; }
+        } catch {}
+      }
+      setError("Couldn't post this Take. Your text is still here. Retry when you're ready.");
+    }
     finally { setWorking(false); }
   };
   return <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -30,7 +45,7 @@ export const FreshCreateTakeScreen: React.FC<{ onSuccess: () => void; onCancel: 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>{ALL_CATEGORIES.filter((x) => x !== 'ALL').map((item) => <TouchableOpacity key={item} style={[styles.category, category === item && styles.categoryActive]} onPress={() => setCategory(item)} accessibilityRole="radio" accessibilityState={{ selected: category === item }}><Text style={[styles.categoryText, category === item && styles.categoryTextActive]}>{categoryLabel(item)}</Text></TouchableOpacity>)}</ScrollView>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </ScrollView>
-    <View style={styles.footer}><PrimaryButton label="Post" onPress={submit} loading={working} disabled={!topic.trim()} /></View>
+    <View style={styles.footer}><PrimaryButton label="Post" onPress={submit} loading={working} loadingLabel="Posting…" disabled={!topic.trim()} /></View>
   </KeyboardAvoidingView>;
 };
 

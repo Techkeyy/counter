@@ -3,12 +3,20 @@ const router = express.Router();
 const crypto = require('crypto');
 const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
+const { summarizeDuel } = require('../duel-state');
+
+function noConditionalListCache(req, res, next) {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache', Expires: '0' });
+  next();
+}
 
 // GET /api/takes
 // Canonical social-identity contract: joined profile fields are aliased to
 // author_* so every surface renders the CURRENT profile (never snapshots,
 // never wallet text). The app reads ONLY these aliased fields.
-router.get('/', (req, res) => {
+router.get('/', noConditionalListCache, (req, res) => {
   const { category, author } = req.query;
   let sql = `
     SELECT t.*, u.handle AS author_handle, u.display_name AS author_name, u.avatar_url AS author_avatar, u.is_arena_eligible, u.skr_staked_amount
@@ -29,26 +37,87 @@ router.get('/', (req, res) => {
 
   sql += ` ORDER BY t.created_at DESC LIMIT 50`;
   const takes = queryAll(sql, params);
-  res.json({ takes });
+  const takeIds = takes.map((take) => take.id);
+  const linkedDuels = takeIds.length
+    ? queryAll(
+      `SELECT d.*, ua.handle AS captain_a_handle, ua.display_name AS captain_a_name, ua.avatar_url AS captain_a_avatar,
+              ub.handle AS captain_b_handle, ub.display_name AS captain_b_name, ub.avatar_url AS captain_b_avatar
+         FROM duels d
+         LEFT JOIN users ua ON d.captain_a_wallet = ua.wallet_address
+         LEFT JOIN users ub ON d.captain_b_wallet = ub.wallet_address
+        WHERE d.take_id IN (${takeIds.map(() => '?').join(',')}) AND COALESCE(d.is_archived, 0) = 0
+        ORDER BY d.created_at DESC`,
+      takeIds,
+    )
+    : [];
+  const duelsByTake = new Map();
+  for (const duel of linkedDuels) {
+    const list = duelsByTake.get(duel.take_id) || [];
+    list.push(summarizeDuel(duel));
+    duelsByTake.set(duel.take_id, list);
+  }
+  res.json({
+    takes: takes.map((take) => ({
+      ...take,
+      duel_summaries: duelsByTake.get(take.id) || [],
+    })),
+  });
+});
+
+// Read back one idempotent client attempt before allowing any retry. This is
+// deliberately authenticated and never creates or mutates a Take.
+router.get('/by-attempt/:attemptId', requireAuth, (req, res) => {
+  const take = queryOne(
+    `SELECT t.*, u.handle AS author_handle, u.display_name AS author_name, u.avatar_url AS author_avatar
+       FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address
+      WHERE t.author_wallet = ? AND t.post_attempt_id = ?`,
+    [req.userWallet, String(req.params.attemptId || '').slice(0, 128)],
+  );
+  if (!take) return res.status(404).json({ error: 'Take attempt not found' });
+  res.json({ take });
 });
 
 // POST /api/takes (Authenticated)
 router.post('/', requireAuth, (req, res) => {
   const { topic, content, category } = req.body;
   const authorWallet = req.userWallet;
+  const attemptId = String(req.get('X-Counter-Attempt-Id') || req.body?.attemptId || '').trim().slice(0, 128) || null;
 
   if (!topic || !String(topic).trim()) {
     return res.status(400).json({ error: 'topic is required' });
   }
 
+  if (attemptId) {
+    const existing = queryOne(
+      `SELECT t.*, u.handle AS author_handle, u.display_name AS author_name, u.avatar_url AS author_avatar
+         FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address
+        WHERE t.author_wallet = ? AND t.post_attempt_id = ?`,
+      [authorWallet, attemptId],
+    );
+    if (existing) return res.status(200).json({ take: existing, idempotent: true });
+  }
+
   const id = `take_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
 
-  execute(
-    `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count, record_origin)
-     VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0, 'USER')`,
-    [id, authorWallet, String(topic).trim(), String(content || '').trim(), category || 'crypto', now]
-  );
+  try {
+    execute(
+      `INSERT INTO takes (id, author_wallet, topic, content, category, created_at, status, likes_count, comments_count, duels_count, record_origin, post_attempt_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 0, 0, 0, 'USER', ?)`,
+      [id, authorWallet, String(topic).trim(), String(content || '').trim(), category || 'crypto', now, attemptId]
+    );
+  } catch (error) {
+    if (attemptId) {
+      const existing = queryOne(
+        `SELECT t.*, u.handle AS author_handle, u.display_name AS author_name, u.avatar_url AS author_avatar
+           FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address
+          WHERE t.author_wallet = ? AND t.post_attempt_id = ?`,
+        [authorWallet, attemptId],
+      );
+      if (existing) return res.status(200).json({ take: existing, idempotent: true });
+    }
+    throw error;
+  }
 
   const take = queryOne(
     `SELECT t.*, u.handle AS author_handle, u.display_name AS author_name, u.avatar_url AS author_avatar FROM takes t LEFT JOIN users u ON t.author_wallet = u.wallet_address WHERE t.id = ?`,

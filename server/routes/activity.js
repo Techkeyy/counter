@@ -2,6 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, execute } = require('../db');
 const { requireAuth } = require('../auth');
+const { deriveDuelState } = require('../duel-state');
+
+function noConditionalListCache(req, res, next) {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache', Expires: '0' });
+  next();
+}
 
 function captainName(duel, wallet) {
   const handle = wallet === duel.captain_a_wallet ? duel.captain_a_handle : duel.captain_b_handle;
@@ -52,9 +60,18 @@ function derivedDuelActivity(userWallet) {
       created_at: timestamp,
     });
 
+    const effectiveState = deriveDuelState(duel, nowSec);
+    if (effectiveState === 'EXPIRED') {
+      add('DUEL_EXPIRED', 'Duel expired', 'This Duel expired before both captains funded it.', 'expired');
+      continue;
+    }
     if (duel.status === 'CANCELLED') {
-      add('NO_AGREEMENT', 'No agreement', `You and ${other} chose different results, so both stakes are being returned.`, 'no-agreement');
-      add('REFUND_READY', 'Refund ready', 'Get your principal cUSD back. Both stakes are refundable.', 'refund');
+      if (effectiveState === 'REFUNDED') {
+        add('NO_AGREEMENT', 'No agreement', `You and ${other} did not reach an agreement, so both stakes are being returned.`, 'no-agreement');
+        add('REFUND_READY', 'Refund ready', 'Get your principal cUSD back. Both stakes are refundable.', 'refund');
+      } else {
+        add('DUEL_CANCELLED', 'Duel cancelled', 'This Duel was cancelled before completion.', 'cancelled');
+      }
       continue;
     }
     if (String(duel.status || '').startsWith('RESOLVED')) continue;
@@ -74,7 +91,7 @@ function derivedDuelActivity(userWallet) {
 }
 
 // GET /api/activity
-router.get('/', requireAuth, (req, res) => {
+router.get('/', noConditionalListCache, requireAuth, (req, res) => {
   const userWallet = req.userWallet;
   const persisted = queryAll(
     `SELECT * FROM activity WHERE user_wallet = ? AND COALESCE(is_archived, 0) = 0 ORDER BY created_at DESC LIMIT 50`,

@@ -28,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
             if (!packages.any { it is ExpoModulesPackage }) {
               packages.add(ExpoModulesPackage())
             }
+            packages.add(CounterReactPackage())
             return packages
           }
 

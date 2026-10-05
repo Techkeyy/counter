@@ -4,6 +4,7 @@ import { Buffer } from 'buffer';
 import { api } from './api';
 import type { StoredWalletAuthorization } from './session';
 import { connectStage, isWalletCancellation, isWalletTimeout } from './diagnostics';
+import { startWalletKeepalive, stopWalletKeepalive } from './walletKeepalive';
 
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const PROGRAM_ID = new PublicKey('52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT');
@@ -128,6 +129,7 @@ export async function connectAndAuthenticate(
   let walletChanged = false;
   let verificationStarted = false;
   const attemptId = options.attemptId || `connect_${Date.now().toString(36)}`;
+  await startWalletKeepalive('CONNECT', attemptId);
   const emitMarker = async (stage: import('./diagnostics').ConnectStage) => {
     connectStage(attemptId, stage);
     try { await options.onMarker?.(stage); } catch {}
@@ -273,5 +275,7 @@ export async function connectAndAuthenticate(
               ? 'The wallet connection was interrupted. Reconnect to continue.'
               : 'Wallet connection could not be completed safely.',
     };
+  } finally {
+    await stopWalletKeepalive(attemptId);
   }
 }

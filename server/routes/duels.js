@@ -8,6 +8,7 @@ const { querySkrStakedAmount } = require('../skr');
 const chain = require('../chain');
 const { PublicKey, Keypair } = require('@solana/web3.js');
 const fs = require('fs');
+const { summarizeDuel } = require('../duel-state');
 
 /** Server resolver authority pubkey (fail-fast: never invent one). */
 function getResolverPublicKey() {
@@ -36,7 +37,12 @@ function ensureCanonicalDuelId(duel) {
 }
 
 // GET /api/duels (Feed / Arena list)
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', (req, res, next) => {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache', Expires: '0' });
+  next();
+}, optionalAuth, (req, res) => {
   const { isArena, category, status } = req.query;
   let sql = `
     SELECT d.*, c.stake_amount_usd AS stake_amount_usd,
@@ -90,6 +96,7 @@ router.get('/', optionalAuth, (req, res) => {
     }
     return {
       ...d,
+      duel_summary: summarizeDuel(d),
       total_pool: total,
       odds_a: oddsA,
       odds_b: oddsB,

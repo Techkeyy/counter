@@ -5,6 +5,13 @@ const { queryAll, queryOne, execute, transaction } = require('../db');
 const { requireAuth } = require('../auth');
 const { validateChallengeContract } = require('../resolution-templates');
 
+function noConditionalListCache(req, res, next) {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache', Expires: '0' });
+  next();
+}
+
 // The program only requires cutoff < resolution and checks both timestamps at
 // instruction time. The old two-hour product floor made short, demoable Duels
 // impossible, so keep a safe 15-minute minimum and derive a hidden staking
@@ -32,7 +39,7 @@ function deriveChallengeTiming(decisionTsRaw, nowSec = Math.floor(Date.now() / 1
 // GET /api/challenges (current user's actionable challenge inbox)
 // Cancelled/declined/accepted rows remain in storage for history but are not
 // returned to the review sheet as actionable pending challenges.
-router.get('/', requireAuth, (req, res) => {
+router.get('/', noConditionalListCache, requireAuth, (req, res) => {
   const challenges = queryAll(
     `SELECT c.*,
             creator.handle AS creator_handle,

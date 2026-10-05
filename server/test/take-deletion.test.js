@@ -57,9 +57,12 @@ async function run() {
     const A = await siwsAuth();
     const B = await siwsAuth();
     tracked.users.push(A.wallet, B.wallet);
+    const handleSuffix = A.wallet.slice(0, 8).toLowerCase();
+    const profileAHandle = `profilea${handleSuffix}`;
+    const profileBHandle = `profileb${handleSuffix}`;
     // Author setup (identity joins resolve through users rows)
     const { queryOne, execute } = require('../db');
-    execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Del Author', 'delauthor', A.wallet]);
+    execute(`UPDATE users SET display_name = ?, handle = ? WHERE wallet_address = ?`, ['Del Author', `delauthor${handleSuffix}`, A.wallet]);
 
     // 1. author deletes unchallenged Take
     let r = await api('POST', '/api/takes', A.token, { topic: 'Deletable', content: 'Delete me', category: 'CRYPTO' });
@@ -86,49 +89,49 @@ async function run() {
     // may send @/mixed-case handles, but reads must expose the canonical
     // current profile through the author_* response fields.
     r = await api('PUT', '/api/users/profile', A.token, {
-      displayName: 'Profile Name A', handle: '@ProfileA', bio: 'Profile bio A',
+      displayName: 'Profile Name A', handle: `@${profileAHandle}`, bio: 'Profile bio A',
     });
     assert(
       r.status === 200 && r.data.user.display_name === 'Profile Name A' &&
-      r.data.user.handle === 'profilea' && r.data.user.bio === 'Profile bio A',
+      r.data.user.handle === profileAHandle && r.data.user.bio === 'Profile bio A',
       'authenticated PUT returns canonical profile fields'
     );
     r = await api('GET', '/api/takes', A.token);
     let feedTake = (r.data.takes || []).find((t) => t.id === takeId2);
     assert(
       feedTake && feedTake.author_wallet === A.wallet && feedTake.author_name === 'Profile Name A' &&
-      feedTake.author_handle === 'profilea' && feedTake.author_avatar === '',
+      feedTake.author_handle === profileAHandle && feedTake.author_avatar === '',
       'feed returns live canonical identity and ignores forged author fields'
     );
 
     r = await api('PUT', '/api/users/profile', A.token, {
-      displayName: 'Profile Name B', handle: '@ProfileB', bio: 'Profile bio B',
+      displayName: 'Profile Name B', handle: `@${profileBHandle}`, bio: 'Profile bio B',
     });
-    assert(r.status === 200 && r.data.user.handle === 'profileb', 'profile edit normalizes handle');
+    assert(r.status === 200 && r.data.user.handle === profileBHandle, 'profile edit normalizes handle');
     r = await api('GET', `/api/users/${A.wallet}`, A.token);
     assert(
       r.status === 200 && r.data.user.display_name === 'Profile Name B' &&
-      r.data.user.handle === 'profileb' && r.data.user.bio === 'Profile bio B',
+      r.data.user.handle === profileBHandle && r.data.user.bio === 'Profile bio B',
       'fresh profile GET matches the edited identity'
     );
     r = await api('GET', '/api/takes', A.token);
     feedTake = (r.data.takes || []).find((t) => t.id === takeId2);
     assert(
       feedTake && feedTake.id === takeId2 && feedTake.author_name === 'Profile Name B' &&
-      feedTake.author_handle === 'profileb' && feedTake.author_name !== 'Counter user',
+      feedTake.author_handle === profileBHandle && feedTake.author_name !== 'Counter user',
       'existing Take keeps its ID and feed resolves current identity'
     );
     r = await api('POST', `/api/takes/${takeId2}/comments`, A.token, { content: 'Live identity reply' });
     assert(
       r.status === 201 && r.data.comment.author_wallet === A.wallet &&
-      r.data.comment.author_name === 'Profile Name B' && r.data.comment.author_handle === 'profileb',
+      r.data.comment.author_name === 'Profile Name B' && r.data.comment.author_handle === profileBHandle,
       'new comment resolves current canonical identity'
     );
     r = await api('GET', `/api/takes/${takeId2}`, A.token);
     assert(
       r.status === 200 && r.data.take.author_name === 'Profile Name B' &&
-      r.data.take.author_handle === 'profileb' &&
-      r.data.comments.some((c) => c.author_name === 'Profile Name B' && c.author_handle === 'profileb'),
+      r.data.take.author_handle === profileBHandle &&
+      r.data.comments.some((c) => c.author_name === 'Profile Name B' && c.author_handle === profileBHandle),
       'Take detail and comments resolve current identity'
     );
     ok('profile PUT/GET, feed, detail, comments, and historical propagation agree');
@@ -194,7 +197,7 @@ async function run() {
     r = await api('GET', `/api/takes/${takeId3}`, A.token);
     assert(
       r.status === 200 && r.data.take.author_name === 'Profile Name B' &&
-      r.data.take.author_handle === 'profileb',
+      r.data.take.author_handle === profileBHandle,
       'live take resolves current identity'
     );
     ok('feed/detail identity contract holds (author_* populated)');

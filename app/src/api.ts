@@ -1,4 +1,5 @@
 import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification, Portfolio } from './types';
+import { syncCoordinator } from './syncCoordinator';
 
 export interface ProfileUpdateInput {
   displayName?: string;
@@ -28,9 +29,11 @@ export function getCurrentWallet() {
   return currentWallet;
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(endpoint: string, options: RequestInit = {}, timeoutMs = 20000): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store',
+    Pragma: 'no-cache',
     ...(options.headers as Record<string, string> || {}),
   };
 
@@ -39,15 +42,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   let response: Response;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
+      cache: 'no-store',
+      signal: options.signal || controller?.signal,
     });
   } catch (err: any) {
+    if (controller?.signal.aborted) throw new Error('REQUEST_TIMEOUT');
     // Transport never reached the backend (offline, DNS, refused).
     console.warn(`[API] transport failure ${endpoint}:`, err?.message);
     throw new Error('NETWORK_UNREACHABLE');
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 
   // Never assume JSON: gateways and default error pages answer HTML (which
@@ -74,6 +84,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (data === null || data === undefined) {
     throw new Error('REQUEST_FAILED:200');
   }
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method !== 'GET' && !endpoint.startsWith('/auth')) {
+    syncCoordinator.mutationSucceeded(`${method} ${endpoint}`);
+  }
   return data as T;
 }
 
@@ -81,7 +95,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 // should render its offline variant, never raw parser text.
 export function isUnreachable(err: any): boolean {
   const msg = String(err?.message || '');
-  return /NETWORK_UNREACHABLE|REQUEST_FAILED:5|network request failed|failed to fetch|offline/i.test(msg);
+  return /NETWORK_UNREACHABLE|REQUEST_TIMEOUT|REQUEST_FAILED:5|network request failed|failed to fetch|offline/i.test(msg);
+}
+
+export function isAmbiguousMutationError(err: any): boolean {
+  return isUnreachable(err) || /REQUEST_FAILED:0|REQUEST_FAILED:408|ambiguous/i.test(String(err?.message || err || ''));
 }
 
 // Fixed UI copy for list-level failures. Backend-provided messages stay for
@@ -123,12 +141,24 @@ export const api = {
     }
     return res;
   },
-  createTake: async (topic: string, content: string | undefined, category: string): Promise<Take> => {
+  createTake: async (topic: string, content: string | undefined, category: string, attemptId?: string): Promise<Take> => {
     const res = await request<any>(`/takes`, {
       method: 'POST',
+      headers: attemptId ? { 'X-Counter-Attempt-Id': attemptId } : undefined,
       body: JSON.stringify({ topic, content: content || '', category }),
     });
-    return res?.take || res;
+    const take = res?.take || res;
+    if (!take?.id) throw new Error('RESPONSE_SHAPE_INVALID');
+    return take;
+  },
+  getTakeByAttempt: async (attemptId: string): Promise<Take | null> => {
+    try {
+      const res = await request<any>(`/takes/by-attempt/${encodeURIComponent(attemptId)}`);
+      return res?.take || res || null;
+    } catch (error: any) {
+      if (/REQUEST_FAILED:404/.test(String(error?.message || ''))) return null;
+      throw error;
+    }
   },
   addComment: async (takeId: string, content: string): Promise<Comment> => {
     const res = await request<any>(`/takes/${takeId}/comments`, {

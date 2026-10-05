@@ -48,6 +48,26 @@ export interface Take {
   likes_count: number;
   comments_count: number;
   duels_count: number;
+  duel_summaries?: DuelSummary[];
+}
+
+export interface DuelSummary {
+  id: string;
+  take_id?: string;
+  status: string;
+  state: string;
+  state_label: string;
+  resolution_ts?: number;
+  captain_a_wallet?: string;
+  captain_b_wallet?: string;
+  captain_a_name?: string;
+  captain_b_name?: string;
+  captain_a_handle?: string;
+  captain_b_handle?: string;
+  captain_a_avatar?: string;
+  captain_b_avatar?: string;
+  side_a_total?: number;
+  side_b_total?: number;
 }
 
 export interface Comment {

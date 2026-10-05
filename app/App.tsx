@@ -41,6 +41,7 @@ import { api } from './src/api';
 import { Take, Duel, Receipt, Challenge } from './src/types';
 import { acceptTransitionStage, connectStage, lifecycleStage } from './src/diagnostics';
 import type { PendingWalletOperation } from './src/session';
+import { syncCoordinator } from './src/syncCoordinator';
 
 type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
 
@@ -59,6 +60,8 @@ export default function App() {
   const [pendingWalletOperation, setPendingWalletOperation] = useState<PendingWalletOperation | null>(null);
   const connectInFlightRef = useRef(false);
   const autoRecoveryAttemptedRef = useRef<string | null>(null);
+  const activeWalletRef = useRef<string | null>(null);
+  const [surfaceEpoch, setSurfaceEpoch] = useState(0);
 
   // Selected Detail Views
   const [selectedDuelId, setSelectedDuelId] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export default function App() {
   const [duelsActionableCount, setDuelsActionableCount] = useState(0);
   const [activityActionableCount, setActivityActionableCount] = useState(0);
   const [hasVisibleTakes, setHasVisibleTakes] = useState(false);
+  const [createdTake, setCreatedTake] = useState<Take | null>(null);
 
   // Modals
   const [challengeTargetTake, setChallengeTargetTake] = useState<Take | null>(null);
@@ -84,6 +88,26 @@ export default function App() {
   // Other-user profile viewing (overlay; own profile lives on the tab).
   const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
 
+  const invalidateUserScopedState = useCallback((nextWallet: string | null) => {
+    setSurfaceEpoch((value) => value + 1);
+    setFeedRefresh((value) => value + 1);
+    setTabFocus((value) => value + 1);
+    setCurrentTab('HOME');
+    setCreatedTake(null);
+    setCreatedChallenge(null);
+    setChallengeTargetTake(null);
+    setReviewChallenge(null);
+    setSelectedDuelId(null);
+    setSelectedTake(null);
+    setSelectedReceipt(null);
+    setShowComposer(false);
+    setViewProfileWallet(null);
+    setDuelsActionableCount(0);
+    setActivityActionableCount(0);
+    setHasVisibleTakes(false);
+    syncCoordinator.setActiveWallet(nextWallet);
+  }, []);
+
   // Capture the app-side of the wallet handoff without recording any wallet
   // payload. Pending work is reconciled after resume; it is never silently
   // discarded when Android suspends or recreates the activity.
@@ -92,8 +116,10 @@ export default function App() {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (previousState === 'active' && nextState !== 'active') {
         lifecycleStage('APP_BACKGROUND');
+        syncCoordinator.setForeground(false);
       } else if (previousState !== 'active' && nextState === 'active') {
         lifecycleStage('APP_RESUME');
+        syncCoordinator.setForeground(true);
         if (!connectInFlightRef.current) {
           void loadPendingWalletOperation().then((pending) => {
             if (!pending) return;
@@ -114,7 +140,11 @@ export default function App() {
       }
       previousState = nextState;
     });
-    return () => subscription.remove();
+    syncCoordinator.setForeground(AppState.currentState === 'active');
+    return () => {
+      subscription.remove();
+      syncCoordinator.setForeground(false);
+    };
   }, []);
 
   // Restore the securely stored session on cold start. The stored token is
@@ -129,6 +159,10 @@ export default function App() {
           loadPendingWalletOperation(),
         ]);
         if (cancelled) return;
+        if (activeWalletRef.current !== restored.publicKey) {
+          invalidateUserScopedState(restored.publicKey);
+          activeWalletRef.current = restored.publicKey;
+        }
         setWalletState(restored);
         if (pending && pending.operationType === 'CONNECT' && restored.connected) {
           // A valid backend session proves that the interrupted connect reached
@@ -271,6 +305,10 @@ export default function App() {
             token: state.authToken,
           });
           await persistStage('CONNECT_SESSION_SAVED', {}, true);
+          if (activeWalletRef.current !== state.publicKey) {
+            invalidateUserScopedState(state.publicKey);
+            activeWalletRef.current = state.publicKey;
+          }
           setWalletState({ ...state, needsProfileSetup });
           setConnectionStatus('CONNECTED');
           setConnectionError(null);
@@ -279,6 +317,7 @@ export default function App() {
           await persistStage('CONNECT_COMPLETE', {}, true);
           await clearPendingWalletOperation();
           setPendingWalletOperation(null);
+          syncCoordinator.requestSync('CONNECT_COMPLETE');
           if (!needsProfileSetup) setFeedRefresh((n) => n + 1);
         } catch (err: any) {
           await persistStage('CONNECT_ERROR');
@@ -339,6 +378,8 @@ export default function App() {
     await clearWalletAuthorization(SecureSessionStorage);
     await clearPendingWalletOperation(SecureSessionStorage);
     setPendingWalletOperation(null);
+    activeWalletRef.current = null;
+    invalidateUserScopedState(null);
     setWalletState(DISCONNECTED);
     setConnectionStatus('IDLE');
     setShowOnboarding(true);
@@ -400,6 +441,7 @@ export default function App() {
             content survive detail navigation. */}
         <View style={[styles.fill, currentTab === 'HOME' ? null : styles.hidden]}>
           <FreshFeedScreen
+            key={`home-${surfaceEpoch}`}
             onSelectTake={(take: Take) => setSelectedTake(take)}
             onSelectDuel={(duel: Duel) => openDuel(duel.id)}
             onHasVisibleTakesChange={setHasVisibleTakes}
@@ -411,12 +453,14 @@ export default function App() {
             onOpenProfile={() => openTab('PROFILE')}
             onOpenAuthorProfile={openAuthorProfile}
             userWallet={walletState.publicKey}
+            createdTake={createdTake}
             refreshSignal={feedRefresh}
             focusSignal={tabFocus}
           />
         </View>
         <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
           <FreshDuelsScreen
+            key={`duels-${surfaceEpoch}`}
             userWallet={walletState.publicKey}
             onSelectDuel={(duel: Duel) => openDuel(duel.id)}
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
@@ -427,6 +471,7 @@ export default function App() {
         </View>
         <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
           <FreshActivityScreen
+            key={`activity-${surfaceEpoch}`}
             onSelectNotification={(notif) => {
               if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
                 openDuel(notif.target_id.replace('receipt_', ''));
@@ -439,6 +484,7 @@ export default function App() {
         </View>
         <View style={[styles.fill, currentTab === 'PROFILE' ? null : styles.hidden]}>
           <FreshProfileScreen
+            key={`profile-${surfaceEpoch}`}
             wallet={walletState.publicKey}
             ownWallet={walletState.publicKey}
             onDisconnect={handleDisconnectWallet}
@@ -452,10 +498,12 @@ export default function App() {
         {showComposer && (
           <View style={styles.overlay}>
             <FreshCreateTakeScreen
-              onSuccess={() => {
+              onSuccess={(take) => {
+                setCreatedTake(take);
                 setShowComposer(false);
                 setCurrentTab('HOME');
                 setFeedRefresh((n) => n + 1);
+                syncCoordinator.mutationSucceeded('POST_TAKE');
               }}
               onCancel={() => setShowComposer(false)}
             />

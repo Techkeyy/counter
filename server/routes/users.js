@@ -9,10 +9,17 @@ const profile = require('../profile');
 const { getCusdBalance } = require('../chain');
 const { buildPortfolio } = require('../portfolio');
 
+function noConditionalPortfolioCache(req, res, next) {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache', Expires: '0' });
+  next();
+}
+
 // GET /api/users/portfolio (Authenticated; always the token wallet)
 // Portfolio is a read-only view over chain balance plus verified Counter
 // position/receipt facts. The wallet is never accepted from the URL or body.
-router.get('/portfolio', requireAuth, async (req, res) => {
+router.get('/portfolio', noConditionalPortfolioCache, requireAuth, async (req, res) => {
   const wallet = req.userWallet;
   try {
     const positions = queryAll(

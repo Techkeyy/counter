@@ -6,6 +6,7 @@ import { hasRealIdentity, formatUserDisplayName, formatUserHandle, formatRelativ
 import { colors, spacing, typography, touchMin } from '../theme';
 import { api, isUnreachable } from '../api';
 import { Avatar, EmptyState, Rule, ScreenHeader, StatusPill } from '../components/CounterUI';
+import { useSyncRefresh } from '../syncCoordinator';
 
 interface FreshFeedScreenProps {
   onSelectTake: (take: Take) => void;
@@ -16,6 +17,7 @@ interface FreshFeedScreenProps {
   onOpenAuthorProfile?: (wallet: string | null) => void;
   onHasVisibleTakesChange?: (hasVisibleTakes: boolean) => void;
   userWallet?: string | null;
+  createdTake?: Take | null;
   refreshSignal?: number;
   focusSignal?: number;
 }
@@ -23,6 +25,7 @@ interface FreshFeedScreenProps {
 export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
   onSelectTake, onSelectDuel, onChallengePress, onCreateTakePress, onOpenProfile,
   onOpenAuthorProfile, onHasVisibleTakesChange, userWallet, refreshSignal, focusSignal,
+  createdTake,
 }) => {
   const [takes, setTakes] = useState<Take[]>([]);
   const [duels, setDuels] = useState<Duel[]>([]);
@@ -39,7 +42,10 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
         api.getTakes(category === 'ALL' ? undefined : category),
         api.getDuels(category === 'ALL' ? {} : { category }),
       ]);
-      const visibleTakes = Array.isArray(nextTakes) ? nextTakes : [];
+      const serverTakes = Array.isArray(nextTakes) ? nextTakes : [];
+      const visibleTakes = createdTake && (category === 'ALL' || createdTake.category === category)
+        ? [createdTake, ...serverTakes.filter((take) => take.id !== createdTake.id)]
+        : serverTakes;
       setTakes(visibleTakes);
       onHasVisibleTakesChange?.(visibleTakes.length > 0);
       setDuels(Array.isArray(nextDuels) ? nextDuels : []);
@@ -52,19 +58,26 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
     } catch (err: any) {
       setError(isUnreachable(err) ? 'NETWORK_UNREACHABLE' : 'The feed could not load.');
     } finally { setLoading(false); setRefreshing(false); }
-  }, [category, onHasVisibleTakesChange, userWallet]);
+  }, [category, createdTake, onHasVisibleTakesChange, userWallet]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { if (refreshSignal) { setRefreshing(true); loadData(); } }, [refreshSignal, loadData]);
+  const syncLoad = useSyncRefresh(loadData);
+  useEffect(() => { void syncLoad(); }, [syncLoad]);
+  useEffect(() => { if (refreshSignal) { setRefreshing(true); void syncLoad(); } }, [refreshSignal, syncLoad]);
   const focusRef = React.useRef(focusSignal);
   useEffect(() => {
-    if (focusSignal !== undefined && focusSignal !== focusRef.current) { focusRef.current = focusSignal; setRefreshing(true); loadData(); }
-  }, [focusSignal, loadData]);
+    if (focusSignal !== undefined && focusSignal !== focusRef.current) { focusRef.current = focusSignal; setRefreshing(true); void syncLoad(); }
+  }, [focusSignal, syncLoad]);
 
   const duelByTake = useMemo(() => new Map(duels.filter((d) => d.take_id).map((d) => [d.take_id as string, d])), [duels]);
 
   const renderTake = ({ item }: { item: Take }) => {
     const duel = duelByTake.get(item.id);
+    const summaries = Array.isArray(item.duel_summaries) ? item.duel_summaries : [];
+    const summaryLabel = summaries.length === 1
+      ? summaries[0].state_label
+      : summaries.length > 1
+        ? `${summaries.length} Duels · ${summaries[0].state_label}`
+        : null;
     const displayName = formatUserDisplayName({ display_name: item.author_name, handle: item.author_handle, wallet: item.author_wallet });
     const handle = formatUserHandle({ handle: item.author_handle, wallet: item.author_wallet });
     return (
@@ -77,7 +90,7 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
           </View>
           <Text style={styles.topic}>{item.topic}</Text>
           {!!item.content?.trim() && <Text style={styles.why}><Text style={styles.whyLabel}>Why </Text>{item.content}</Text>}
-          {duel ? <TouchableOpacity style={styles.duelHint} onPress={() => onSelectDuel(duel)}><Text style={styles.duelHintText}>Duel in progress</Text><Text style={styles.duelHintArrow}>›</Text></TouchableOpacity> : null}
+          {summaryLabel ? <TouchableOpacity style={styles.duelHint} onPress={() => duel && onSelectDuel(duel)} disabled={!duel}><Text style={styles.duelHintText}>{summaryLabel}</Text>{duel ? <Text style={styles.duelHintArrow}>›</Text> : null}</TouchableOpacity> : duel ? <TouchableOpacity style={styles.duelHint} onPress={() => onSelectDuel(duel)}><Text style={styles.duelHintText}>Duel forming</Text><Text style={styles.duelHintArrow}>›</Text></TouchableOpacity> : null}
           <View style={styles.actions}><Text style={styles.actionText}>{item.comments_count || 0} replies</Text><Text style={styles.actionDot}>·</Text><Text style={styles.actionText}>{item.duels_count || 0} duels</Text><View style={styles.actionSpacer} />{onChallengePress && item.author_wallet !== userWallet ? <TouchableOpacity style={styles.challenge} onPress={() => onChallengePress(item)} accessibilityRole="button"><Text style={styles.challengeText}>Challenge</Text></TouchableOpacity> : null}</View>
         </TouchableOpacity>
         <Rule />
@@ -90,7 +103,7 @@ export const FreshFeedScreen: React.FC<FreshFeedScreenProps> = ({
       <ScreenHeader title="Home" right={<TouchableOpacity onPress={onOpenProfile} style={styles.avatarButton} accessibilityLabel="Open profile"><Avatar wallet={userWallet} size={36} placeholderColor={colors.brandPrimary} /></TouchableOpacity>} />
       <View style={styles.intro}><Text style={styles.introTitle}>Say what you think.</Text><Text style={styles.introBody}>Make a Take. Let someone challenge it.</Text></View>
       <FlatList style={styles.filterList} horizontal data={ALL_CATEGORIES} keyExtractor={(x) => x} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} renderItem={({ item }) => <TouchableOpacity onPress={() => setCategory(item)} style={[styles.filter, category === item && styles.filterActive]} accessibilityRole="tab" accessibilityState={{ selected: category === item }}><Text numberOfLines={1} ellipsizeMode="clip" style={[styles.filterText, category === item && styles.filterTextActive]}>{categoryLabel(item)}</Text></TouchableOpacity>} />
-      {loading ? <View style={styles.loading}><Text style={styles.loadingText}>Finding fresh Takes…</Text></View> : error ? <EmptyState title={error} body="Check your connection and try again." action="Retry" onAction={loadData} /> : <FlatList data={takes} keyExtractor={(x) => x.id} renderItem={renderTake} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={colors.brandPrimary} />} contentContainerStyle={takes.length ? styles.list : styles.emptyList} ListEmptyComponent={<EmptyState title="The room is quiet" body="Be the first person to post a Take worth arguing about." action="Post a Take" onAction={onCreateTakePress} />} />}
+      {loading ? <View style={styles.loading}><Text style={styles.loadingText}>Finding fresh Takes…</Text></View> : error ? <EmptyState title={error} body="Check your connection and try again." action="Retry" onAction={syncLoad} /> : <FlatList data={takes} keyExtractor={(x) => x.id} renderItem={renderTake} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void syncLoad(); }} tintColor={colors.brandPrimary} />} contentContainerStyle={takes.length ? styles.list : styles.emptyList} ListEmptyComponent={<EmptyState title="The room is quiet" body="Be the first person to post a Take worth arguing about." action="Post a Take" onAction={onCreateTakePress} />} />}
       {profileIncomplete && !loading && !error ? <TouchableOpacity style={styles.profileNudge} onPress={onOpenProfile} accessibilityRole="button"><Text style={styles.profileNudgeText}>Finish your profile so people recognize you</Text><Text style={styles.profileNudgeArrow}>›</Text></TouchableOpacity> : null}
     </View>
   );

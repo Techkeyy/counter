@@ -20,9 +20,9 @@ export const ScreenHeader: React.FC<{ eyebrow?: string; title: string; right?: R
   </View>
 );
 
-export const PrimaryButton: React.FC<{ label: string; onPress?: () => void; disabled?: boolean; loading?: boolean; accessibilityLabel?: string }> = ({ label, onPress, disabled, loading, accessibilityLabel }) => (
+export const PrimaryButton: React.FC<{ label: string; onPress?: () => void; disabled?: boolean; loading?: boolean; loadingLabel?: string; accessibilityLabel?: string }> = ({ label, onPress, disabled, loading, loadingLabel, accessibilityLabel }) => (
   <TouchableOpacity style={[styles.primary, disabled && styles.primaryDisabled]} onPress={onPress} disabled={disabled || loading} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={accessibilityLabel || label}>
-    {loading ? <ActivityIndicator color={colors.background} /> : <Text style={styles.primaryText}>{label}</Text>}
+    {loading ? (loadingLabel ? <Text style={styles.primaryText}>{loadingLabel}</Text> : <ActivityIndicator color={colors.background} />) : <Text style={styles.primaryText}>{label}</Text>}
   </TouchableOpacity>
 );
 

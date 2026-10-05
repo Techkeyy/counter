@@ -83,6 +83,20 @@ export function lifecycleStage(stage: 'APP_BACKGROUND' | 'APP_RESUME'): void {
   } catch {}
 }
 
+export type WalletKeepaliveStage =
+  | 'KEEPALIVE_START'
+  | 'KEEPALIVE_ACTIVE'
+  | 'KEEPALIVE_STOP'
+  | 'KEEPALIVE_UNAVAILABLE'
+  | 'KEEPALIVE_ERROR';
+
+/** Keepalive markers are correlation-only and never carry wallet material. */
+export function walletKeepaliveStage(operationId: string, stage: WalletKeepaliveStage): void {
+  try {
+    console.info(`[COUNTER][WALLET_KEEPALIVE][operation=${operationId}][stage=${stage}]`);
+  } catch {}
+}
+
 export type ConnectStage =
   | 'CONNECT_START'
   | 'CONNECT_STATE_SAVED'

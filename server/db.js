@@ -202,6 +202,7 @@ async function getDb() {
   ensureColumn('positions', 'stake_tx_signature', 'TEXT');
   ensureColumn('positions', 'payout_amount', 'REAL');
   ensureColumn('takes', 'record_origin', "TEXT DEFAULT 'USER'");
+  ensureColumn('takes', 'post_attempt_id', 'TEXT');
   ensureColumn('activity', 'is_archived', 'INTEGER DEFAULT 0');
   // Settlement-mode columns (explicit duel terms; legacy rows default to the
   // historical Counter Verified behavior).
@@ -221,6 +222,7 @@ async function getDb() {
     updated_at TEXT,
     PRIMARY KEY (duel_id, captain_wallet)
   )`);
+  db.run('CREATE UNIQUE INDEX IF NOT EXISTS takes_author_attempt_idx ON takes(author_wallet, post_attempt_id) WHERE post_attempt_id IS NOT NULL');
   // One durable settlement attempt per Duel. This is the backend idempotence
   // boundary for automatic mismatch cancellation and normal mutual settlement:
   // an API retry must never submit a second ResolveDuel transaction.

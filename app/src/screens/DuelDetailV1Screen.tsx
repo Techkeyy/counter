@@ -45,6 +45,7 @@ import {
   savePendingWalletOperation,
 } from '../session';
 import type { PendingWalletOperationType } from '../session';
+import { useSyncRefresh } from '../syncCoordinator';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -138,6 +139,8 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     }
   };
 
+  const syncLoadDuel = useSyncRefresh(loadDuelData);
+
   const refreshPreflight = async () => {
     try {
       setPreflight(await readWalletPreflight(userWallet));
@@ -152,9 +155,9 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       duelId,
       attemptId: transitionAttemptId || 'direct-open',
     });
-    loadDuelData();
+    void syncLoadDuel();
     refreshPreflight();
-  }, [duelId, userWallet]);
+  }, [duelId, userWallet, syncLoadDuel]);
 
   // Recover a public signature that was returned before Android killed or
   // suspended the JS process. A missing signature remains a controlled retry;
@@ -180,14 +183,14 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     let previousState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (previousState !== 'active' && nextState === 'active') {
-        loadDuelData();
+        void syncLoadDuel();
         refreshPreflight();
         if (pendingSignature) handleCheckInitializationStatus();
       }
       previousState = nextState;
     });
     return () => subscription.remove();
-  }, [duelId, userWallet, pendingSignature]);
+  }, [duelId, userWallet, pendingSignature, syncLoadDuel]);
 
   if (loading) {
     return (
