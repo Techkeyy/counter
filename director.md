@@ -3707,3 +3707,88 @@ Duels, Activity, and Profile remain owner/Director review evidence; the fresh
 APK above is the only artifact authorized for the next native visual review.
 
 Target: **`BUILDING — VISUAL FOUNDATION REMEDIATED / DIRECTOR SECOND NATIVE REVIEW REQUIRED`**.
+
+## 63. ACCEPT → DUEL DETAIL TRANSITION REMEDIATION — 2026-10-05
+
+Director-authorized bounded client fix for the observed accepted-challenge
+blank transition. The production Take, Challenge, and Duel incident rows were
+not retried or mutated. No backend, database, Solana program, MWA, stake,
+settlement, claim, or refund code was changed.
+
+### 63.A — Source and regression closure
+
+- Source commit: `0998b53a75672762bd97ae750534b863911f93af`.
+- The prior `setTimeout(300)` accept callback was removed.
+- The accepted Duel is retained locally, the native challenge `Modal` is
+  closed, and selection occurs only from Android `onDismiss` after the sheet
+  has completed dismissal.
+- The parent renders an in-theme `Opening your Duel…` intermediate state while
+  the native surface closes. The existing Duel detail is then mounted behind a
+  scoped recoverable boundary with `Couldn't open this Duel`, `Try again`, and
+  `Back to Duels`. Retry only reloads the existing Duel ID.
+- Value-free transition markers cover `ACCEPT_UI_START`, `ACCEPT_HTTP_OK`,
+  `ACCEPT_DUEL_RECEIVED`, `CHALLENGE_SHEET_DISMISS_START`,
+  `CHALLENGE_SHEET_DISMISSED`, `DUEL_DETAIL_SELECT`, `DUEL_DETAIL_MOUNT`,
+  `DUEL_DETAIL_DATA_OK`, `DUEL_DETAIL_READY`, and render failure. Duplicate
+  native dismissal callbacks are ignored.
+- TypeScript: PASS. Accept-transition guard: PASS. Session: 5/5. V1
+  experience guardrails: PASS. Duels-load isolation: PASS. MWA handoff:
+  PASS. Profile boundaries: PASS. Fresh visibility: PASS. Portfolio: PASS.
+  Chain vectors: 11/11. Resolution boundaries: PASS. Mutual closure: PASS.
+  MVP lifecycle: PASS. Take deletion: PASS. Auth boundary: PASS. The first
+  token-issuing integration attempts without local `JWT_SECRET` were refused
+  as designed; reruns with an ephemeral test-process-only value passed, and
+  the value was never printed or persisted.
+- `git diff --check`: PASS.
+
+### 63.B — Sole fresh release artifact
+
+Exactly one Gradle release build was run from `app/android` after the source
+commit above. No second build was started.
+
+```text
+.\gradlew.bat assembleRelease --no-daemon --console=plain
+BUILD SUCCESSFUL in 24m 17s
+exit: 0
+packaged source: 0998b53a75672762bd97ae750534b863911f93af
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62505755
+SHA-256: 5c1e614ded1700805b97e02e115efe0c7300003ff85e42d69f2c519ff6881402
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+```
+
+The existing rotated `counter` signing identity and current-user DPAPI vault
+were reused. No key was regenerated. The password was decrypted only into the
+build process, was never printed or persisted, and temporary signing
+environment variables were cleared after Gradle exited. The preceding APK
+`6e8bc6e46e223ce469778db7d874f15a61745cba012c56c647f4f1cf01b9c7bd` is
+superseded by this fresh artifact.
+
+### 63.C — Packaged remediation proof
+
+The APK contains `assets/index.android.bundle` (2,559,584 bytes). After
+read-only extraction and null-byte normalization for Hermes UTF-16 string
+storage, the bundle contains `acceptChallenge`, `onDismiss`, `Opening your
+Duel`, `ACCEPT_UI_START`, `ACCEPT_HTTP_OK`, `ACCEPT_DUEL_RECEIVED`,
+`CHALLENGE_SHEET_DISMISS_START`, `CHALLENGE_SHEET_DISMISSED`,
+`DUEL_DETAIL_SELECT`, `DUEL_DETAIL_MOUNT`, `DUEL_DETAIL_DATA_OK`,
+`DUEL_DETAIL_READY`, `Ready to Duel`, `ACCEPTED_NOT_INITIALIZED`,
+`Couldn't open this Duel`, `Try again`, `Back to Duels`, and the existing-Duel
+failure copy. This is compiled artifact evidence, not source-only inference.
+
+The built manifest still contains `counter://duel/:id`,
+`counter://receipt/:id`, and the production HTTPS `/d` and `/r` App Links with
+`autoVerify=true`. The bundle contains the production backend,
+`52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT` program, and
+`AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC` Devnet mint. The tested
+artifact scan found no former JWT fallback literal, private-key field, or
+`counter.app` host.
+
+No install, app launch, tap-through, wallet interaction, new challenge,
+economic UAT, or physical retry has been performed in this pass. The exact APK
+above is the only artifact authorized for the next owner-driven physical UAT.
+
+Target: **`BUILDING — ACCEPT → DUEL TRANSITION FIX BUILT / OWNER PHYSICAL UAT REQUIRED`**.
