@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -28,12 +28,19 @@ import {
   restoreSession,
   saveSession,
   clearSession,
+  loadWalletAuthorization,
+  saveWalletAuthorization,
+  clearWalletAuthorization,
+  loadPendingWalletOperation,
+  savePendingWalletOperation,
+  clearPendingWalletOperation,
   DISCONNECTED,
   hasCompleteCounterProfile,
 } from './src/session';
 import { api } from './src/api';
 import { Take, Duel, Receipt, Challenge } from './src/types';
-import { acceptTransitionStage, lifecycleStage } from './src/diagnostics';
+import { acceptTransitionStage, connectStage, lifecycleStage } from './src/diagnostics';
+import type { PendingWalletOperation } from './src/session';
 
 type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
 
@@ -49,6 +56,9 @@ export default function App() {
   const [walletState, setWalletState] = useState<WalletState>(DISCONNECTED);
   const [connectionStatus, setConnectionStatus] = useState<WalletConnectionStatus>('IDLE');
   const [restoring, setRestoring] = useState(true);
+  const [pendingWalletOperation, setPendingWalletOperation] = useState<PendingWalletOperation | null>(null);
+  const connectInFlightRef = useRef(false);
+  const autoRecoveryAttemptedRef = useRef<string | null>(null);
 
   // Selected Detail Views
   const [selectedDuelId, setSelectedDuelId] = useState<string | null>(null);
@@ -75,7 +85,8 @@ export default function App() {
   const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
 
   // Capture the app-side of the wallet handoff without recording any wallet
-  // payload. This makes a background/resume gap visible in physical UAT logs.
+  // payload. Pending work is reconciled after resume; it is never silently
+  // discarded when Android suspends or recreates the activity.
   useEffect(() => {
     let previousState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -83,6 +94,23 @@ export default function App() {
         lifecycleStage('APP_BACKGROUND');
       } else if (previousState !== 'active' && nextState === 'active') {
         lifecycleStage('APP_RESUME');
+        if (!connectInFlightRef.current) {
+          void loadPendingWalletOperation().then((pending) => {
+            if (!pending) return;
+            setPendingWalletOperation(pending);
+            if (pending.operationType === 'CONNECT') {
+              setShowOnboarding(true);
+              if (autoRecoveryAttemptedRef.current !== pending.operationId) {
+                setConnectionStatus('RESTORING');
+              } else {
+                setConnectionStatus('INTERRUPTED');
+                setConnectionError('Counter can safely reconnect to your wallet.');
+              }
+            } else {
+              setLinkNotice('Checking your transaction…');
+            }
+          }).catch(() => {});
+        }
       }
       previousState = nextState;
     });
@@ -96,11 +124,33 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const restored = await restoreSession();
+        const [restored, pending] = await Promise.all([
+          restoreSession(),
+          loadPendingWalletOperation(),
+        ]);
         if (cancelled) return;
         setWalletState(restored);
-        setConnectionStatus(restored.connected ? 'CONNECTED' : 'IDLE');
+        if (pending && pending.operationType === 'CONNECT' && restored.connected) {
+          // A valid backend session proves that the interrupted connect reached
+          // its terminal state before process death. Do not re-open Phantom.
+          await clearPendingWalletOperation();
+          setPendingWalletOperation(null);
+        } else {
+          setPendingWalletOperation(pending);
+        }
+        setConnectionStatus(
+          restored.connected
+            ? 'CONNECTED'
+            : pending?.operationType === 'CONNECT'
+              ? 'INTERRUPTED'
+              : 'IDLE',
+        );
         setShowOnboarding(!restored.connected || restored.needsProfileSetup === true);
+        if (pending && pending.operationType !== 'CONNECT') {
+          setLinkNotice('Checking your transaction…');
+        } else if (pending?.operationType === 'CONNECT' && !restored.connected) {
+          setConnectionError('Counter can safely reconnect to your wallet.');
+        }
       } catch {
         if (!cancelled) {
           setWalletState(DISCONNECTED);
@@ -157,56 +207,138 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const handleConnectWallet = async () => {
+  const handleConnectWallet = useCallback(async (recovery = false) => {
+    if (connectInFlightRef.current) return;
+    connectInFlightRef.current = true;
     // Failures never silently return to idle: the outcome status stays
     // visible (with retry/help) until the user succeeds or dismisses.
     // On success the onboarding sheet stays open: it persists the typed
     // profile draft itself and closes only after verified save.
-    setConnectionError(null);
-    setConnectionStatus('CONNECTING');
-    const outcome = await connectAndAuthenticate((stage) => {
-      setConnectionStatus(stage);
-    });
-    const { state } = outcome;
-    if (state.connected && state.publicKey && state.authToken) {
-      try {
-        await saveSession(SecureSessionStorage, {
-          wallet: state.publicKey,
-          token: state.authToken,
-        });
-      } catch (err) {
-        console.warn('[SESSION] persist failed:', (err as Error)?.message);
-      }
-      try {
-        // Authentication creates a placeholder profile for new wallets. The
-        // canonical profile read—not the wallet address or cached session—is
-        // what decides whether setup is still required.
-        const response: any = await api.getUserProfile(state.publicKey);
-        const profile = response?.user || response;
-        const needsProfileSetup = !hasCompleteCounterProfile(profile);
-        setWalletState({ ...state, needsProfileSetup });
-        setConnectionStatus('CONNECTED');
-        setConnectionError(null);
-        setShowOnboarding(needsProfileSetup);
-        if (!needsProfileSetup) setFeedRefresh((n) => n + 1);
-      } catch (err: any) {
-        setWalletState({ ...state, needsProfileSetup: true });
-        setConnectionStatus('NETWORK_ERROR');
-        setConnectionError('Counter could not confirm this wallet profile. Retry to continue safely.');
-        setShowOnboarding(true);
-        console.warn('[PROFILE] canonical profile check failed:', err?.message);
-      }
-    } else {
-      await clearSession(SecureSessionStorage);
-      setWalletState(DISCONNECTED);
-      setConnectionStatus(outcome.status);
-      setConnectionError(outcome.detail || null);
+    try {
+      const previous = recovery ? await loadPendingWalletOperation() : null;
+      const operationId = recovery && previous?.operationType === 'CONNECT'
+        ? previous.operationId
+        : `connect_${Date.now().toString(36)}`;
+      const expectedWallet = recovery ? previous?.expectedWallet : undefined;
+      autoRecoveryAttemptedRef.current = operationId;
+      const now = Date.now();
+      let pending: PendingWalletOperation = {
+        v: 1,
+        operationId,
+        operationType: 'CONNECT',
+        stage: 'CONNECT_START',
+        expectedWallet,
+        createdAt: previous?.createdAt || now,
+        updatedAt: now,
+      };
+      const persistStage = async (stage: string, changes: Partial<PendingWalletOperation> = {}, logMarker = false) => {
+        pending = { ...pending, ...changes, stage, updatedAt: Date.now() };
+        await savePendingWalletOperation(SecureSessionStorage, pending);
+        setPendingWalletOperation(pending);
+        if (logMarker) connectStage(operationId, stage as import('./src/diagnostics').ConnectStage);
+      };
+
+      if (recovery) connectStage(operationId, 'CONNECT_RESUME_FOUND_PENDING');
+      connectStage(operationId, 'CONNECT_START');
+      await persistStage('CONNECT_STATE_SAVED', {}, true);
+      setConnectionError(null);
+      setConnectionStatus(recovery ? 'RESTORING' : 'CONNECTING');
       setShowOnboarding(true);
+      const storedAuthorization = await loadWalletAuthorization();
+      const outcome = await connectAndAuthenticate((stage) => {
+        setConnectionStatus(stage);
+      }, undefined, {
+        attemptId: operationId,
+        authorization: storedAuthorization,
+        expectedWallet,
+        onMarker: (stage) => persistStage(stage),
+        onAuthorization: async (authorization) => {
+          await saveWalletAuthorization(SecureSessionStorage, authorization);
+          await persistStage('CONNECT_AUTH_PERSISTED', { expectedWallet: authorization.wallet });
+        },
+      });
+      const { state } = outcome;
+      if (state.connected && state.publicKey && state.authToken) {
+        setConnectionStatus('RESTORING');
+        await persistStage('CONNECT_PROFILE_START', { expectedWallet: state.publicKey }, true);
+      try {
+          const response: any = await api.getUserProfile(state.publicKey);
+          const profile = response?.user || response;
+          const needsProfileSetup = !hasCompleteCounterProfile(profile);
+          await persistStage('CONNECT_PROFILE_OK', {}, true);
+          await saveSession(SecureSessionStorage, {
+            wallet: state.publicKey,
+            token: state.authToken,
+          });
+          await persistStage('CONNECT_SESSION_SAVED', {}, true);
+          setWalletState({ ...state, needsProfileSetup });
+          setConnectionStatus('CONNECTED');
+          setConnectionError(null);
+          setShowOnboarding(needsProfileSetup);
+          if (recovery) await persistStage('CONNECT_RECOVERY_COMPLETE');
+          await persistStage('CONNECT_COMPLETE', {}, true);
+          await clearPendingWalletOperation();
+          setPendingWalletOperation(null);
+          if (!needsProfileSetup) setFeedRefresh((n) => n + 1);
+        } catch (err: any) {
+          await persistStage('CONNECT_ERROR');
+          setWalletState({ ...state, needsProfileSetup: true });
+          setConnectionStatus('NETWORK_ERROR');
+          setConnectionError('Counter could not confirm this wallet profile. Reconnect to continue safely.');
+          setShowOnboarding(true);
+        }
+      } else {
+        const failureStage = outcome.walletChanged
+          ? 'CONNECT_ERROR'
+          : outcome.tokenRejected || outcome.status === 'AUTH_FAILED'
+            ? 'CONNECT_AUTH_FAILED'
+            : outcome.status === 'USER_REJECTED'
+              ? 'CONNECT_CANCELLED'
+              : outcome.status === 'MWA_TIMEOUT'
+                ? 'CONNECT_TIMEOUT'
+                : 'CONNECT_INTERRUPTED';
+        await persistStage(failureStage, {}, true);
+        if (outcome.tokenRejected) await clearWalletAuthorization();
+        setWalletState(DISCONNECTED);
+        setConnectionStatus(outcome.walletChanged ? 'WALLET_CHANGED' : outcome.status === 'MWA_TIMEOUT' && recovery ? 'INTERRUPTED' : outcome.status);
+        setConnectionError(outcome.walletChanged ? 'Wallet changed. Return to the wallet you started with.' : outcome.detail || 'Connection interrupted. Counter can safely reconnect to your wallet.');
+        setShowOnboarding(true);
+      }
+    } catch {
+      setConnectionStatus('INTERRUPTED');
+      setConnectionError('Connection interrupted. Counter can safely reconnect to your wallet.');
+      setShowOnboarding(true);
+    } finally {
+      connectInFlightRef.current = false;
     }
-  };
+  }, []);
+
+  // A stored MWA authorization is safe to reuse after process death or an
+  // association loss. First-ever connects without one stay explicit and do
+  // not launch a wallet repeatedly in the background.
+  useEffect(() => {
+    if (restoring || walletState.connected || !pendingWalletOperation || pendingWalletOperation.operationType !== 'CONNECT') return;
+    if (autoRecoveryAttemptedRef.current === pendingWalletOperation.operationId || connectInFlightRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const authorization = await loadWalletAuthorization();
+      if (cancelled) return;
+      if (authorization) {
+        await handleConnectWallet(true);
+      } else {
+        setConnectionStatus('INTERRUPTED');
+        setConnectionError('Connection interrupted. Counter can safely reconnect to your wallet.');
+        setShowOnboarding(true);
+      }
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [restoring, walletState.connected, pendingWalletOperation, handleConnectWallet]);
 
   const handleDisconnectWallet = async () => {
     await clearSession(SecureSessionStorage);
+    await clearWalletAuthorization(SecureSessionStorage);
+    await clearPendingWalletOperation(SecureSessionStorage);
+    setPendingWalletOperation(null);
     setWalletState(DISCONNECTED);
     setConnectionStatus('IDLE');
     setShowOnboarding(true);

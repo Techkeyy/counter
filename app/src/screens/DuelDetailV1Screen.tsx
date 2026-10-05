@@ -39,6 +39,12 @@ import { formatRelativeTime, formatUserDisplayName, isRealSignature } from '../u
 import { captainSide, mapDuelState, positionFor, stateLabel } from '../utils/duelState';
 import { formatSol, hasFeeBalance, readWalletPreflight } from '../utils/preflight';
 import type { WalletPreflight } from '../utils/preflight';
+import {
+  clearPendingWalletOperation,
+  loadPendingWalletOperation,
+  savePendingWalletOperation,
+} from '../session';
+import type { PendingWalletOperationType } from '../session';
 
 interface DuelDetailScreenProps {
   duelId: string;
@@ -79,6 +85,22 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const [initializationRecovery, setInitializationRecovery] = useState<'RETRY' | 'CHECK_STATUS' | null>(null);
   const initAttemptRef = useRef<WalletAttempt | null>(null);
   const claimAttemptRef = useRef<WalletAttempt | null>(null);
+
+  const persistPendingOperation = async (
+    operationType: PendingWalletOperationType,
+    attempt: WalletAttempt,
+    stage: string,
+    signature?: string,
+  ) => {
+    await savePendingWalletOperation(undefined, {
+      operationId: attempt.attemptId,
+      operationType,
+      resourceId: duelId,
+      expectedWallet: userWallet || undefined,
+      stage,
+      signature,
+    });
+  };
 
   const loadDuelData = async () => {
     try {
@@ -133,6 +155,26 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     loadDuelData();
     refreshPreflight();
   }, [duelId, userWallet]);
+
+  // Recover a public signature that was returned before Android killed or
+  // suspended the JS process. A missing signature remains a controlled retry;
+  // it is never treated as permission to blindly send a second transaction.
+  useEffect(() => {
+    let cancelled = false;
+    loadPendingWalletOperation().then((pending) => {
+      if (cancelled || !pending || pending.resourceId !== duelId) return;
+      if (pending.operationType === 'DUEL_INIT') {
+        setPendingSignature(pending.signature || null);
+        if (!pending.signature) {
+          setInitializationRecovery('RETRY');
+          setMessage('A setup attempt was interrupted. Counter checked that no signature was recorded; retry setup when ready.');
+        }
+      } else if (pending.operationType === 'CLAIM' || pending.operationType === 'REFUND') {
+        setPendingClaimSignature(pending.signature || null);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [duelId]);
 
   useEffect(() => {
     let previousState = AppState.currentState;
@@ -218,6 +260,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     setMessage(null);
     let backendVerifyStarted = false;
     try {
+      await persistPendingOperation('DUEL_INIT', attempt, 'CHAIN_ACCOUNTS_START');
       const accounts = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
       walletStage(attempt, 'CHAIN_ACCOUNTS_OK');
       if (accounts.chainStatus === 'INITIALIZED') throw new Error('Duel is already ready. Refreshing its state.');
@@ -231,6 +274,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setMessage('Waiting for wallet approval…');
       const signature = await mwaSignSendConfirm(instructions, payer, undefined, attempt);
       setPendingSignature(signature);
+      await persistPendingOperation('DUEL_INIT', attempt, 'TX_CONFIRMED', signature);
       setMessage('Checking the Duel on Devnet…');
       backendVerifyStarted = true;
       walletStage(attempt, 'BACKEND_VERIFY_START');
@@ -238,13 +282,17 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingSignature(null);
+      await clearPendingWalletOperation();
       setInitializationRecovery(null);
       setMessage('Duel ready. Both captains can now lock the agreed stake.');
       await loadDuelData();
     } catch (error: any) {
       if (backendVerifyStarted) walletStage(attempt, 'BACKEND_VERIFY_FAILED');
       if (error instanceof WalletFlowError) {
-        if (error.signature) setPendingSignature(error.signature);
+        if (error.signature) {
+          setPendingSignature(error.signature);
+          await persistPendingOperation('DUEL_INIT', attempt, 'TX_SUBMITTED', error.signature);
+        }
         if (error.signature || error.kind === 'CONFIRMATION_FAILED' || error.kind === 'TIMEOUT') {
           setInitializationRecovery('CHECK_STATUS');
           setMessage('Transaction submitted but not confirmed yet. Check status before retrying.');
@@ -284,6 +332,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       if (status?.err) {
         walletStage(attempt, 'TX_CONFIRM_FAILED');
         setInitializationRecovery('RETRY');
+        await clearPendingWalletOperation();
         setMessage(`Devnet rejected the setup transaction: ${JSON.stringify(status.err)}`);
         return;
       }
@@ -294,12 +343,14 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
         return;
       }
       walletStage(attempt, 'TX_CONFIRMED');
+      await persistPendingOperation('DUEL_INIT', attempt, 'TX_CONFIRMED', signature);
       backendVerifyStarted = true;
       walletStage(attempt, 'BACKEND_VERIFY_START');
       await api.initOnChainDuel(duel.id, signature);
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingSignature(null);
+      await clearPendingWalletOperation();
       setInitializationRecovery(null);
       setMessage('Duel ready. Both captains can now lock the agreed stake.');
       await loadDuelData();
@@ -322,6 +373,22 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setMessage('Only the two captains choose the result.');
       return;
     }
+    const pendingSettlement = await loadPendingWalletOperation().catch(() => null);
+    if (pendingSettlement?.operationType === 'SETTLEMENT' && pendingSettlement.resourceId === duel.id) {
+      // A message signature is not a Solana transaction signature. Reconcile
+      // the authoritative Duel before permitting a second sign-in request.
+      const latest: any = await api.getDuel(duel.id).catch(() => null);
+      const alreadyRecorded = !!latest?.myVoteSubmitted ||
+        (Array.isArray(latest?.mutualVotes) && latest.mutualVotes.some((vote: any) => vote.captain_wallet === userWallet));
+      if (alreadyRecorded) {
+        await clearPendingWalletOperation();
+        setMessage('Your result is already recorded. Refreshing the Duel.');
+        await loadDuelData();
+        return;
+      }
+      // The authoritative read found no vote, so this is the only safe retry.
+      await clearPendingWalletOperation();
+    }
     const currentPreflight = await readWalletPreflight(userWallet).catch(() => null);
     setPreflight(currentPreflight);
     if (!hasFeeBalance(currentPreflight)) {
@@ -334,6 +401,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     setMessage('Your choice stays private. Waiting for wallet approval…');
     let backendVerifyStarted = false;
     try {
+      await persistPendingOperation('SETTLEMENT', attempt, 'SIGN_IN_START');
       const signature = await mwaSignMessage(settlementMessage(duel.id, winnerSide, Number(duel.resolution_ts) || 0), userWallet, attempt);
       setMessage('Recording your result…');
       backendVerifyStarted = true;
@@ -341,6 +409,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       const response = await api.postMutualVote(duel.id, winnerSide, signature);
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
+      await clearPendingWalletOperation();
       if (response.match?.matched) {
         try {
           await api.resolveDuel(duel.id);
@@ -354,6 +423,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       await loadDuelData();
     } catch (error: any) {
       if (backendVerifyStarted) walletStage(attempt, 'BACKEND_VERIFY_FAILED');
+      await persistPendingOperation('SETTLEMENT', attempt, 'ERROR');
       showError(error, "Couldn't record your result.");
     } finally {
       setVoting(false);
@@ -387,29 +457,34 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setMessage('You need a little Devnet SOL to pay the network fee before claiming. Get SOL, then return here.');
       return;
     }
-    const attempt = createWalletAttempt(duel.id, 'CLAIM');
+    const claimOperation: PendingWalletOperationType = canRefund ? 'REFUND' : 'CLAIM';
+    const attempt = createWalletAttempt(duel.id, claimOperation);
     claimAttemptRef.current = attempt;
     walletStage(attempt, 'START');
     setClaiming(true);
     setMessage('Waiting for wallet approval…');
     let backendVerifyStarted = false;
     try {
+      await persistPendingOperation(claimOperation, attempt, 'CHAIN_ACCOUNTS_START');
       const accounts = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
       walletStage(attempt, 'CHAIN_ACCOUNTS_OK');
       const user = new PublicKey(userWallet);
       const signature = await mwaSignSendConfirm([buildClaimPayoutIx(accounts, user)], user, undefined, attempt);
+      await persistPendingOperation(claimOperation, attempt, 'TX_CONFIRMED', signature);
       backendVerifyStarted = true;
       walletStage(attempt, 'BACKEND_VERIFY_START');
       await api.claimDuel(duel.id, signature);
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingClaimSignature(null);
+      await clearPendingWalletOperation();
       setMessage(duel.status === 'CANCELLED' ? 'Refund claimed.' : 'Payout claimed.');
       await loadDuelData();
     } catch (error: any) {
       if (backendVerifyStarted) walletStage(attempt, 'BACKEND_VERIFY_FAILED');
       if (error instanceof WalletFlowError && error.signature) {
         setPendingClaimSignature(error.signature);
+        await persistPendingOperation(claimOperation, attempt, 'TX_SUBMITTED', error.signature);
         setMessage('Payout transaction submitted but not confirmed yet. Check status before retrying.');
       } else {
         showError(error, 'Could not complete this payout.');
@@ -425,7 +500,8 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setMessage('No submitted payout transaction was found.');
       return;
     }
-    const attempt = claimAttemptRef.current || createWalletAttempt(duel.id, 'CLAIM');
+    const claimOperation: PendingWalletOperationType = duel.status === 'CANCELLED' ? 'REFUND' : 'CLAIM';
+    const attempt = claimAttemptRef.current || createWalletAttempt(duel.id, claimOperation);
     claimAttemptRef.current = attempt;
     setClaiming(true);
     setMessage('Checking payout transaction status…');
@@ -435,6 +511,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       if (status?.err) {
         walletStage(attempt, 'TX_CONFIRM_FAILED');
         setPendingClaimSignature(null);
+        await clearPendingWalletOperation();
         setMessage(`Devnet rejected the payout transaction: ${JSON.stringify(status.err)}`);
         return;
       }
@@ -444,12 +521,14 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
         return;
       }
       walletStage(attempt, 'TX_CONFIRMED');
+      await persistPendingOperation(claimOperation, attempt, 'TX_CONFIRMED', signature);
       backendVerifyStarted = true;
       walletStage(attempt, 'BACKEND_VERIFY_START');
       await api.claimDuel(duel.id, signature);
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingClaimSignature(null);
+      await clearPendingWalletOperation();
       setMessage(duel.status === 'CANCELLED' ? 'Refund claimed.' : 'Payout claimed.');
       await loadDuelData();
     } catch (error: any) {

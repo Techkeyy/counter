@@ -29,15 +29,17 @@ interface OnboardingModalProps {
 }
 
 const BUSY_LABEL: Record<string, string> = {
-  CONNECTING: 'Contacting wallet',
-  WAITING_FOR_WALLET: 'Opening wallet',
-  VERIFYING: 'Verifying ownership',
+  CONNECTING: 'Opening Phantom…',
+  WAITING_FOR_WALLET: 'Waiting for wallet approval…',
+  VERIFYING: 'Verifying your wallet…',
+  RESTORING: 'Restoring your Counter account…',
 };
 
 const BUSY_BODY: Record<string, string> = {
-  CONNECTING: 'Dispatching a secure request to your Solana wallet app.',
-  WAITING_FOR_WALLET: 'Check your wallet app and approve the Counter request there.',
+  CONNECTING: 'Dispatching a secure request to Phantom.',
+  WAITING_FOR_WALLET: 'Approve the Counter request in your wallet app.',
   VERIFYING: 'Confirming the signature with Counter. Almost done.',
+  RESTORING: 'Finishing the secure connection and restoring your profile.',
 };
 
 function isFailure(s: WalletConnectionStatus): boolean {
@@ -46,7 +48,9 @@ function isFailure(s: WalletConnectionStatus): boolean {
     s === 'NO_WALLET' ||
     s === 'MWA_TIMEOUT' ||
     s === 'NETWORK_ERROR' ||
-    s === 'AUTH_FAILED'
+    s === 'AUTH_FAILED' ||
+    s === 'INTERRUPTED' ||
+    s === 'WALLET_CHANGED'
   );
 }
 
@@ -236,6 +240,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <Text style={styles.devnetText}>Test build on Solana Devnet</Text>
               </View>
 
+              {busy ? (
+                <View style={styles.statusBox}>
+                  <ActivityIndicator size="large" color={colors.brandPrimary} />
+                  <Text style={styles.statusTitle}>{BUSY_LABEL[connectionStatus]}</Text>
+                  <Text style={styles.statusBody}>{BUSY_BODY[connectionStatus]}</Text>
+                </View>
+              ) : failed ? (
+                <ConnectionHelp status={connectionStatus} detail={connectionError} onRetry={onConnectWallet} />
+              ) : null}
+
               <View style={styles.featureList}>
                 <View style={styles.featureItem}>
                   <View style={styles.bullet}>
@@ -269,6 +283,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => (wallet ? setStep(2) : onConnectWallet())}
+                disabled={busy || failed}
                 activeOpacity={0.8}
                 accessibilityLabel={wallet ? 'Set up your Counter profile' : 'Connect wallet'}
                 accessibilityRole="button"

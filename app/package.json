@@ -8,7 +8,8 @@
     "ios": "expo run:ios",
     "test:experience": "node experience-rebase.test.js",
     "test:mwa": "node mwa-handoff.test.js",
-    "test:v1-state": "node duel-state.test.js"
+    "test:v1-state": "node duel-state.test.js",
+    "test:wallet-recovery": "node wallet-recovery.test.js"
   },
   "dependencies": {
     "@solana-mobile/mobile-wallet-adapter-protocol": "^2.1.4",

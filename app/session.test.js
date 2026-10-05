@@ -65,6 +65,39 @@ async function main() {
   assert.strictEqual(st.publicKey, null);
   ok('no stored session -> disconnected');
 
+  // 1b. MWA authorization is opaque, secure, and distinct from the backend
+  // JWT. Replacement wallet tokens overwrite the previous authorization.
+  await session.saveWalletAuthorization({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }, {
+    wallet: WALLET,
+    auth_token: 'opaque-mwa-token-without-jwt-shape',
+    wallet_uri_base: 'https://phantom.app/ul/v1',
+    chain: 'solana:devnet',
+  });
+  let auth = await session.loadWalletAuthorization({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync });
+  assert.strictEqual(auth.wallet, WALLET);
+  assert.strictEqual(auth.auth_token, 'opaque-mwa-token-without-jwt-shape');
+  await session.saveWalletAuthorization({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }, {
+    wallet: WALLET,
+    auth_token: 'replacement-mwa-token',
+    chain: 'solana:devnet',
+  });
+  auth = await session.loadWalletAuthorization({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync });
+  assert.strictEqual(auth.auth_token, 'replacement-mwa-token');
+  ok('MWA authorization persisted securely and replacement token wins');
+
+  // 1c. Pending operations retain a public signature for status recovery and
+  // validate a no-signature state for a controlled retry.
+  await session.savePendingWalletOperation({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }, {
+    operationId: 'stake_attempt_1', operationType: 'STAKE', resourceId: 'duel_1',
+    expectedWallet: WALLET, stage: 'TX_SUBMITTED', signature: '5'.repeat(64),
+  });
+  let pending = await session.loadPendingWalletOperation({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync });
+  assert.strictEqual(pending.operationType, 'STAKE');
+  assert.strictEqual(pending.signature, '5'.repeat(64));
+  await session.clearPendingWalletOperation({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync });
+  assert.strictEqual(await session.loadPendingWalletOperation({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }), null);
+  ok('pending public transaction signature survives and clears explicitly');
+
   // 2. Valid stored session + backend accepts -> restored profile.
   await session.saveSession({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }, { wallet: WALLET, token: 'good.token.here.valid', displayName: 'Tester', handle: '@tester' });
   st = await session.restoreSession({ getItem: fakeSecureStore.getItemAsync, setItem: fakeSecureStore.setItemAsync, deleteItem: fakeSecureStore.deleteItemAsync }, fakeApi);

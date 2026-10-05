@@ -32,6 +32,14 @@ const HEADLINES: Record<string, { title: string; body: string }> = {
     title: 'Ownership check failed',
     body: 'The wallet signature could not be verified. Retry to get a fresh sign-in.',
   },
+  INTERRUPTED: {
+    title: 'Connection interrupted',
+    body: 'Counter can safely reconnect to your wallet. Try again when you are ready.',
+  },
+  WALLET_CHANGED: {
+    title: 'Wallet changed',
+    body: 'Return to the wallet you started with before continuing.',
+  },
 };
 
 export const ConnectionHelp: React.FC<ConnectionHelpProps> = ({ status, detail, onRetry, busy }) => {
@@ -79,9 +87,9 @@ export const ConnectionHelp: React.FC<ConnectionHelpProps> = ({ status, detail, 
       {showHelp && (
         <View style={styles.helpBox}>
           <Text style={styles.helpText}>
-            Counter talks to your wallet over a secure on-device connection. Some Android
-            battery-saving modes can interrupt it. If connects keep stalling, check that
-            your wallet app is allowed to run while Counter is open.
+            Counter talks to your wallet over a secure on-device connection. If Android
+            interrupts the handoff, Counter keeps the operation safe and can reconnect
+            without repeating a transaction.
           </Text>
           <Text style={styles.helpText}>
             This test build uses Solana Devnet. Enable Devnet inside your wallet if it

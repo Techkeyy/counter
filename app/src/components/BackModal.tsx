@@ -29,6 +29,11 @@ import { createWalletAttempt, isWalletCancellation, WalletFlowError, walletStage
 import type { WalletAttempt } from '../diagnostics';
 import { formatCusd, formatSol, hasFeeBalance, hasStakeBalance, readWalletPreflight } from '../utils/preflight';
 import type { WalletPreflight } from '../utils/preflight';
+import {
+  clearPendingWalletOperation,
+  loadPendingWalletOperation,
+  savePendingWalletOperation,
+} from '../session';
 
 interface BackModalProps {
   visible: boolean;
@@ -63,6 +68,12 @@ export const BackModal: React.FC<BackModalProps> = ({
     (async () => {
       try { setBalances(await readWalletPreflight(userWallet)); } catch { setBalances(null); }
     })();
+    loadPendingWalletOperation().then((pending) => {
+      if (pending?.operationType === 'STAKE' && pending.resourceId === duel?.id) {
+        setPendingSignature(pending.signature || null);
+        if (!pending.signature) setError('A stake attempt was interrupted. Counter found no signature; review funding before retrying.');
+      }
+    }).catch(() => {});
   }, [visible, duel?.id, userWallet]);
 
   useEffect(() => {
@@ -170,6 +181,13 @@ export const BackModal: React.FC<BackModalProps> = ({
     let backendVerifyStarted = false;
 
     try {
+      await savePendingWalletOperation(undefined, {
+        operationId: attempt.attemptId,
+        operationType: 'STAKE',
+        resourceId: duel.id,
+        expectedWallet: userWallet,
+        stage: 'CHAIN_ACCOUNTS_START',
+      });
       if (!canContinue) throw new Error('Complete the funding steps before opening your wallet.');
       // 1. Canonical accounts from the backend (single-derivation rule).
       const acct = (await api.getChainAccounts(duel.id, userWallet)) as ChainAccounts;
@@ -211,6 +229,14 @@ export const BackModal: React.FC<BackModalProps> = ({
       // 4. MWA sign + send + confirm on Devnet.
       setStatus('Waiting for wallet approval…');
       const signature = await mwaSignSendConfirm(ixs, user, undefined, attempt);
+      await savePendingWalletOperation(undefined, {
+        operationId: attempt.attemptId,
+        operationType: 'STAKE',
+        resourceId: duel.id,
+        expectedWallet: userWallet,
+        stage: 'TX_CONFIRMED',
+        signature,
+      });
 
       // 5. Backend independently verifies the tx before indexing.
       setStatus('Submitting your stake…');
@@ -220,6 +246,7 @@ export const BackModal: React.FC<BackModalProps> = ({
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingSignature(null);
+      await clearPendingWalletOperation();
 
       setLoading(false);
       setStatus('Stake confirmed');
@@ -231,6 +258,14 @@ export const BackModal: React.FC<BackModalProps> = ({
       setStatus(null);
       if (err instanceof WalletFlowError && err.signature) {
         setPendingSignature(err.signature);
+        await savePendingWalletOperation(undefined, {
+          operationId: attempt.attemptId,
+          operationType: 'STAKE',
+          resourceId: duel.id,
+          expectedWallet: userWallet,
+          stage: 'TX_SUBMITTED',
+          signature: err.signature,
+        });
         setError('Stake transaction submitted but not confirmed yet. Check status before retrying.');
       } else {
         setError(isWalletCancellation(err) ? 'Approval cancelled. Nothing was changed.' : "Couldn't submit your stake. Try again.");
@@ -255,6 +290,7 @@ export const BackModal: React.FC<BackModalProps> = ({
       if (status?.err) {
         walletStage(attempt, 'TX_CONFIRM_FAILED');
         setPendingSignature(null);
+        await clearPendingWalletOperation();
         setStatus(null);
         setError(`Devnet rejected the stake transaction: ${JSON.stringify(status.err)}`);
         return;
@@ -272,6 +308,7 @@ export const BackModal: React.FC<BackModalProps> = ({
       walletStage(attempt, 'BACKEND_VERIFY_OK');
       walletStage(attempt, 'UI_SUCCESS');
       setPendingSignature(null);
+      await clearPendingWalletOperation();
       setStatus('Stake confirmed');
       onStakeRecorded();
       onClose();

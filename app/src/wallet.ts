@@ -2,6 +2,8 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 import { Buffer } from 'buffer';
 import { api } from './api';
+import type { StoredWalletAuthorization } from './session';
+import { connectStage, isWalletCancellation, isWalletTimeout } from './diagnostics';
 
 export const DEVNET_RPC = 'https://api.devnet.solana.com';
 export const PROGRAM_ID = new PublicKey('52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT');
@@ -27,12 +29,15 @@ export type WalletConnectionStatus =
   | 'CONNECTING'
   | 'WAITING_FOR_WALLET'
   | 'VERIFYING'
+  | 'RESTORING'
   | 'CONNECTED'
   | 'USER_REJECTED'
   | 'NO_WALLET'
   | 'MWA_TIMEOUT'
   | 'NETWORK_ERROR'
-  | 'AUTH_FAILED';
+  | 'AUTH_FAILED'
+  | 'INTERRUPTED'
+  | 'WALLET_CHANGED';
 
 let connection: Connection | null = null;
 export function getConnection(): Connection {
@@ -58,6 +63,16 @@ export interface ConnectOutcome {
   state: WalletState;
   status: WalletConnectionStatus;
   detail?: string;
+  tokenRejected?: boolean;
+  walletChanged?: boolean;
+}
+
+export interface ConnectOptions {
+  attemptId?: string;
+  authorization?: StoredWalletAuthorization | null;
+  expectedWallet?: string | null;
+  onMarker?: (stage: import('./diagnostics').ConnectStage) => void | Promise<void>;
+  onAuthorization?: (authorization: Omit<StoredWalletAuthorization, 'v' | 'authorizedAt'>) => void | Promise<void>;
 }
 
 const DISCONNECTED_STATE: WalletState = {
@@ -99,7 +114,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => void):
 
 export async function connectAndAuthenticate(
   onStage?: (stage: WalletConnectionStatus) => void,
-  timeoutMs: number = MWA_HANDSHAKE_TIMEOUT_MS
+  timeoutMs: number = MWA_HANDSHAKE_TIMEOUT_MS,
+  options: ConnectOptions = {},
 ): Promise<ConnectOutcome> {
   const emit = (s: WalletConnectionStatus) => {
     try {
@@ -108,6 +124,19 @@ export async function connectAndAuthenticate(
   };
   let timedOut = false;
   let settled = false;
+  let tokenRejected = false;
+  let walletChanged = false;
+  let verificationStarted = false;
+  const attemptId = options.attemptId || `connect_${Date.now().toString(36)}`;
+  const emitMarker = async (stage: import('./diagnostics').ConnectStage) => {
+    connectStage(attemptId, stage);
+    try { await options.onMarker?.(stage); } catch {}
+  };
+  const identity = {
+    name: 'Counter Mobile',
+    uri: 'https://counter.103-195-188-198.sslip.io',
+    icon: 'favicon.ico',
+  };
 
   // If authorization has not returned quickly, the user is most likely
   // looking at their wallet app (or the dispatch stalled): say so instead
@@ -116,23 +145,60 @@ export async function connectAndAuthenticate(
     if (!settled) emit('WAITING_FOR_WALLET');
   }, 2500);
 
-  const attempt = transact(async (wallet) => {
-    try {
-      const authResult = await wallet.authorize({
-        cluster: 'devnet',
-        identity: {
-          name: 'Counter Mobile',
-          uri: 'https://counter.103-195-188-198.sslip.io',
-          icon: 'favicon.ico',
-        },
-      });
+  const attempt = (async () => {
+    await emitMarker('CONNECT_MWA_TRANSACT_START');
+    return transact(async (wallet) => {
+      await emitMarker('CONNECT_CALLBACK_ENTER');
+      let authResult: any;
+      const walletWithReauthorize = wallet as typeof wallet & {
+        reauthorize?: (params: { auth_token: string; identity: typeof identity }) => Promise<any>;
+      };
+      try {
+        if (options.authorization) {
+          await emitMarker('CONNECT_REASSOCIATE_START');
+          await emitMarker('CONNECT_REAUTHORIZE_START');
+          if (typeof walletWithReauthorize.reauthorize === 'function') {
+            authResult = await walletWithReauthorize.reauthorize({ auth_token: options.authorization.auth_token, identity });
+          } else {
+            authResult = await wallet.authorize({
+              chain: 'solana:devnet',
+              identity,
+              auth_token: options.authorization.auth_token,
+            });
+          }
+          await emitMarker('CONNECT_REAUTHORIZE_OK');
+        } else {
+          await emitMarker('CONNECT_AUTHORIZE_START');
+          authResult = await wallet.authorize({ cluster: 'devnet', identity });
+          await emitMarker('CONNECT_AUTHORIZE_OK');
+        }
+      } catch (error) {
+        const message = String((error as any)?.message || error || '').toLowerCase();
+        if (options.authorization && /auth.?token|unauthor|deauthor|expired|invalid.?auth|not authorized/.test(message)) {
+          tokenRejected = true;
+        }
+        throw error;
+      }
 
-      const userPubkeyStr = authResult.accounts[0].address;
+      const userPubkeyStr = authResult?.accounts?.[0]?.address;
+      if (typeof userPubkeyStr !== 'string' || userPubkeyStr.length === 0) throw new Error('Wallet returned no account');
       const userPubkey = new PublicKey(Buffer.from(userPubkeyStr, 'base64'));
       const walletBase58 = userPubkey.toBase58();
+      if (options.expectedWallet && options.expectedWallet !== walletBase58) {
+        walletChanged = true;
+        throw new Error('Wallet changed during recovery');
+      }
+
+      await options.onAuthorization?.({
+        wallet: walletBase58,
+        auth_token: authResult.auth_token,
+        wallet_uri_base: authResult.wallet_uri_base,
+        chain: 'solana:devnet',
+      });
+      await emitMarker('CONNECT_AUTH_PERSISTED');
 
       emit('VERIFYING');
-      // SIWS Nonce
+      await emitMarker('CONNECT_SIGN_IN_START');
       const { nonce } = await api.getNonce(walletBase58);
       const message = `Sign-in to Counter with nonce: ${nonce}`;
       const messageBytes = Uint8Array.from(Buffer.from(message, 'utf-8'));
@@ -141,13 +207,17 @@ export async function connectAndAuthenticate(
         addresses: [userPubkeyStr],
         payloads: [messageBytes],
       });
+      await emitMarker('CONNECT_SIGN_IN_RETURN');
 
       const signatureBytes = signResults[0] as Uint8Array;
       // Convert to base58
       const bs58 = require('bs58').default || require('bs58');
       const signatureBase58 = bs58.encode(Buffer.from(signatureBytes));
 
+      verificationStarted = true;
+      await emitMarker('CONNECT_VERIFY_START');
       const verifyRes = await api.verifySignature(walletBase58, signatureBase58, nonce);
+      await emitMarker('CONNECT_VERIFY_OK');
 
       return {
         connected: true,
@@ -156,12 +226,8 @@ export async function connectAndAuthenticate(
         isArenaEligible: verifyRes.user?.is_arena_eligible === 1,
         skrStakedAmount: verifyRes.user?.skr_staked_amount || 0,
       } as WalletState;
-    } catch (err: any) {
-      // Stage the failure by where it happened: anything before the SIWS
-      // verify call is an authorize/wallet-stage failure.
-      throw err;
-    }
-  });
+    });
+  })();
 
   emit('CONNECTING');
   try {
@@ -178,10 +244,34 @@ export async function connectAndAuthenticate(
     // must surface as an explicit failure state so the product never
     // fabricates identity, session tokens, or arena eligibility. Wallet
     // rejection is a normal outcome the UI handles explicitly.
-    console.warn('[MWA] authorization failed or cancelled:', err?.message);
-    const status: WalletConnectionStatus = timedOut
-      ? 'MWA_TIMEOUT'
-      : classifyConnectError(err, 'authorize');
-    return { state: DISCONNECTED_STATE, status, detail: String(err?.message || err || 'Wallet connection failed') };
+    const status: WalletConnectionStatus = walletChanged
+      ? 'WALLET_CHANGED'
+      : timedOut
+        ? 'MWA_TIMEOUT'
+        : tokenRejected
+          ? 'AUTH_FAILED'
+          : classifyConnectError(err, verificationStarted ? 'verify' : 'authorize');
+    if (timedOut) void emitMarker('CONNECT_TIMEOUT');
+    else if (walletChanged) void emitMarker('CONNECT_ERROR');
+    else if (tokenRejected || status === 'AUTH_FAILED') void emitMarker('CONNECT_AUTH_FAILED');
+    else if (isWalletCancellation(err)) void emitMarker('CONNECT_CANCELLED');
+    else void emitMarker('CONNECT_ERROR');
+    // Do not print or surface raw wallet errors: some wallet implementations
+    // include authorization material in exception text.
+    return {
+      state: DISCONNECTED_STATE,
+      status,
+      tokenRejected,
+      walletChanged,
+      detail: walletChanged
+        ? 'Wallet changed during recovery.'
+        : tokenRejected
+          ? 'The saved wallet authorization expired. Reconnect to continue.'
+          : isWalletCancellation(err)
+            ? 'The wallet request was cancelled.'
+            : timedOut || isWalletTimeout(err)
+              ? 'The wallet connection was interrupted. Reconnect to continue.'
+              : 'Wallet connection could not be completed safely.',
+    };
   }
 }

@@ -1,4 +1,4 @@
-export type WalletOperation = 'DUEL_INIT' | 'STAKE' | 'SETTLEMENT' | 'CLAIM';
+export type WalletOperation = 'DUEL_INIT' | 'STAKE' | 'SETTLEMENT' | 'CLAIM' | 'REFUND';
 
 export type WalletStage =
   | 'START'
@@ -80,6 +80,40 @@ export function walletStage(attempt: WalletAttempt, stage: WalletStage): void {
 export function lifecycleStage(stage: 'APP_BACKGROUND' | 'APP_RESUME'): void {
   try {
     console.info(`[COUNTER][WALLET][${stage}]`);
+  } catch {}
+}
+
+export type ConnectStage =
+  | 'CONNECT_START'
+  | 'CONNECT_STATE_SAVED'
+  | 'CONNECT_MWA_TRANSACT_START'
+  | 'CONNECT_CALLBACK_ENTER'
+  | 'CONNECT_AUTHORIZE_START'
+  | 'CONNECT_AUTHORIZE_OK'
+  | 'CONNECT_AUTH_PERSISTED'
+  | 'CONNECT_SIGN_IN_START'
+  | 'CONNECT_SIGN_IN_RETURN'
+  | 'CONNECT_VERIFY_START'
+  | 'CONNECT_VERIFY_OK'
+  | 'CONNECT_PROFILE_START'
+  | 'CONNECT_PROFILE_OK'
+  | 'CONNECT_SESSION_SAVED'
+  | 'CONNECT_COMPLETE'
+  | 'CONNECT_RESUME_FOUND_PENDING'
+  | 'CONNECT_REASSOCIATE_START'
+  | 'CONNECT_REAUTHORIZE_START'
+  | 'CONNECT_REAUTHORIZE_OK'
+  | 'CONNECT_RECOVERY_COMPLETE'
+  | 'CONNECT_CANCELLED'
+  | 'CONNECT_INTERRUPTED'
+  | 'CONNECT_TIMEOUT'
+  | 'CONNECT_AUTH_FAILED'
+  | 'CONNECT_ERROR';
+
+/** Connect markers are correlation-only: never append wallet or auth values. */
+export function connectStage(attemptId: string, stage: ConnectStage): void {
+  try {
+    console.info(`[COUNTER][CONNECT][attempt=${attemptId}][stage=${stage}]`);
   } catch {}
 }
 
