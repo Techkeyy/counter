@@ -28,6 +28,7 @@ import {
 } from '../chain';
 import {
   createWalletAttempt,
+  acceptTransitionStage,
   isWalletCancellation,
   WalletFlowError,
   walletStage,
@@ -42,8 +43,11 @@ import type { WalletPreflight } from '../utils/preflight';
 interface DuelDetailScreenProps {
   duelId: string;
   userWallet: string | null;
+  challengeId?: string;
+  transitionAttemptId?: string;
   onBack: () => void;
   onViewReceipt: (receiptId: string) => void;
+  onDataError?: (error: unknown) => void;
 }
 
 type DuelData = Duel & { positions?: Position[]; mutualVotes?: MutualVote[] };
@@ -51,8 +55,11 @@ type DuelData = Duel & { positions?: Position[]; mutualVotes?: MutualVote[] };
 export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   duelId,
   userWallet,
+  challengeId,
+  transitionAttemptId,
   onBack,
   onViewReceipt,
+  onDataError,
 }) => {
   const [duel, setDuel] = useState<DuelData | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -80,8 +87,30 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setPositions(Array.isArray(data.positions) ? data.positions : []);
       setMutualVotes(Array.isArray(data.mutualVotes) ? data.mutualVotes : []);
       setLoadError(null);
+      acceptTransitionStage('DUEL_DETAIL_DATA_OK', {
+        challengeId: challengeId || 'direct-open',
+        duelId,
+        attemptId: transitionAttemptId || 'direct-open',
+      });
+      const mappedState = mapDuelState({
+        duel: data,
+        userWallet,
+        positions: Array.isArray(data.positions) ? data.positions : [],
+        mutualVotes: Array.isArray(data.mutualVotes) ? data.mutualVotes : [],
+        mutualState: data.mutualState,
+        myVoteSubmitted: data.myVoteSubmitted,
+        otherVoteSubmitted: data.otherVoteSubmitted,
+      });
+      if (mappedState === 'ACCEPTED_NOT_INITIALIZED') {
+        acceptTransitionStage('DUEL_DETAIL_READY', {
+          challengeId: challengeId || 'direct-open',
+          duelId,
+          attemptId: transitionAttemptId || 'direct-open',
+        });
+      }
     } catch (error: any) {
       setLoadError(error?.message || 'Duel not found');
+      onDataError?.(error);
     } finally {
       setLoading(false);
     }
@@ -96,6 +125,11 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   };
 
   useEffect(() => {
+    acceptTransitionStage('DUEL_DETAIL_MOUNT', {
+      challengeId: challengeId || 'direct-open',
+      duelId,
+      attemptId: transitionAttemptId || 'direct-open',
+    });
     loadDuelData();
     refreshPreflight();
   }, [duelId, userWallet]);

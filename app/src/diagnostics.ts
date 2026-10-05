@@ -83,6 +83,36 @@ export function lifecycleStage(stage: 'APP_BACKGROUND' | 'APP_RESUME'): void {
   } catch {}
 }
 
+export type AcceptTransitionStage =
+  | 'ACCEPT_UI_START'
+  | 'ACCEPT_HTTP_OK'
+  | 'ACCEPT_DUEL_RECEIVED'
+  | 'CHALLENGE_SHEET_DISMISS_START'
+  | 'CHALLENGE_SHEET_DISMISSED'
+  | 'DUEL_DETAIL_SELECT'
+  | 'DUEL_DETAIL_MOUNT'
+  | 'DUEL_DETAIL_DATA_OK'
+  | 'DUEL_DETAIL_READY'
+  | 'DUEL_DETAIL_RENDER_FAILED';
+
+export interface AcceptTransitionContext {
+  challengeId: string;
+  duelId?: string;
+  attemptId: string;
+}
+
+// Accept/detail transition markers are deliberately value-free. They correlate
+// one public challenge/Duel without recording auth, wallet, or transaction data.
+export function acceptTransitionStage(stage: AcceptTransitionStage, context: AcceptTransitionContext): void {
+  try {
+    const duelPart = context.duelId ? `[duel=${context.duelId}]` : '';
+    console.info(
+      `[COUNTER][ACCEPT_TRANSITION][challenge=${context.challengeId}]` +
+      `${duelPart}[attempt=${context.attemptId}][stage=${stage}]`
+    );
+  } catch {}
+}
+
 export function isWalletCancellation(error: unknown): boolean {
   const value = error as any;
   const message = String(value?.message || error || '').toLowerCase();

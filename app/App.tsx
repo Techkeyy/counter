@@ -12,7 +12,7 @@ import * as Linking from 'expo-linking';
 import { FreshFeedScreen } from './src/screens/FreshFeedScreen';
 import { FreshDuelsScreen } from './src/screens/FreshDuelsScreen';
 import { FreshCreateTakeScreen } from './src/screens/FreshCreateTakeScreen';
-import { DuelDetailV1Screen } from './src/screens/DuelDetailV1Screen';
+import { DuelDetailBoundary } from './src/components/DuelDetailBoundary';
 import { FreshTakeDetailScreen } from './src/screens/FreshTakeDetailScreen';
 import { FreshReceiptScreen } from './src/screens/FreshReceiptScreen';
 import { FreshProfileScreen } from './src/screens/FreshProfileScreen';
@@ -33,7 +33,7 @@ import {
 } from './src/session';
 import { api } from './src/api';
 import { Take, Duel, Receipt, Challenge } from './src/types';
-import { lifecycleStage } from './src/diagnostics';
+import { acceptTransitionStage, lifecycleStage } from './src/diagnostics';
 
 type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
 
@@ -52,6 +52,9 @@ export default function App() {
 
   // Selected Detail Views
   const [selectedDuelId, setSelectedDuelId] = useState<string | null>(null);
+  const [acceptTransition, setAcceptTransition] = useState<{ challengeId: string; duelId: string; attemptId: string } | null>(null);
+  const [detailTransition, setDetailTransition] = useState<{ challengeId: string; duelId: string; attemptId: string } | null>(null);
+  const [duelDetailRetry, setDuelDetailRetry] = useState(0);
   const [selectedTake, setSelectedTake] = useState<Take | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [showComposer, setShowComposer] = useState(false);
@@ -211,6 +214,9 @@ export default function App() {
 
   const clearDetailViews = () => {
     setSelectedDuelId(null);
+    setAcceptTransition(null);
+    setDetailTransition(null);
+    setDuelDetailRetry(0);
     setSelectedTake(null);
     setSelectedReceipt(null);
     setShowComposer(false);
@@ -334,12 +340,27 @@ export default function App() {
             />
           </View>
         )}
+        {acceptTransition && !selectedDuelId && (
+          <View style={[styles.overlay, styles.openingOverlay]}>
+            <Text style={styles.openingTitle}>Opening your Duel…</Text>
+            <Text style={styles.openingCopy}>Your challenge was accepted. Loading the existing Duel.</Text>
+          </View>
+        )}
         {selectedDuelId && (
           <View style={styles.overlay}>
-            <DuelDetailV1Screen
+            <DuelDetailBoundary
+              key={`${selectedDuelId}:${duelDetailRetry}`}
               duelId={selectedDuelId}
               userWallet={walletState.publicKey}
-              onBack={() => setSelectedDuelId(null)}
+              challengeId={detailTransition?.challengeId}
+              attemptId={detailTransition?.attemptId}
+              onBack={() => {
+                setSelectedDuelId(null);
+                setAcceptTransition(null);
+                setDetailTransition(null);
+                setDuelDetailRetry(0);
+              }}
+              onRetry={() => setDuelDetailRetry((value) => value + 1)}
               onViewReceipt={(receiptId) => setSelectedDuelId(receiptId.replace('receipt_', ''))}
             />
           </View>
@@ -410,11 +431,25 @@ export default function App() {
         challenge={reviewChallenge}
         userWallet={walletState.publicKey}
         onClose={() => setReviewChallenge(null)}
-        onDecided={(duel) => {
+        onAcceptResolved={(duel, attemptId) => {
+          setAcceptTransition({ challengeId: reviewChallenge?.id || 'unknown', duelId: duel.id, attemptId });
+        }}
+        onDecided={(duel, attemptId) => {
           setReviewChallenge(null);
           setTabFocus((n) => n + 1);
           if (duel) {
+            const transition = acceptTransition;
+            acceptTransitionStage('DUEL_DETAIL_SELECT', {
+              challengeId: transition?.challengeId || reviewChallenge?.id || 'unknown',
+              duelId: duel.id,
+              attemptId: attemptId || transition?.attemptId || 'unknown',
+            });
             clearDetailViews();
+            setDetailTransition({
+              challengeId: transition?.challengeId || reviewChallenge?.id || 'unknown',
+              duelId: duel.id,
+              attemptId: attemptId || transition?.attemptId || 'unknown',
+            });
             setSelectedDuelId(duel.id);
           }
         }}
@@ -486,6 +521,24 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.background,
+  },
+  openingOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  openingTitle: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  openingCopy: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   fab: {
     position: 'absolute',
