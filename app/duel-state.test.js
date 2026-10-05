@@ -18,8 +18,9 @@ const vote = (captain_wallet, winner_side) => ({ captain_wallet, winner_side });
 
 assert.equal(mapDuelState({ duel: null, userWallet: 'A', nowSec: 1_000 }), 'PENDING_CHALLENGE');
 assert.equal(mapDuelState({ duel: duel({ chain_status: 'UNINITIALIZED' }), userWallet: 'A', nowSec: 1_000 }), 'ACCEPTED_NOT_INITIALIZED');
+assert.equal(mapDuelState({ duel: duel({ chain_status: 'UNINITIALIZED', side_a_total: 0, side_b_total: 0 }), userWallet: 'A', nowSec: 2_000 }), 'EXPIRED_BEFORE_FUNDING');
 assert.equal(mapDuelState({ duel: duel({ side_b_total: 0 }), userWallet: 'A', nowSec: 1_000 }), 'FUNDING');
-assert.equal(mapDuelState({ duel: duel({ side_b_total: 0 }), userWallet: 'A', nowSec: 2_000 }), 'TIMEOUT');
+assert.equal(mapDuelState({ duel: duel({ side_b_total: 0 }), userWallet: 'A', nowSec: 2_000 }), 'EXPIRED_BEFORE_FUNDING');
 assert.equal(mapDuelState({ duel: duel(), userWallet: 'A', nowSec: 1_000 }), 'LIVE');
 assert.equal(mapDuelState({ duel: duel(), userWallet: 'A', nowSec: 2_000 }), 'READY_TO_SETTLE');
 assert.equal(mapDuelState({ duel: duel(), userWallet: 'A', mutualVotes: [vote('A', 1)], nowSec: 2_000 }), 'WAITING_FOR_OTHER_RESULT');
@@ -30,5 +31,7 @@ assert.equal(mapDuelState({ duel: duel({ status: 'RESOLVED_SIDE_A' }), userWalle
 assert.equal(mapDuelState({ duel: duel({ status: 'CANCELLED' }), userWallet: 'A', nowSec: 3_000 }), 'MISMATCH');
 assert.equal(mapDuelState({ duel: duel({ mutualState: 'AWAITING_COUNTERPARTY' }), userWallet: 'A', myVoteSubmitted: true, nowSec: 2_000 }), 'WAITING_FOR_OTHER_RESULT');
 assert.equal(mapDuelState({ duel: duel({ mutualState: 'AWAITING_COUNTERPARTY' }), userWallet: 'A', otherVoteSubmitted: true, nowSec: 2_000 }), 'READY_TO_SETTLE');
+assert.equal(mapDuelState({ duel: duel({ side_a_total: 30, side_b_total: 0 }), userWallet: 'A', nowSec: 2_000 }), 'EXPIRED_BEFORE_FUNDING');
+assert.equal(mapDuelState({ duel: duel({ side_a_total: 30, side_b_total: 30 }), userWallet: 'A', nowSec: 2_000 }), 'READY_TO_SETTLE');
 
-console.log('V1 canonical Duel state mapper: PASS (14/14)');
+console.log('V1 canonical Duel state mapper: PASS (18/18)');

@@ -569,12 +569,21 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       );
     }
 
-    if (state === 'TIMEOUT' && !hasBothFunded) {
+    if (state === 'EXPIRED_BEFORE_FUNDING') {
+      const hasPrincipal = Number(duel.side_a_total || 0) > 0
+        || Number(duel.side_b_total || 0) > 0
+        || !!myPosition;
+      const refundAvailable = duel.status === 'CANCELLED';
+
       return (
         <View style={styles.stateBox}>
           <Text style={styles.stateTitle}>Duel expired before funding</Text>
-          <Text style={styles.stateCopy}>Both captain stakes were not locked before the decision time. No winner can be chosen.</Text>
-          <Text style={styles.subtleCopy}>Any confirmed principal follows the existing refund rules.</Text>
+          <Text style={styles.stateCopy}>This Duel reached its decision time before both stakes were locked.</Text>
+          <Text style={styles.subtleCopy}>No winner can be chosen.</Text>
+          {hasPrincipal && !refundAvailable && resolutionReached && <TouchableOpacity style={styles.primaryButton} onPress={handleResolve} disabled={resolving} accessibilityRole="button"><Text style={styles.primaryButtonText}>{resolving ? 'Opening refund…' : 'Make refund available'}</Text></TouchableOpacity>}
+          {hasPrincipal && canRefund && renderPreflight()}
+          {hasPrincipal && canRefund && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Get ${payout.toFixed(2)} Counter Test USD back` : 'Get SOL to claim'}</Text></TouchableOpacity>}
+          {hasPrincipal && refundAvailable && !canRefund && <TouchableOpacity style={styles.secondaryButton} onPress={() => onViewReceipt(`receipt_${duel.id}`)} accessibilityRole="button"><Text style={styles.secondaryButtonText}>View receipt</Text></TouchableOpacity>}
         </View>
       );
     }

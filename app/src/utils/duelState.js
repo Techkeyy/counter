@@ -46,8 +46,8 @@ function mapDuelState({
 
   if (duel.status === 'CANCELLED') return 'MISMATCH';
   if (duel.status === 'RESOLVED_SIDE_A' || duel.status === 'RESOLVED_SIDE_B') return 'MATCHED_RESULT';
-  if (!initialized) return side ? 'ACCEPTED_NOT_INITIALIZED' : 'ACCEPTED_NOT_INITIALIZED';
-  if (!bothFunded && resolutionReached) return 'TIMEOUT';
+  if (resolutionReached && !bothFunded) return 'EXPIRED_BEFORE_FUNDING';
+  if (!initialized) return 'ACCEPTED_NOT_INITIALIZED';
   if (!bothFunded) return 'FUNDING';
   if (!resolutionReached) return 'LIVE';
   if (mutualState === 'DISPUTED') return 'MISMATCH';
@@ -64,6 +64,7 @@ function stateLabel(state) {
   return {
     PENDING_CHALLENGE: 'Challenge pending',
     ACCEPTED_NOT_INITIALIZED: 'Ready to Duel',
+    EXPIRED_BEFORE_FUNDING: 'Duel expired before funding',
     FUNDING: 'Funding',
     LIVE: 'Duel live',
     READY_TO_SETTLE: 'Ready to settle',

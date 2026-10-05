@@ -123,7 +123,7 @@ export default function App() {
       if (parsed.path?.startsWith('duel/')) {
         const duelId = parsed.path.replace('duel/', '');
         clearDetailViews();
-        setSelectedDuelId(duelId);
+        openDuel(duelId);
       } else if (parsed.path?.startsWith('receipt/')) {
         const receiptId = parsed.path.replace('receipt/', '');
         clearDetailViews();
@@ -138,7 +138,7 @@ export default function App() {
         const parts = (parsed.path || '').split('/');
         if (parts[0] === 'd' && parts[1]) {
           clearDetailViews();
-          setSelectedDuelId(parts[1]);
+          openDuel(parts[1]);
         } else if (parts[0] === 'r' && parts[1]) {
           clearDetailViews();
           api
@@ -236,6 +236,14 @@ export default function App() {
     if (tab === 'HOME') setFeedRefresh((n) => n + 1);
   };
 
+  // A Duel detail is an overlay, but it belongs to the Duels section. Keep
+  // the bottom-nav state truthful when it is opened from Home, Activity, or
+  // Profile rather than leaving an unrelated tab highlighted underneath.
+  const openDuel = (duelId: string) => {
+    setCurrentTab('DUELS');
+    setSelectedDuelId(duelId);
+  };
+
   const onDuelsActionableCountChange = useCallback((count: number) => {
     setDuelsActionableCount(count);
   }, []);
@@ -261,7 +269,7 @@ export default function App() {
         <View style={[styles.fill, currentTab === 'HOME' ? null : styles.hidden]}>
           <FreshFeedScreen
             onSelectTake={(take: Take) => setSelectedTake(take)}
-            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onSelectDuel={(duel: Duel) => openDuel(duel.id)}
             onHasVisibleTakesChange={setHasVisibleTakes}
             onChallengePress={(take: Take) => setChallengeTargetTake(take)}
             onCreateTakePress={() => {
@@ -278,7 +286,7 @@ export default function App() {
         <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
           <FreshDuelsScreen
             userWallet={walletState.publicKey}
-            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onSelectDuel={(duel: Duel) => openDuel(duel.id)}
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
             createdChallenge={createdChallenge}
             focusSignal={tabFocus}
@@ -289,7 +297,7 @@ export default function App() {
           <FreshActivityScreen
             onSelectNotification={(notif) => {
               if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
-                setSelectedDuelId(notif.target_id.replace('receipt_', ''));
+                openDuel(notif.target_id.replace('receipt_', ''));
               }
             }}
             onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
@@ -303,7 +311,7 @@ export default function App() {
             ownWallet={walletState.publicKey}
             onDisconnect={handleDisconnectWallet}
             onSelectTake={(take: Take) => setSelectedTake(take)}
-            onSelectDuel={(duel: Duel) => setSelectedDuelId(duel.id)}
+            onSelectDuel={(duel: Duel) => openDuel(duel.id)}
             onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
             onProfileSaved={() => setFeedRefresh((n) => n + 1)}
             focusSignal={tabFocus}
@@ -328,7 +336,7 @@ export default function App() {
               onBack={() => setSelectedTake(null)}
               onSelectDuel={(duel) => {
                 clearDetailViews();
-                setSelectedDuelId(duel.id);
+                openDuel(duel.id);
               }}
               onChallengeTake={(take) => setChallengeTargetTake(take)}
               onOpenAuthorProfile={openAuthorProfile}
@@ -372,7 +380,7 @@ export default function App() {
               onBack={() => setSelectedReceipt(null)}
               onViewDuel={(duelId) => {
                 clearDetailViews();
-                setSelectedDuelId(duelId);
+                openDuel(duelId);
               }}
             />
           </View>
@@ -390,7 +398,7 @@ export default function App() {
               }}
               onSelectDuel={(duel: Duel) => {
                 clearDetailViews();
-                setSelectedDuelId(duel.id);
+                openDuel(duel.id);
               }}
               onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
             />
@@ -450,7 +458,7 @@ export default function App() {
               duelId: duel.id,
               attemptId: attemptId || transition?.attemptId || 'unknown',
             });
-            setSelectedDuelId(duel.id);
+            openDuel(duel.id);
           }
         }}
       />

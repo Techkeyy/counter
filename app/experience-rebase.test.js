@@ -79,7 +79,7 @@ excludes(modal, 'Ready to settlement', 'active challenge composer has no broken 
 for (const label of ['Incoming', 'Sent', 'Active', 'Claimable', 'Completed']) {
   includes(duels, label, `Duels home contains ${label} state/tab`);
 }
-for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Ready to stake', 'Funding in progress', 'Duel live', 'Ready to settle', 'Make refund available']) {
+for (const label of ['Waiting for response', 'Set up this Duel', 'Waiting for setup', 'Ready to stake', 'Funding in progress', 'Duel live', 'Ready to settle', 'Make refund available', 'Duel expired before funding', 'This Duel reached its decision time before both stakes were locked.', 'No winner can be chosen.']) {
   includes(duels + detail + stateMachine, label, `V1 lifecycle contains ${label}`);
 }
 includes(sheet, 'challenged your Take', 'incoming challenge copy identifies the Take');
@@ -90,6 +90,8 @@ includes(sheet, 'Counter', 'incoming challenge exposes the counter path');
 includes(sheet, 'Decline', 'incoming challenge exposes the decline path');
 
 includes(detail, 'Ready to Duel', 'Duel setup has the pre-wallet boundary');
+includes(stateMachine, 'EXPIRED_BEFORE_FUNDING', 'expired uninitialized Duels have a distinct terminal-pre-funding state');
+includes(detail, 'hasPrincipal', 'expired partial-funding states retain only the authoritative refund path');
 includes(detail, 'Waiting for wallet approval…', 'Duel actions have the wallet waiting boundary');
 includes(detail, 'Set up this Duel', 'Duel setup exposes the first on-chain action');
 includes(detail, 'Duel ready', 'Duel setup has a success state');
@@ -141,5 +143,6 @@ includes(activeSurface, 'Get test funds', 'profile provides the direct test-fund
 includes(detail, 'Get SOL', 'Duel preflight provides the direct SOL action');
 includes(detail, 'hasFeeBalance', 'Duel action is blocked before wallet handoff when fees are insufficient');
 includes(activeSurface, 'Settle together', 'the new product language explains mutual settlement');
+includes(app, "setCurrentTab('DUELS')", 'Duel overlays keep Duels active in bottom navigation');
 
 console.log('V1 experience rebase source guardrails passed');

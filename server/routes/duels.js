@@ -102,8 +102,24 @@ router.get('/', optionalAuth, (req, res) => {
   res.json({ duels: enrichedDuels });
 });
 
+// Duel detail is an application JSON resource, not a cacheable document.
+// Express' default ETag handling otherwise turns a repeated conditional GET
+// into a bodyless 304, which the mobile JSON contract cannot consume. Strip
+// only the validators for this route and advertise the same no-store policy
+// to intermediaries; unrelated API routes retain their normal behavior.
+function noConditionalDetailCache(req, res, next) {
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
+  next();
+}
+
 // GET /api/duels/:id
-router.get('/:id', optionalAuth, (req, res) => {
+router.get('/:id', noConditionalDetailCache, optionalAuth, (req, res) => {
   const duel = queryOne(
     `SELECT d.*, c.stake_amount_usd AS stake_amount_usd,
             ua.handle as captain_a_handle, ua.display_name as captain_a_name, ua.avatar_url as captain_a_avatar,
