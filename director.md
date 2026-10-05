@@ -4018,3 +4018,156 @@ Power Saving test has been performed. The exact APK above is staged for one
 owner-driven physical Connect Wallet test with Power Saving left on.
 
 Target: **`BUILDING — POWER-SAVING-RESILIENT MWA RECOVERY BUILT / READY FOR ONE PHYSICAL CONNECT TEST WITH POWER SAVING ON`**.
+
+## 66. FINAL PRODUCT RELIABILITY PASS — 2026-10-05
+
+Director-authorized reliability pass for the owner-observed Take, account
+switching, cross-surface freshness, known Duel terminal states, and the
+Power-Saving-on wallet handoff. No production VPS deployment, production DB
+mutation, Solana program change, wallet interaction, or physical UAT was
+performed in this pass. The existing VPS backend remains the APK backend; the
+Render migration was not switched into this artifact.
+
+### 66.A — Take incident diagnosis
+
+The latest owner-associated Take submission used public wallet
+`PgJhWQpVfcNU5oQ5JzPbUKdL2oQquerWddW5p6MpcJs`. The VPS journal records
+`POST /api/takes` at `Oct 05 17:10:31`, HTTP `201`, followed immediately by a
+successful `GET /api/takes`. The authoritative production row is
+`take_1791220231286_27612009`, created at
+`2026-10-05T17:10:31.286Z`, with status `ACTIVE`, topic `Rain will fall
+tonight`, and category `CULTURE`. No duplicate Take was created.
+
+The server journal does not retain the POST response body, and the physical
+client capture did not cover this Take attempt, so the exact final on-device
+spinner/error transition cannot be reconstructed. The literal phrase
+`not accepted` is not an application-owned runtime string in the current
+source. The causal classification is **D — POST succeeded, but client/feed
+reconciliation was not authoritative enough after the response**; whether the
+visible symptom was the spinner or a stale refresh cannot be separated from
+the available capture.
+
+### 66.B — Runtime correction
+
+The packaged runtime source commit is
+`d06f45fa21901eea9b7813d57feed347d8039cf8`.
+
+- `ACTIVE_WALLET_CHANGED` is emitted by one sync coordinator. App-level
+  invalidation clears profile, balance, Home, challenges, Duels, Activity,
+  unread counts, selected detail/composer state, and pending user-scoped UI
+  before the new wallet surfaces reload.
+- One foreground coordinator polls authoritative social/Duel state every four
+  seconds, pauses in background, refreshes on `APP_RESUME`, focus, and every
+  successful non-auth mutation. All four primary surfaces remain mounted and
+  subscribe to the same event stream, so Activity/unread badges do not depend
+  on tab hopping.
+- The server derives effective Duel state from stored status, current time,
+  funding, and settlement. Linked Take feed summaries now expose compact
+  forming/live/ready/completed/refunded/cancelled/expired state without odds or
+  market UI. Derived Activity includes `DUEL_EXPIRED`, `DUEL_CANCELLED`,
+  `NO_AGREEMENT`, and `REFUND_READY` without duplicate writes.
+- Post Take now has an attempt id, `Posting…` state, an idempotent server
+  boundary, authoritative `/takes/by-attempt/:attemptId` readback after an
+  ambiguous response, immediate returned-Take merge, and draft-preserving
+  failure copy. A retry cannot duplicate the Take.
+- A short Android foreground `dataSync` service starts around CONNECT,
+  DUEL_INIT, STAKE, SETTLEMENT, CLAIM, and REFUND. It is non-exported,
+  stop-with-task false, bounded to 90 seconds, displays only product copy, and
+  stops/removes its notification on every terminal path or timeout. A bounded
+  partial wake lock is acquired only for that same window and released on
+  stop/destroy. Existing pending-operation, SecureStore authorization/session,
+  APP_RESUME, reauthorization, known-signature, and process-death recovery
+  remain in place.
+
+The earlier known Duel readback remains authoritative: the incident row was
+`UNINITIALIZED/ACCEPTING_STAKES`, unarchived, and the route returned readable
+JSON rather than a missing record. A Duel that has reached its resolution time
+without both sides funded now maps to `EXPIRED_BEFORE_FUNDING` and the
+state-specific copy `Duel expired before funding`; a pre-resolution
+uninitialized Duel remains `Ready to Duel`. The exact old Duel ID was not
+present in the current physical capture, so no new ID is inferred here.
+
+### 66.C — Regression closure
+
+- TypeScript: PASS.
+- App session/pending-operation harness: PASS, `7/7` cases.
+- MWA handoff, wallet recovery, experience rebase, accept transition, and
+  Duels-load isolation: PASS.
+- Profile boundaries: PASS, `12/12`.
+- Take deletion: PASS. Its local fixture handles were made run-unique after a
+  stale prior local fixture caused a false collision; no production data was
+  touched.
+- Portfolio: PASS.
+- Chain vectors: PASS, `11/11`.
+- Resolution boundaries, timing vectors, mutual closure, MVP lifecycle,
+  fresh visibility, Duel-detail HTTP contract, and auth boundary: PASS.
+- Backend adversarial suite: PASS, `8/8`.
+- New mobile reliability contract: PASS.
+- New local server reliability integration: PASS for idempotent Take POST,
+  attempt readback, no-store feed refresh, linked Duel summary, and expired
+  Activity.
+- Android native release compilation and packaging: PASS. The only compiler
+  warning for the new native code is the Android-deprecated legacy
+  `Notification.Builder(Context)` constructor; the release build succeeded.
+- Secret/mock scan of the packaged bundle: former JWT fallback absent,
+  signing environment markers absent, private-key material absent, and no
+  power/battery-setting workaround copy present.
+
+### 66.D — Sole fresh release artifact
+
+The initial unsigned-environment guard stopped before packaging because the
+required release password variables were absent. The existing rotated
+`counter` identity and current-user DPAPI vault were then reused for exactly
+one successful release APK build. The password was held in memory only,
+never printed or persisted, and temporary signing variables were cleared.
+
+```text
+BUILD SUCCESSFUL in 17m 17s
+exit: 0
+packaged source: d06f45fa21901eea9b7813d57feed347d8039cf8
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62518227
+SHA-256: a96c5eda8d9bd3a18ba0a8b7b9cf76f394f9cde2d5b3e3557736644b5628d971
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+APK signature: v2 verified; one signer
+```
+
+### 66.E — Packaged artifact proof
+
+Read-only APK inspection found `assets/index.android.bundle` at `2,581,320`
+bytes with SHA-256
+`de176f61d8908df7c2b1643345e16cd76b625af2e9ec5a6f57f8ba968f275997`.
+Compiled bundle evidence includes `ACTIVE_WALLET_CHANGED`,
+`FOREGROUND_INTERVAL`, `APP_RESUME`, `MUTATION_SUCCEEDED`,
+`X-Counter-Attempt-Id`, `getTakeByAttempt`, `Your text is still here`,
+`Duel expired`, `Duel cancelled`, `Result confirmed`, `No agreement`,
+`CounterWalletKeepalive`, the six scoped wallet operations, the VPS API URL,
+the Solana program ID, and the Devnet cUSD mint. Hermes’ UTF-16 string table
+contains the posting copy represented by the compiled `Posting` string and
+the wired `loadingLabel` path; the exact ellipsis glyph is encoded in the
+Hermes table rather than as a contiguous UTF-8 substring.
+
+The packaged DEX contains `WalletKeepaliveService`,
+`CounterWalletKeepalive`, `Connecting securely to your wallet…`,
+`Waiting for wallet approval…`, `Wallet handoff`, and the bounded wake-lock
+tag. The binary manifest contains `FOREGROUND_SERVICE_DATA_SYNC`, `WAKE_LOCK`,
+the non-exported `WalletKeepaliveService`, `counter://duel/:id`,
+`counter://receipt/:id`, and auto-verified HTTPS `/d` and `/r` filters for the
+VPS host. The live health endpoint and Asset Links endpoint both returned
+HTTP `200`; Asset Links named `app.counter.mobile` and the current release
+certificate.
+
+Source-to-artifact binding is exact: the APK was built from commit
+`d06f45fa21901eea9b7813d57feed347d8039cf8`, and
+`git diff d06f45fa21901eea9b7813d57feed347d8039cf8 HEAD -- app/ server/ program/`
+is empty. The artifact inspection did not modify tracked files.
+
+No installation, app launch, tap-through, wallet switch, Phantom approval,
+Take creation, challenge, setup, funding, settlement, claim, refund, or
+physical Power-Saving-on UAT was performed. The exact APK above is staged for
+owner-driven physical core UAT.
+
+Target: **`BUILDING — CROSS-SURFACE STATE CONSISTENCY + TAKE RELIABILITY + POWER-SAVING WALLET KEEPALIVE BUILT / PHYSICAL CORE UAT REQUIRED`**.
