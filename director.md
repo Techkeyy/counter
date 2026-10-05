@@ -3,11 +3,11 @@
 **Project:** Counter (Mobile Social Network for 1v1 Duels, Backer Pools, Authoritative Settlement, and Permanent Receipts on Solana Mobile)  
 **Location:** `C:\Users\HomePC\Desktop\Counter`  
 **Role:** BUILDER under Director supervision  
-**Current Authoritative Status:** `BUILT — FINAL SURGICAL REMEDIATION / THIRD NATIVE REVIEW INSTALL PENDING DEVICE`
+**Current Authoritative Status:** `BUILDING — DUEL DETAIL DATA-CONTRACT FIX BUILT / OWNER PHYSICAL UAT REQUIRED`
 **Isolation Policy:** `STRICT VPS ISOLATION ACTIVE` (Counter-only in-place upgrade executed under explicit owner authorization: only `/opt/counter/server` implementation files, Counter JWT config, Counter service restart, and Counter backup/rollback state were touched; no unrelated services, directories, or runtimes were altered — see §38)
-**Repository State:** On branch `master`; final surgical Duels-load and Home-mark remediation commit `41e36f2` is pushed and clean before this docs-only update. Production historical Duel/Activity visibility alignment is deployed Counter-only; the final surgical APK is built and artifact-inspected. The third native review install is pending because the owner-authorized device was not present in normal ADB at the builder check. Economic/core physical UAT remains deferred.
+**Repository State:** On branch `master`; the final Duel-detail data-contract/state-precedence runtime commit `80b5148` is pushed and clean before this docs-only update. The route-only production deployment is read back healthy, the fresh APK is built and artifact-inspected, and owner-driven physical UAT remains pending. No database or economic state was mutated.
 **Public GitHub:** `https://github.com/Techkeyy/counter` (visibility: PUBLIC, verified via `gh repo view`)  
-**Authoritative Packaged-Source Commit:** `41e36f2995d5290eaba16a3b5182f0ace6e34143`. The sole current final-surgical APK SHA-256 is `6e8bc6e46e223ce469778db7d874f15a61745cba012c56c647f4f1cf01b9c7bd`; the prior visual-review APK `1b98c79deae4500206a3e674bed41dae189482f3e6510ea29cb3e66635a884c5` is superseded.
+**Authoritative Packaged-Source Commit:** `80b51487f6479d5f89b965c54c97671d1f7fa61f`. The sole current Duel-detail data-contract APK SHA-256 is `30e56fb67818a329e0c2e1c93653a357c2cb5220eb39d11d12218a351213766d`; all prior APKs, including `5c1e614ded1700805b97e02e115efe0c7300003ff85e42d69f2c519ff6881402`, are superseded.
 **Last Updated:** 2026-10-05
 
 ---
@@ -3792,3 +3792,106 @@ economic UAT, or physical retry has been performed in this pass. The exact APK
 above is the only artifact authorized for the next owner-driven physical UAT.
 
 Target: **`BUILDING — ACCEPT → DUEL TRANSITION FIX BUILT / OWNER PHYSICAL UAT REQUIRED`**.
+
+## 64. FINAL DUEL DETAIL DATA-CONTRACT FIX — 2026-10-05
+
+Director-authorized bounded fix for the two evidence-backed Duel-detail
+failures: a bodyless conditional `304` from `GET /api/duels/:id`, and an
+expired uninitialized Duel falling through to `Ready to Duel`. No economic
+mechanics, Solana program, MWA flow, database rows, or production economic
+state were changed.
+
+### 64.A — Runtime correction and production readback
+
+- Runtime source commit: `80b51487f6479d5f89b965c54c97671d1f7fa61f`.
+- The Duel-detail route now strips request validators locally and emits
+  `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate`,
+  `Pragma: no-cache`, and `Expires: 0`. The generic API client was not changed
+  to accept `304`; other routes retain their existing behavior.
+- State precedence is now explicit: pre-resolution uninitialized is
+  `ACCEPTED_NOT_INITIALIZED`; expired with less than two funded sides is
+  `EXPIRED_BEFORE_FUNDING`; both funded after resolution remains
+  `READY_TO_SETTLE`.
+- The expired UI copy is packaged as: `Duel expired before funding`, `This
+  Duel reached its decision time before both stakes were locked.`, and `No
+  winner can be chosen.`. The zero-principal path exposes no setup, stake,
+  settlement, or refund CTA; a partial-principal path retains the
+  authoritative refund route.
+- Detail selection now makes `DUELS` the active secondary navigation context.
+- Only `server/routes/duels.js` was deployed. The production route hash is
+  `ab17460b18cc3a3ccdf0d949732806af...`, matching the local route hash
+  `AB17460B18CC3A3CCDF0D949732806AFB0EC5095DA55003A4F918AC5824BF9F5`.
+  The old route was backed up at
+  `/opt/counter/backups/duels.js.pre-detail-contract-20261005`; only
+  `counter-backend.service` was restarted.
+- Production readback: health `200`; incident Duel first GET `200` with JSON;
+  conditional GET with the captured ETag `200` with JSON; returned state was
+  unchanged (`UNINITIALIZED/ACCEPTING_STAKES`, `archived=0`); list and archived
+  reads were also `200` JSON. No production DB mutation was performed.
+
+### 64.B — Regression closure
+
+- TypeScript: PASS.
+- Duel-state mapper: PASS (`18/18`), including uninitialized expired,
+  initialized partial expired, both-funded expired, and pre-resolution
+  accepted-not-initialized vectors.
+- Duel-detail conditional HTTP contract: PASS. The test performs an initial
+  GET, captures ETag, performs a conditional GET with validators, and requires
+  `200` plus valid JSON on both responses.
+- Experience guardrails, MWA handoff, accept transition, Duels-load isolation,
+  session flow (`5/5`), profile boundaries, fresh visibility, portfolio,
+  chain vectors (`11/11`), resolution boundaries, mutual closure, MVP
+  lifecycle, Take deletion, and backend adversarial (`8/8`): PASS.
+- `git diff --check`: PASS.
+
+### 64.C — Sole fresh release artifact
+
+A preliminary signing-environment guard invocation stopped before producing an
+APK because the required password environment variables were absent. The
+existing current-user DPAPI vault was then used successfully; exactly one
+release build completed and no second successful build was run.
+
+```text
+.\gradlew.bat assembleRelease --rerun-tasks --no-daemon --console=plain
+BUILD SUCCESSFUL in 22m 43s
+exit: 0
+packaged source: 80b51487f6479d5f89b965c54c97671d1f7fa61f
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62505971
+SHA-256: 30e56fb67818a329e0c2e1c93653a357c2cb5220eb39d11d12218a351213766d
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+APK signature: v2 verified; one signer
+```
+
+The rotated `counter` signing identity was reused from
+`C:\Users\HomePC\.counter-secrets\counter-release.keystore`; no key was
+regenerated. The DPAPI password was decrypted only in memory for the Gradle
+process, never printed or persisted, and temporary signing environment
+variables were cleared after Gradle exited.
+
+### 64.D — Packaged remediation proof
+
+The APK was extracted read-only to
+`.uat/duel-contract-artifact-30e56fb6-1306/`. Its packaged Hermes/React Native
+bundle is `assets/index.android.bundle` with `2,560,348` bytes and SHA-256
+`2d5ad45e101add114fa7c682d83fe0ceddfe2226747bd05a54ed467534bdecf8`.
+Compiled bundle evidence contains the state literals
+`EXPIRED_BEFORE_FUNDING`, `ACCEPTED_NOT_INITIALIZED`, and `READY_TO_SETTLE`,
+the exact expired-state copy, `Ready to Duel`, and the `DUELS` navigation
+surface. This is evidence from the packaged bundle, not a source-only claim.
+
+The server-side `200` JSON contract is proven independently by the production
+conditional readback above; it is intentionally not represented as mobile
+bundle code. Source-to-artifact binding is the build from commit
+`80b51487f6479d5f89b965c54c97671d1f7fa61f`; the subsequent docs-only change
+does not alter `app/`, `server/`, or `program/`.
+
+No installation, app launch, tap-through, wallet interaction, challenge,
+setup, funding, settlement, claim, refund, Get SOL action, or economic UAT was
+performed by the builder in this pass. The exact APK above is the only artifact
+authorized for the next owner-driven physical UAT.
+
+Target: **`BUILDING — DUEL DETAIL DATA-CONTRACT PROVEN / OWNER PHYSICAL UAT REQUIRED`**.
