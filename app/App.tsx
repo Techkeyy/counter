@@ -440,6 +440,29 @@ export default function App() {
     selectDuel(duelId, selectionReason);
   };
 
+  // Accept owns a deterministic route transition. The returned Duel ID is
+  // committed before the native challenge sheet can dismiss; onDismiss is
+  // cleanup only and must never be the sole path to Duel detail.
+  const commitAcceptedDuel = (challengeId: string, duelId: string, attemptId: string) => {
+    const acceptedDuelId = String(duelId || '').trim();
+    if (!acceptedDuelId) return;
+    const transition = { challengeId, duelId: acceptedDuelId, attemptId };
+    acceptTransitionStage('ACCEPT_DUEL_ID_COMMITTED', transition);
+    setAcceptTransition(transition);
+    acceptTransitionStage('CHALLENGE_UI_CLOSE_REQUESTED', transition);
+    setReviewChallenge(null);
+    setChallengeTargetTake(null);
+    setSelectedTake(null);
+    setSelectedReceipt(null);
+    setShowComposer(false);
+    setViewProfileWallet(null);
+    setDetailTransition(transition);
+    setTabFocus((n) => n + 1);
+    acceptTransitionStage('DUEL_DETAIL_SELECT', transition);
+    openDuel(acceptedDuelId, 'ACCEPTED_CHALLENGE');
+    acceptTransitionStage('DUEL_ROUTE_COMMITTED', transition);
+  };
+
   const onDuelsActionableCountChange = useCallback((count: number) => {
     setDuelsActionableCount(count);
   }, []);
@@ -642,27 +665,12 @@ export default function App() {
         challenge={reviewChallenge}
         userWallet={walletState.publicKey}
         onClose={() => setReviewChallenge(null)}
-        onAcceptResolved={(duel, attemptId) => {
-          setAcceptTransition({ challengeId: reviewChallenge?.id || 'unknown', duelId: duel.id, attemptId });
+        onAcceptResolved={(duel, attemptId, challengeId) => {
+          commitAcceptedDuel(challengeId, duel.id, attemptId);
         }}
-        onDecided={(duel, attemptId) => {
+        onDecided={() => {
           setReviewChallenge(null);
           setTabFocus((n) => n + 1);
-          if (duel) {
-            const transition = acceptTransition;
-            acceptTransitionStage('DUEL_DETAIL_SELECT', {
-              challengeId: transition?.challengeId || reviewChallenge?.id || 'unknown',
-              duelId: duel.id,
-              attemptId: attemptId || transition?.attemptId || 'unknown',
-            });
-            clearDetailViews();
-            setDetailTransition({
-              challengeId: transition?.challengeId || reviewChallenge?.id || 'unknown',
-              duelId: duel.id,
-              attemptId: attemptId || transition?.attemptId || 'unknown',
-            });
-            openDuel(duel.id, 'ACCEPTED_CHALLENGE');
-          }
         }}
       />
 

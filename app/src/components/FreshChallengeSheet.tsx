@@ -13,7 +13,7 @@ type FreshChallengeSheetProps = {
   userWallet: string | null;
   onClose: () => void;
   onDecided: (duel?: Duel, attemptId?: string) => void;
-  onAcceptResolved?: (duel: Duel, attemptId: string) => void;
+  onAcceptResolved?: (duel: Duel, attemptId: string, challengeId: string) => void;
 };
 
 export const FreshChallengeSheet: React.FC<FreshChallengeSheetProps> = ({ challenge, userWallet, onClose, onDecided, onAcceptResolved }) => {
@@ -79,9 +79,9 @@ export const FreshChallengeSheet: React.FC<FreshChallengeSheetProps> = ({ challe
         acceptTransitionStage('ACCEPT_DUEL_RECEIVED', { challengeId: challenge.id, duelId: duel.id, attemptId });
         setPendingDuel(duel);
         setPendingAttemptId(attemptId);
-        onAcceptResolved?.(duel, attemptId);
-        setStatus('Opening your Duel…');
         acceptTransitionStage('CHALLENGE_SHEET_DISMISS_START', { challengeId: challenge.id, duelId: duel.id, attemptId });
+        onAcceptResolved?.(duel, attemptId, challenge.id);
+        setStatus('Opening your Duel…');
         setModalVisible(false);
       }
       else if (kind === 'decline') { await api.declineChallenge(challenge.id); onDecided(); }
