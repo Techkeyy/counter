@@ -104,6 +104,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const initAttemptRef = useRef<WalletAttempt | null>(null);
   const claimAttemptRef = useRef<WalletAttempt | null>(null);
   const renderReadyKeyRef = useRef<string | null>(null);
+  const checkClaimStatusRef = useRef<(() => Promise<void>) | null>(null);
 
   const persistPendingOperation = async (
     operationType: PendingWalletOperationType,
@@ -268,6 +269,21 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       mappedState,
     });
   }, [loading, duel, positions, mutualVotes, userWallet, challengeId, duelId, transitionAttemptId]);
+
+  // Keep every hook before the loading/not-found returns. The callback itself
+  // is assigned after the loaded handlers are declared, but the effect runs
+  // after commit and reads the current callback through this ref.
+  useEffect(() => {
+    if (!pendingClaimSignature || !duel) return;
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (previousState !== 'active' && nextState === 'active') {
+        void checkClaimStatusRef.current?.();
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [pendingClaimSignature, duel?.id]);
 
   if (loading) {
     return (
@@ -618,16 +634,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setClaiming(false);
     }
   };
-
-  useEffect(() => {
-    if (!pendingClaimSignature) return;
-    let previousState = AppState.currentState;
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (previousState !== 'active' && nextState === 'active') handleCheckClaimStatus();
-      previousState = nextState;
-    });
-    return () => subscription.remove();
-  }, [pendingClaimSignature]);
+  checkClaimStatusRef.current = handleCheckClaimStatus;
 
   const handleShare = async () => {
     const link = `${PRODUCTION_WEB_URL}/d/${duel.share_slug || duel.id}`;
