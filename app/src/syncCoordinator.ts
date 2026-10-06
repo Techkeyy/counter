@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { syncStage } from './diagnostics';
 
 export type SyncEventType = 'SYNC_REFRESH' | 'ACTIVE_WALLET_CHANGED' | 'MUTATION_SUCCEEDED';
 
@@ -72,6 +73,7 @@ class SyncCoordinator {
   }
 
   private emit(type: SyncEventType, reason: string): void {
+    syncStage(type, reason);
     this.revision += 1;
     const event: SyncEvent = {
       type,

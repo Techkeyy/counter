@@ -8,6 +8,7 @@ const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
 const boundary = fs.readFileSync(path.join(root, 'src/components/DuelDetailBoundary.tsx'), 'utf8');
 const detail = fs.readFileSync(path.join(root, 'src/screens/DuelDetailV1Screen.tsx'), 'utf8');
 const diagnostics = fs.readFileSync(path.join(root, 'src/diagnostics.ts'), 'utf8');
+const sync = fs.readFileSync(path.join(root, 'src/syncCoordinator.ts'), 'utf8');
 
 assert(sheet.includes('onDismiss={handleDismiss}'), 'challenge sheet must wait for native dismissal');
 assert(sheet.includes('setModalVisible(false)'), 'accept must close the challenge surface before detail selection');
@@ -23,6 +24,10 @@ assert(boundary.includes('Back to Duels'), 'detail back action missing');
 assert(detail.includes("'DUEL_DETAIL_MOUNT'"), 'detail mount marker missing');
 assert(detail.includes("'DUEL_DETAIL_DATA_OK'"), 'detail data marker missing');
 assert(detail.includes("'DUEL_DETAIL_READY'"), 'detail ready marker missing');
+assert(detail.includes("'DUEL_DETAIL_RENDER_READY'"), 'terminal render-ready marker missing');
+assert(boundary.includes('errorClass'), 'render failure marker must include a safe error class');
+assert(boundary.includes("'DUEL_DETAIL_BOUNDARY_DATA_ERROR'"), 'data boundary marker missing');
+assert(boundary.includes("'DUEL_DETAIL_BOUNDARY_RENDER_THROW'"), 'render boundary marker missing');
 for (const marker of [
   'ACCEPT_UI_START',
   'ACCEPT_HTTP_OK',
@@ -30,9 +35,20 @@ for (const marker of [
   'CHALLENGE_SHEET_DISMISS_START',
   'CHALLENGE_SHEET_DISMISSED',
   'DUEL_DETAIL_SELECT',
+  'DUEL_DETAIL_REQUEST_START',
+  'DUEL_DETAIL_REQUEST_HTTP_OK',
+  'DUEL_DETAIL_REQUEST_FAILED',
+  'DUEL_DETAIL_NORMALIZE_OK',
+  'DUEL_DETAIL_NORMALIZE_FAILED',
+  'DUEL_DETAIL_DATA_ERROR',
+  'DUEL_DETAIL_STATE_MAPPED',
+  'DUEL_DETAIL_RENDER_READY',
 ]) {
   assert(diagnostics.includes(`'${marker}'`), `missing transition marker ${marker}`);
 }
+assert(app.includes('DUEL_SELECTION_SET'), 'selection set marker missing');
+assert(app.includes('DUEL_SELECTION_CLEARED'), 'selection clear marker missing');
+assert(sync.includes('ACTIVE_WALLET_CHANGED'), 'active wallet change marker must remain available');
 
 // Deterministic ordering contract: accepted data is retained while the sheet
 // is open, selection is legal only after real dismissal, and one Duel is used.

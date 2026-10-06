@@ -139,14 +139,28 @@ export type AcceptTransitionStage =
   | 'CHALLENGE_SHEET_DISMISSED'
   | 'DUEL_DETAIL_SELECT'
   | 'DUEL_DETAIL_MOUNT'
+  | 'DUEL_DETAIL_REQUEST_START'
+  | 'DUEL_DETAIL_REQUEST_HTTP_OK'
+  | 'DUEL_DETAIL_REQUEST_FAILED'
+  | 'DUEL_DETAIL_NORMALIZE_OK'
+  | 'DUEL_DETAIL_NORMALIZE_FAILED'
   | 'DUEL_DETAIL_DATA_OK'
+  | 'DUEL_DETAIL_DATA_ERROR'
+  | 'DUEL_DETAIL_STATE_MAPPED'
   | 'DUEL_DETAIL_READY'
-  | 'DUEL_DETAIL_RENDER_FAILED';
+  | 'DUEL_DETAIL_RENDER_READY'
+  | 'DUEL_DETAIL_RENDER_FAILED'
+  | 'DUEL_DETAIL_BOUNDARY_DATA_ERROR'
+  | 'DUEL_DETAIL_BOUNDARY_RENDER_THROW';
 
 export interface AcceptTransitionContext {
   challengeId: string;
   duelId?: string;
   attemptId: string;
+  mappedState?: string;
+  httpStatus?: number;
+  errorClass?: string;
+  errorCode?: string;
 }
 
 // Accept/detail transition markers are deliberately value-free. They correlate
@@ -154,10 +168,51 @@ export interface AcceptTransitionContext {
 export function acceptTransitionStage(stage: AcceptTransitionStage, context: AcceptTransitionContext): void {
   try {
     const duelPart = context.duelId ? `[duel=${context.duelId}]` : '';
+    const safePart = (label: string, value?: string) => {
+      const safe = String(value || '');
+      return /^[A-Za-z0-9_.:-]{1,80}$/.test(safe) ? `[${label}=${safe}]` : '';
+    };
     console.info(
       `[COUNTER][ACCEPT_TRANSITION][challenge=${context.challengeId}]` +
-      `${duelPart}[attempt=${context.attemptId}][stage=${stage}]`
+      `${duelPart}[attempt=${context.attemptId}][stage=${stage}]` +
+      safePart('mappedState', context.mappedState) +
+      safePart('httpStatus', context.httpStatus === undefined ? undefined : String(context.httpStatus)) +
+      safePart('errorClass', context.errorClass) +
+      safePart('errorCode', context.errorCode)
     );
+  } catch {}
+}
+
+export type DuelSelectionStage = 'DUEL_SELECTION_SET' | 'DUEL_SELECTION_CLEARED';
+export type DuelSelectionReason =
+  | 'BACK_TO_DUELS'
+  | 'ACCOUNT_CHANGED'
+  | 'DISCONNECT'
+  | 'REPLACED_SELECTION'
+  | 'DUEL_ROW'
+  | 'ACTIVITY_NOTIFICATION'
+  | 'DEEP_LINK'
+  | 'ACCEPTED_CHALLENGE'
+  | 'RECEIPT_VIEW';
+
+/** Selection markers carry only the public Duel id and a bounded lifecycle reason. */
+export function duelSelectionStage(
+  stage: DuelSelectionStage,
+  context: { duelId?: string; reason: DuelSelectionReason },
+): void {
+  try {
+    const duelPart = context.duelId ? `[duel=${context.duelId}]` : '';
+    console.info(`[COUNTER][DUEL_SELECTION]${duelPart}[stage=${stage}][reason=${context.reason}]`);
+  } catch {}
+}
+
+export type SyncDiagnosticStage = 'SYNC_REFRESH' | 'ACTIVE_WALLET_CHANGED' | 'MUTATION_SUCCEEDED';
+
+/** Sync markers deliberately omit the active wallet value and all auth material. */
+export function syncStage(stage: SyncDiagnosticStage, reason: string): void {
+  try {
+    const safeReason = String(reason || '').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80) || 'UNKNOWN';
+    console.info(`[COUNTER][SYNC][stage=${stage}][reason=${safeReason}]`);
   } catch {}
 }
 

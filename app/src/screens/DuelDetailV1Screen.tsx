@@ -59,6 +59,23 @@ interface DuelDetailScreenProps {
 
 type DuelData = Duel & { positions?: Position[]; mutualVotes?: MutualVote[] };
 
+function detailErrorContext(error: unknown) {
+  const value = error as any;
+  const message = String(value?.message || '').toLowerCase();
+  const statusMatch = message.match(/request_failed:(\d{3})/);
+  const errorCode = statusMatch
+    ? `HTTP_${statusMatch[1]}`
+    : /timeout/.test(message)
+      ? 'REQUEST_TIMEOUT'
+      : /network|fetch|unreachable/.test(message)
+        ? 'NETWORK_UNREACHABLE'
+        : 'DUEL_REQUEST_FAILED';
+  return {
+    errorClass: String(value?.name || 'Error').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80) || 'Error',
+    errorCode,
+  };
+}
+
 export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   duelId,
   userWallet,
@@ -86,6 +103,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const [initializationRecovery, setInitializationRecovery] = useState<'RETRY' | 'CHECK_STATUS' | null>(null);
   const initAttemptRef = useRef<WalletAttempt | null>(null);
   const claimAttemptRef = useRef<WalletAttempt | null>(null);
+  const renderReadyKeyRef = useRef<string | null>(null);
 
   const persistPendingOperation = async (
     operationType: PendingWalletOperationType,
@@ -104,16 +122,40 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   };
 
   const loadDuelData = async () => {
+    const transitionContext = {
+      challengeId: challengeId || 'direct-open',
+      duelId,
+      attemptId: transitionAttemptId || 'direct-open',
+    };
+    let requestFailureMarked = false;
+    acceptTransitionStage('DUEL_DETAIL_REQUEST_START', transitionContext);
     try {
-      const data = await api.getDuel(duelId);
+      const data = await api.getDuel(duelId, {
+        onHttpResponse: (status, ok) => {
+          if (ok) {
+            acceptTransitionStage('DUEL_DETAIL_REQUEST_HTTP_OK', { ...transitionContext, httpStatus: status });
+          } else {
+            requestFailureMarked = true;
+            acceptTransitionStage('DUEL_DETAIL_REQUEST_FAILED', {
+              ...transitionContext,
+              httpStatus: status,
+              errorClass: 'HttpError',
+              errorCode: `HTTP_${status}`,
+            });
+          }
+        },
+      });
+      const normalized = !!data && typeof data === 'object' && typeof (data as any).id === 'string';
+      acceptTransitionStage(normalized ? 'DUEL_DETAIL_NORMALIZE_OK' : 'DUEL_DETAIL_NORMALIZE_FAILED', {
+        ...transitionContext,
+        ...(normalized ? {} : { errorClass: 'ResponseShapeError', errorCode: 'RESPONSE_SHAPE_INVALID' }),
+      });
       setDuel(data);
       setPositions(Array.isArray(data.positions) ? data.positions : []);
       setMutualVotes(Array.isArray(data.mutualVotes) ? data.mutualVotes : []);
       setLoadError(null);
       acceptTransitionStage('DUEL_DETAIL_DATA_OK', {
-        challengeId: challengeId || 'direct-open',
-        duelId,
-        attemptId: transitionAttemptId || 'direct-open',
+        ...transitionContext,
       });
       const mappedState = mapDuelState({
         duel: data,
@@ -124,14 +166,23 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
         myVoteSubmitted: data.myVoteSubmitted,
         otherVoteSubmitted: data.otherVoteSubmitted,
       });
+      acceptTransitionStage('DUEL_DETAIL_STATE_MAPPED', { ...transitionContext, mappedState });
       if (mappedState === 'ACCEPTED_NOT_INITIALIZED') {
         acceptTransitionStage('DUEL_DETAIL_READY', {
-          challengeId: challengeId || 'direct-open',
-          duelId,
-          attemptId: transitionAttemptId || 'direct-open',
+          ...transitionContext,
         });
       }
     } catch (error: any) {
+      if (!requestFailureMarked) {
+        acceptTransitionStage('DUEL_DETAIL_REQUEST_FAILED', {
+          ...transitionContext,
+          ...detailErrorContext(error),
+        });
+      }
+      acceptTransitionStage('DUEL_DETAIL_DATA_ERROR', {
+        ...transitionContext,
+        ...detailErrorContext(error),
+      });
       setLoadError(error?.message || 'Duel not found');
       onDataError?.(error);
     } finally {
@@ -191,6 +242,32 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
     });
     return () => subscription.remove();
   }, [duelId, userWallet, pendingSignature, syncLoadDuel]);
+
+  // Emit one terminal success marker after React commits a fully rendered
+  // state. This covers every mapped Duel state, including read-only expired,
+  // cancelled, refunded, and completed states; it is intentionally after the
+  // render path so a child render exception cannot be reported as success.
+  useEffect(() => {
+    if (loading || !duel) return;
+    const mappedState = mapDuelState({
+      duel,
+      userWallet,
+      positions,
+      mutualVotes,
+      mutualState: duel.mutualState,
+      myVoteSubmitted: duel.myVoteSubmitted,
+      otherVoteSubmitted: duel.otherVoteSubmitted,
+    });
+    const renderReadyKey = `${duel.id}:${mappedState}`;
+    if (renderReadyKeyRef.current === renderReadyKey) return;
+    renderReadyKeyRef.current = renderReadyKey;
+    acceptTransitionStage('DUEL_DETAIL_RENDER_READY', {
+      challengeId: challengeId || 'direct-open',
+      duelId,
+      attemptId: transitionAttemptId || 'direct-open',
+      mappedState,
+    });
+  }, [loading, duel, positions, mutualVotes, userWallet, challengeId, duelId, transitionAttemptId]);
 
   if (loading) {
     return (

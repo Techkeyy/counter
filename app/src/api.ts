@@ -29,7 +29,12 @@ export function getCurrentWallet() {
   return currentWallet;
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}, timeoutMs = 20000): Promise<T> {
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  timeoutMs = 20000,
+  onResponse?: (response: Response) => void,
+): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache, no-store',
@@ -59,6 +64,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}, timeoutMs
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+
+  try { onResponse?.(response); } catch {}
 
   // Never assume JSON: gateways and default error pages answer HTML (which
   // used to surface on-device as "JSON Parse error: Unexpected character:
@@ -233,8 +240,16 @@ export const api = {
     if (res && Array.isArray(res.duels)) return res.duels;
     return [];
   },
-  getDuel: async (id: string): Promise<Duel & { positions: any[]; myPosition?: any; mutualVotes?: any[] }> => {
-    const res = await request<any>(`/duels/${id}`);
+  getDuel: async (
+    id: string,
+    diagnostic?: { onHttpResponse?: (status: number, ok: boolean) => void },
+  ): Promise<Duel & { positions: any[]; myPosition?: any; mutualVotes?: any[] }> => {
+    const res = await request<any>(
+      `/duels/${id}`,
+      {},
+      20000,
+      (response) => diagnostic?.onHttpResponse?.(response.status, response.ok),
+    );
     if (res && res.duel) {
       return {
         ...res.duel,

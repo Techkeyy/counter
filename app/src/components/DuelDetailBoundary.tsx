@@ -29,13 +29,47 @@ export class DuelDetailBoundary extends React.Component<DuelDetailBoundaryProps,
     };
   }
 
+  private errorContext(error: unknown) {
+    const value = error as any;
+    const errorClass = String(value?.name || (error instanceof Error ? 'Error' : 'Unknown'))
+      .replace(/[^A-Za-z0-9_.:-]/g, '')
+      .slice(0, 80) || 'Unknown';
+    const rawCode = String(value?.code || '').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80);
+    const message = String(value?.message || '').toLowerCase();
+    const errorCode = rawCode || (
+      /not found|404/.test(message)
+        ? 'DUEL_NOT_FOUND'
+        : /network|request_failed|unreachable|fetch|timeout/.test(message)
+          ? 'DUEL_REQUEST_FAILED'
+          : 'DUEL_DETAIL_ERROR'
+    );
+    return {
+      errorClass,
+      errorCode,
+    };
+  }
+
   componentDidCatch(error: Error) {
-    acceptTransitionStage('DUEL_DETAIL_RENDER_FAILED', this.transitionContext());
+    acceptTransitionStage('DUEL_DETAIL_BOUNDARY_RENDER_THROW', {
+      ...this.transitionContext(),
+      ...this.errorContext(error),
+    });
+    acceptTransitionStage('DUEL_DETAIL_RENDER_FAILED', {
+      ...this.transitionContext(),
+      ...this.errorContext(error),
+    });
     this.setState({ error });
   }
 
   private handleDataError = (error: unknown) => {
-    acceptTransitionStage('DUEL_DETAIL_RENDER_FAILED', this.transitionContext());
+    acceptTransitionStage('DUEL_DETAIL_BOUNDARY_DATA_ERROR', {
+      ...this.transitionContext(),
+      ...this.errorContext(error),
+    });
+    acceptTransitionStage('DUEL_DETAIL_DATA_ERROR', {
+      ...this.transitionContext(),
+      ...this.errorContext(error),
+    });
     this.setState({ error: error instanceof Error ? error : new Error('Duel data could not be loaded.') });
   };
 
