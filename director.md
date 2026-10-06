@@ -4171,3 +4171,207 @@ physical Power-Saving-on UAT was performed. The exact APK above is staged for
 owner-driven physical core UAT.
 
 Target: **`BUILDING — CROSS-SURFACE STATE CONSISTENCY + TAKE RELIABILITY + POWER-SAVING WALLET KEEPALIVE BUILT / PHYSICAL CORE UAT REQUIRED`**.
+
+## 67. SAME-VOTE WINNER-CLAIM CORE PATH — 2026-10-06
+
+SAME-VOTE WINNER-CLAIM CORE PATH:
+PHYSICALLY PROVEN
+
+This is an evidence-preservation entry for the completed owner-driven Duel.
+No source, APK, backend, database, program, wallet, or economic state was
+changed while collecting this evidence. The mismatch/refund path remains
+unproven and is deliberately not marked here.
+
+### 67.A — Exact completed Duel identity
+
+The unique production record matching the requested proposition, captains,
+and 50 cUSD stake is:
+
+```text
+Take:             take_1791293217464_c6a13c7f
+Challenge:        chal_1791293301136_68f6c833
+Duel:             duel_1791293391218_38f2eb7b
+On-chain duel id: ae769f26767a87ce78ffc8e389183ca5
+Captain A:        Praise / @prodigyy
+Captain A wallet: PgJhWQpVfcNU5oQ5JzPbUKdL2oQquerWddW5p6MpcJs
+Captain B:        Iszee / @iszee23
+Captain B wallet: eMMEh84r6rodPg3QNKfUX8dhi34Swd1kChsrDG54obK
+Proposition A:    Rain will fall in the next 15mins
+Proposition B:    It won't
+Category:         WEATHER
+Stake each:       50 cUSD
+Side A total:     50 cUSD
+Side B total:     50 cUSD
+Pool:             100 cUSD
+Final result:     RESOLVED_SIDE_B / Iszee / Side B
+Resolution mode:  MUTUAL
+Fallback mode:    REFUND (not used)
+Receipt:          receipt_duel_1791293391218_38f2eb7b
+```
+
+The production `GET /api/duels/duel_1791293391218_38f2eb7b` and public
+receipt readback agree on every identity, stake, result, and receipt field.
+
+### 67.B — Backend transaction and position readback
+
+```text
+Initialization tx:
+2NGqt7HYsUtvsvVqCoXfAbSKrFmd7zsj87uSkbcSRdX28KKgvR76D3vvFX94iUC6saAovbmDqpk7CC36Q6gYSFr4
+
+Captain A stake tx (Side A, 50 cUSD):
+3VXJKNVHuU917y9x4mewLo78rGfmF7Eh4NQ8hG2WPyxKQMuYp8fyod339J7tPeA72AhsDz4RfGMDc81q2UBEYDt
+
+Captain B stake tx (Side B, 50 cUSD):
+4HtaUeiYdvMomeACYC5EsmXAiSWZjufXmqTxNDtjfnvqMfsoimqwpBRHpy8RLHe1HJ2mxTNE8wEyQ4euB4bqQ45Q
+
+Resolution tx (winning Side B):
+2NnbMVwEzWjmwdWvYqnYRSFByJPsLKUmz7L64o2KByZ1hbeJu21Ph5uz6fEXbC7u7DYv4ZD2CarQ5Rspe4EcuNG6
+
+Winner claim tx (Captain B / Iszee):
+4dUg3XUdDCuCTWuaNkAgeX6E1RzLou8EdHy8GcnN6ArMqKPNW4JMKWGXLW1wCfftGRJYM6ye7jd8pLWd38mEjmdP
+```
+
+The backend positions read back as:
+
+```text
+Captain A / Side A:
+  position PDA:       EujSnYvfqJTx63QzsaXPLhVYi7bmKij6imp1Wm8Dm6Rc
+  stake_amount_usd:   50
+  stake_tx_signature: 3VXJKNVHuU917y9x4mewLo78rGfmF7Eh4NQ8hG2WPyxKQMuYp8fyod339J7tPeA72AhsDz4RfGMDc81q2UBEYDt
+  claimed:            0
+  claim_tx:           null
+  payout_amount:      null
+
+Captain B / Side B:
+  position PDA:       GbCetfLUz6DrLsrNzzQ5nCm6B8UH6QJurNawETWNC6Ji
+  stake_amount_usd:   50
+  stake_tx_signature: 4HtaUeiYdvMomeACYC5EsmXAiSWZjufXmqTxNDtjfnvqMfsoimqwpBRHpy8RLHe1HJ2mxTNE8wEyQ4euB4bqQ45Q
+  claimed:            1
+  claim_tx:           4dUg3XUdDCuCTWuaNkAgeX6E1RzLou8EdHy8GcnN6ArMqKPNW4JMKWGXLW1wCfftGRJYM6ye7jd8pLWd38mEjmdP
+  payout_amount:      100
+```
+
+### 67.C — Private same-vote records and settlement
+
+The production `resolution_data` and receipt `resolution_evidence` contain
+two captain confirmations, in this order:
+
+```text
+First confirmation:
+  captain wallet: eMMEh84r6rodPg3QNKfUX8dhi34Swd1kChsrDG54obK
+  winner side:    2 / Side B
+  recorded at:    2026-10-06T14:31:54.938Z
+
+Second confirmation:
+  captain wallet: PgJhWQpVfcNU5oQ5JzPbUKdL2oQquerWddW5p6MpcJs
+  winner side:    2 / Side B
+  recorded at:    2026-10-06T14:33:57.897Z
+```
+
+The public ledger intentionally does not reproduce raw wallet-message
+signatures. The production record does contain both signatures, and both
+confirmations agree on Side B. The backend state is `RESOLVED_SIDE_B`,
+`winning_side = 2`, `resolution_mode = MUTUAL`, and the receipt says:
+`Settled together: both captains agreed Side B.`
+
+### 67.D — Devnet PDA, funding, claim, and balance proof
+
+All five recorded economic transactions—initialize, Side-A stake, Side-B
+stake, resolve, and winner claim—returned `confirmationStatus = finalized` and
+`err = null` from Devnet `getSignatureStatuses`; the transaction readbacks
+also contained successful Counter-program logs.
+
+The Devnet PDA readback was:
+
+```text
+Duel PDA:          6fUW2Q3mr4324AazpRUrZTCHKtc2rCzJaAPRn79DXoFF
+Owner:             52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT
+Initialized:       true
+On-chain status:   ResolvedSideB (status byte 3)
+Side A total:      50,000,000 base units = 50 cUSD
+Side B total:      50,000,000 base units = 50 cUSD
+
+Vault PDA:         Cy4SFhVgs8KLTjgzt8GgLqBqU83yp9VJbJ4qrJLryfoi
+Vault token acct:  7MmXEpyMTo9zY2rTQJ7keiUPwNu5PL4zTqdBCYZLRA8X
+Final vault:       0 cUSD
+
+Side-A position:   initialized, side 1, 50,000,000 base units, claimed=false
+Side-B position:   initialized, side 2, 50,000,000 base units, claimed=true
+```
+
+The Side-B claim transaction transferred `100,000,000` base units / `100`
+cUSD from the vault to Iszee’s cUSD token account. Its transaction balance
+delta was vault `100 → 0` and winner `200 → 300` cUSD. The final public Devnet
+token-account readback was:
+
+```text
+Winner Iszee cUSD:  300 cUSD
+Loser Praise cUSD:  200 cUSD
+```
+
+The cUSD mint used by the transaction and balance queries was
+`AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC`.
+
+### 67.E — Receipt and Activity readback
+
+The public receipt endpoint returned:
+
+```text
+receipt id:          receipt_duel_1791293391218_38f2eb7b
+duel id:             duel_1791293391218_38f2eb7b
+take id:             take_1791293217464_c6a13c7f
+winner wallet:       eMMEh84r6rodPg3QNKfUX8dhi34Swd1kChsrDG54obK
+total pool:          100 cUSD
+winning side:        2
+onchain signature:   2NnbMVwEzWjmwdWvYqnYRSFByJPsLKUmz7L64o2KByZ1hbeJu21Ph5uz6fEXbC7u7DYv4ZD2CarQ5Rspe4EcuNG6
+summary:             Settled together: both captains agreed Side B.
+```
+
+The authoritative production Activity rows for this target were read
+read-only from the existing application database. Relevant lifecycle rows,
+in chronological order, are:
+
+```text
+2026-10-06T13:28:21.136Z  CHALLENGE_RECEIVED      Captain A
+2026-10-06T13:29:51.219Z  CHALLENGE_ACCEPTED      Captain B
+2026-10-06T13:29:51.220Z  STAKE_REQUIRED          Captain A
+2026-10-06T13:29:51.221Z  STAKE_REQUIRED          Captain B
+2026-10-06T13:29:51.222Z  DUEL_SETUP_NEEDED       Captain A
+2026-10-06T13:31:21.136Z  STAKE_DEPOSITED         Captain A / Side A
+2026-10-06T13:31:21.138Z  OPPONENT_FUNDED         Captain B’s view
+2026-10-06T13:35:55.391Z  STAKE_DEPOSITED         Captain B / Side B
+2026-10-06T13:35:55.394Z  OPPONENT_FUNDED         Captain A’s view
+2026-10-06T13:35:55.396Z  DUEL_LIVE               Captain A
+2026-10-06T13:35:55.397Z  DUEL_LIVE               Captain B
+2026-10-06T14:31:54.940Z  OPPONENT_SUBMITTED_RESULT Captain A
+2026-10-06T14:33:57.898Z  RESULT_CONFIRMED        Captain A
+2026-10-06T14:33:57.899Z  RESULT_CONFIRMED        Captain B
+2026-10-06T14:33:59.464Z  READY_TO_SETTLE          Captain A
+2026-10-06T14:33:59.465Z  READY_TO_SETTLE          Captain B
+2026-10-06T14:34:00.392Z  WINNINGS_READY           Captain B
+2026-10-06T14:38:02.883Z  CLAIMED                  Captain B
+```
+
+### 67.F — Claim safety invariants
+
+Read-only state proves that only the Side-B position was claimed, exactly
+once: the winning position is `claimed=true` with one recorded claim
+signature and the Side-A position remains `claimed=false` with no claim
+signature. The deployed Counter program rejects a second claim when the
+position’s claimed flag is already true (`AlreadyClaimed`, custom error 106),
+and rejects a Side-A claim against a `ResolvedSideB` Duel (`InvalidPositionSide`,
+custom error 107). The backend claim route independently rejects an already
+claimed position and rejects a verified claim whose side differs from the
+recorded winning side.
+
+No loser-claim or duplicate-claim transaction was submitted during this
+preservation pass; the evidence is the finalized on-chain state plus the
+program/backend guards, with no mutation performed to manufacture a negative
+test. This is sufficient to preserve the completed winner-claim path without
+risking the completed Duel.
+
+Backend and chain are consistent on identity, mint, both 50 cUSD funding
+totals, Side-B resolution, the 100 cUSD payout, the zero final vault, and the
+winner claimed flag. Mismatch/refund remains **NOT PROVEN**.
+
+Target: **`SAME-VOTE WINNER-CLAIM CORE PATH: PHYSICALLY PROVEN`**.
