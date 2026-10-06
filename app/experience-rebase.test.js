@@ -90,6 +90,14 @@ includes(sheet, 'Counter', 'incoming challenge exposes the counter path');
 includes(sheet, 'Decline', 'incoming challenge exposes the decline path');
 
 includes(detail, 'Ready to Duel', 'Duel setup has the pre-wallet boundary');
+includes(detail, "import * as Clipboard from 'expo-clipboard'", 'Duel preflight uses the existing clipboard capability');
+includes(detail, 'Your wallet', 'Duel preflight identifies the active wallet');
+includes(detail, 'formatWalletShort(userWallet)', 'Duel preflight truncates only the displayed active wallet address');
+includes(detail, 'Clipboard.setStringAsync(connectedWallet)', 'wallet Copy uses the complete connected public address');
+includes(detail, 'Wallet address copied', 'wallet Copy provides immediate feedback');
+includes(detail, 'if (!connectedWallet) return', 'wallet Copy cannot use a stale address when disconnected');
+includes(detail, 'participantColumn: { flex: 1', 'participant columns share the available width');
+includes(detail, 'vsColumn: { width: 44, alignItems: \'center\', justifyContent: \'center\' }', 'participant vs is centered in a fixed-width column');
 includes(stateMachine, 'EXPIRED_BEFORE_FUNDING', 'expired uninitialized Duels have a distinct terminal-pre-funding state');
 includes(detail, 'hasPrincipal', 'expired partial-funding states retain only the authoritative refund path');
 includes(detail, 'Waiting for wallet approval…', 'Duel actions have the wallet waiting boundary');

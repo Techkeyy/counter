@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { PublicKey } from '@solana/web3.js';
 import { Duel, MutualVote, Position } from '../types';
 import { BackModal } from '../components/BackModal';
@@ -35,7 +36,7 @@ import {
 } from '../diagnostics';
 import type { WalletAttempt } from '../diagnostics';
 import { formatDeadline } from '../utils/criteria';
-import { formatRelativeTime, formatUserDisplayName, isRealSignature } from '../utils/identity';
+import { formatRelativeTime, formatUserDisplayName, formatWalletShort, isRealSignature } from '../utils/identity';
 import { captainSide, mapDuelState, positionFor, stateLabel } from '../utils/duelState';
 import { formatSol, hasFeeBalance, readWalletPreflight } from '../utils/preflight';
 import type { WalletPreflight } from '../utils/preflight';
@@ -101,6 +102,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const [pendingSignature, setPendingSignature] = useState<string | null>(null);
   const [pendingClaimSignature, setPendingClaimSignature] = useState<string | null>(null);
   const [initializationRecovery, setInitializationRecovery] = useState<'RETRY' | 'CHECK_STATUS' | null>(null);
+  const [walletCopied, setWalletCopied] = useState(false);
   const initAttemptRef = useRef<WalletAttempt | null>(null);
   const claimAttemptRef = useRef<WalletAttempt | null>(null);
   const renderReadyKeyRef = useRef<string | null>(null);
@@ -200,6 +202,21 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       setPreflight(null);
     }
   };
+
+  const copyWalletAddress = async () => {
+    const connectedWallet = userWallet?.trim();
+    if (!connectedWallet) return;
+    try {
+      await Clipboard.setStringAsync(connectedWallet);
+      setWalletCopied(true);
+    } catch {
+      setWalletCopied(false);
+    }
+  };
+
+  useEffect(() => {
+    setWalletCopied(false);
+  }, [userWallet]);
 
   useEffect(() => {
     acceptTransitionStage('DUEL_DETAIL_MOUNT', {
@@ -648,6 +665,18 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
       <PreflightRow label="Wallet connected" value={userWallet ? 'Connected' : 'Connect wallet'} ready={!!userWallet} />
       <PreflightRow label="Captain eligibility" value={isCaptain ? 'Captain' : 'Not a captain'} ready={isCaptain} />
       <PreflightRow label="Devnet SOL for fees" value={formatSol(preflight?.sol ?? null)} ready={hasFeeBalance(preflight)} />
+      {userWallet ? (
+        <View style={styles.walletAddressRow}>
+          <View style={styles.walletAddressCopy}>
+            <Text style={styles.preflightLabel}>Your wallet</Text>
+            <Text style={styles.walletAddress} numberOfLines={1}>{formatWalletShort(userWallet)}</Text>
+          </View>
+          <TouchableOpacity style={styles.copyButton} onPress={() => void copyWalletAddress()} accessibilityRole="button" accessibilityLabel="Copy wallet address">
+            <Text style={styles.copyButtonText}>Copy</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {walletCopied ? <Text style={styles.walletCopied}>Wallet address copied</Text> : null}
       {!hasFeeBalance(preflight) && (
         <>
           <Text style={styles.preflightCopy}>You need a little Devnet SOL to pay network fees. This is testnet SOL and has no cash value.</Text>
@@ -787,9 +816,15 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
         <Text style={styles.meta}>Settle together · Decide {formatDeadline(duel.resolution_ts)} · {duel.category}</Text>
 
         <View style={styles.captainRow}>
-          <CaptainCard name={nameA} color={colors.sideA} funded={Number(duel.side_a_total) > 0} />
-          <Text style={styles.vsBadge}>VS</Text>
-          <CaptainCard name={nameB} color={colors.sideB} funded={Number(duel.side_b_total) > 0} />
+          <View style={styles.participantColumn}>
+            <CaptainCard name={nameA} color={colors.sideA} funded={Number(duel.side_a_total) > 0} />
+          </View>
+          <View style={styles.vsColumn}>
+            <Text style={styles.vsBadge}>VS</Text>
+          </View>
+          <View style={styles.participantColumn}>
+            <CaptainCard name={nameB} color={colors.sideB} funded={Number(duel.side_b_total) > 0} />
+          </View>
         </View>
 
         {myPosition && <View style={styles.ownershipBox}><Text style={styles.ownershipText}>Your captain stake: {Number(myPosition.stake_amount).toFixed(2)} Counter Test USD{myPosition.claimed ? ' · complete' : ''}</Text></View>}
@@ -847,8 +882,10 @@ const styles = StyleSheet.create({
   proposition: { ...typography.h1, color: colors.textPrimary, fontSize: 23, lineHeight: 30 },
   vsText: { color: colors.textMuted, fontSize: 12, fontWeight: '800', marginVertical: 2 },
   meta: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, marginBottom: spacing.lg },
-  captainRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-  captainCard: { flex: 1, backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider, paddingVertical: spacing.md, minHeight: 76, justifyContent: 'center' },
+  captainRow: { flexDirection: 'row', alignItems: 'stretch', marginBottom: spacing.md },
+  participantColumn: { flex: 1, minWidth: 0 },
+  vsColumn: { width: 44, alignItems: 'center', justifyContent: 'center' },
+  captainCard: { backgroundColor: colors.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider, paddingVertical: spacing.md, minHeight: 76, justifyContent: 'center' },
   captainName: { ...typography.bodyBold, fontSize: 14 },
   captainStatus: { ...typography.caption, color: colors.textSecondary, marginTop: 5 },
   vsBadge: { color: colors.textMuted, fontWeight: '900', fontSize: 11 },
@@ -866,6 +903,12 @@ const styles = StyleSheet.create({
   preflightLabel: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
   preflightValue: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
   preflightReady: { color: colors.success },
+  walletAddressRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  walletAddressCopy: { flex: 1, minWidth: 0 },
+  walletAddress: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', marginTop: 2 },
+  copyButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  copyButtonText: { color: colors.brandPrimary, fontSize: 13, fontWeight: '800' },
+  walletCopied: { color: colors.success, fontSize: 12, fontWeight: '700', marginTop: 1 },
   preflightCopy: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: spacing.xs },
   inlineAction: { minHeight: touchMin, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.xs },
   inlineActionText: { color: colors.brandPrimary, fontSize: 13, fontWeight: '800' },
