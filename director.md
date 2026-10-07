@@ -4375,3 +4375,144 @@ totals, Side-B resolution, the 100 cUSD payout, the zero final vault, and the
 winner claimed flag. Mismatch/refund remains **NOT PROVEN**.
 
 Target: **`SAME-VOTE WINNER-CLAIM CORE PATH: PHYSICALLY PROVEN`**.
+
+## 68 — FINAL STABILIZATION + RELEASE FREEZE
+
+The economic V1 mechanism remains frozen. No Solana program, backend claim or
+refund calculation, receipt schema, settlement rule, or product redesign was
+changed in this pass.
+
+### 68.A — Bounded runtime corrections
+
+- **Refund CTA:** winner display now uses a distinct `claimAmount` derived from
+  the total pool; cancelled/refund display uses a distinct principal-only
+  `refundAmount`. The refund transaction path is unchanged.
+- **Copy separation:** for the regression fixture `stake=100`,
+  `totalPool=200`, the winner copy is `Claim 200.00 Counter Test USD` and the
+  refund copy is `Get 100.00 Counter Test USD back`.
+- **Activity ordering:** future mutual-vote and explicit-resolve paths now
+  insert the actionable `READY_TO_SETTLE` boundary before result confirmation,
+  and read-only derivation suppresses a late ready item after a matched pair.
+  Historical activity is not rewritten.
+- **Wallet handoff:** the existing pending CONNECT record and bounded
+  keepalive/resume recovery remain in place. The client now exposes
+  `Still connecting to Phantom…` after the bounded handoff-observation window,
+  preserves the pending operation, and exposes at most one controlled
+  `Open Phantom again` recovery action per pending operation. No economic
+  operation is retried from this path and no power-saving workaround copy was
+  added.
+
+### 68.B — Regression gates
+
+The source-level and local integration gates passed:
+
+- TypeScript: PASS.
+- Duel mapper: PASS, 18/18.
+- Duel-detail lifecycle: PASS for all 7 mapped states.
+- Accept transition: PASS.
+- Winner/refund CTA amount regression: PASS, including 100/100 → 200 winner
+  and 100 principal refund separation.
+- Mutual same-vote and mismatch/refund closure: PASS.
+- Wallet recovery and secure session persistence: PASS, 7/7 session cases.
+- MWA handoff source contract: PASS.
+- App reliability contract: PASS.
+- Activity ordering HTTP regression: PASS; ready rows are present before a
+  future result event and mismatch does not emit `RESULT_CONFIRMED`.
+- Profile boundaries: PASS, 12/12.
+- Portfolio: PASS.
+- Chain vectors: PASS, 11/11.
+- Resolution boundaries, adversarial backend: PASS, 8/8, and Take deletion:
+  PASS.
+- `git diff --check`: PASS.
+- Application-owned secret/mock scan: ZERO matches for the former JWT
+  fallback, private-key material, mock-wallet text, and fallback-secret
+  patterns. The only `JWT_SECRET ||` match is test-harness environment setup;
+  runtime `server/auth.js` remains fail-closed.
+
+### 68.C — Sole fresh release artifact
+
+The source commit was pushed before build. The existing rotated `counter`
+signing identity was reused through the current-user DPAPI vault; no key was
+regenerated, the password was never printed or persisted, and the temporary
+signing environment was cleared after the build.
+
+```text
+packaged source: 856d2bb1eb4ff0b95ebf28d4888a6f065a1de080
+APK: C:\Users\HomePC\Desktop\Counter\app\android\app\build\outputs\apk\release\app-release.apk
+bytes: 62521575
+SHA-256: d7cee99423ba8adcf6bb37157d29f86a08ac6dde872e4c45a6820932640dd827
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+signing certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+signature: v2 verified; one signer
+build: BUILD SUCCESSFUL; exit 0
+build log: .uat/build-final-stabilization-20261007094827.log
+Hermes bundle bytes: 2587992
+Hermes bundle SHA-256: df43435b0eefb1b298b10b9dd12f1a345b6934b599274e99de092dd2a65c6bd2
+```
+
+The prior APK was preserved in the local ignored artifact archive and is
+superseded by the SHA-256 above.
+
+### 68.D — Compiled-artifact proof
+
+Hermes disassembly of the APK’s `assets/index.android.bundle` proves the
+release artifact contains both display branches: a `Claim ` branch calling
+`toFixed(2)` on one captured amount, and a separate `Get ` branch calling
+`toFixed(2)` on a second captured amount, with the `Counter Test USD back`
+refund suffix in the Hermes string table. The disassembly also contains the
+packaged `No agreement`, `Result confirmed`, `READY_TO_SETTLE`, and
+`REFUND_READY` lifecycle vocabulary.
+
+The same compiled bundle contains the disassembly markers
+`CONNECT_STILL_CONNECTING` and `CONNECT_OPEN_PHANTOM`, while the Hermes
+UTF-16 string table contains `Still connecting to Phantom…`,
+`Open Phantom again`, and the safe pending-connection copy. It contains the
+production backend URL, the authoritative Solana program ID, and the
+authoritative Devnet cUSD mint. Artifact scans found zero occurrences of the
+obsolete `counter.app`, old mint prefix, former JWT fallback literal, private
+key marker, or `JWT_SECRET` runtime name.
+
+### 68.E — Production and App Links readback
+
+Read-only live checks returned HTTP 200 for `/api/health` and
+`/.well-known/assetlinks.json`. Asset Links names `app.counter.mobile` and
+the current certificate (colon-normalized comparison). The APK manifest
+retains `counter://duel/:id`, `counter://receipt/:id`, and auto-verified HTTPS
+filters for the production host at `/d` and `/r`. The packaged runtime
+configuration is unchanged:
+
+```text
+backend: https://counter.103-195-188-198.sslip.io
+program: 52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT
+mint: AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC
+```
+
+### 68.F — Source binding and physical-smoke limitation
+
+The APK was packaged from `856d2bb1eb4ff0b95ebf28d4888a6f065a1de080`.
+`git diff 856d2bb1eb4ff0b95ebf28d4888a6f065a1de080 HEAD -- app/ server/ program/`
+is empty. The only post-build change is this documentation ledger entry.
+
+The requested final physical smoke was **not run** in this build session:
+normal ADB reported no attached device, so no install, launch, tap, wallet
+connect, account switch, or economic mutation was performed. Existing
+completed winner and mismatch records remain preserved and were not mutated.
+The new APK’s physical Power-Saving-on handoff and the corrected mismatch CTA
+therefore remain owner/device smoke checks, not claims of a fresh physical
+pass.
+
+### 68.G — Claim → Mechanism → Boundary → Proof ledger
+
+```text
+Claim     Economic V1 same-vote winner claim          PROVEN (prior physical UAT + chain/receipt readback)
+Claim     Economic V1 mismatch/refund                 PROVEN (prior physical UAT + 100/100 chain readback)
+Mechanism Winner/refund display separation            PROVEN (source + Hermes artifact + regression)
+Mechanism Activity causal ordering                    PROVEN (local HTTP regression; history preserved)
+Boundary  Wallet pending/recovery safety              SUPPORTED (source, tests, compiled artifact)
+Boundary  Power-Saving-on physical handoff            LIMITATION (fresh smoke blocked by absent ADB device)
+Proof     Fresh signed APK identity                   PROVEN (hash, bytes, package, version, certificate)
+Proof     Fresh artifact contains this remediation     PROVEN (Hermes disassembly)
+Submission current release candidate                  SUPPORTED; owner/device smoke remains
+```
