@@ -29,6 +29,7 @@ export type WalletConnectionStatus =
   | 'IDLE'
   | 'CONNECTING'
   | 'WAITING_FOR_WALLET'
+  | 'STILL_CONNECTING'
   | 'VERIFYING'
   | 'RESTORING'
   | 'CONNECTED'
@@ -38,6 +39,7 @@ export type WalletConnectionStatus =
   | 'NETWORK_ERROR'
   | 'AUTH_FAILED'
   | 'INTERRUPTED'
+  | 'OPEN_PHANTOM'
   | 'WALLET_CHANGED';
 
 let connection: Connection | null = null;
@@ -128,6 +130,7 @@ export async function connectAndAuthenticate(
   let tokenRejected = false;
   let walletChanged = false;
   let verificationStarted = false;
+  let handoffObserved = false;
   const attemptId = options.attemptId || `connect_${Date.now().toString(36)}`;
   await startWalletKeepalive('CONNECT', attemptId);
   const emitMarker = async (stage: import('./diagnostics').ConnectStage) => {
@@ -146,10 +149,18 @@ export async function connectAndAuthenticate(
   const waitingTimer = setTimeout(() => {
     if (!settled) emit('WAITING_FOR_WALLET');
   }, 2500);
+  const handoffTimer = setTimeout(() => {
+    if (!settled && !handoffObserved) {
+      emit('STILL_CONNECTING');
+      void emitMarker('CONNECT_STILL_CONNECTING');
+    }
+  }, 8000);
 
   const attempt = (async () => {
     await emitMarker('CONNECT_MWA_TRANSACT_START');
     return transact(async (wallet) => {
+      handoffObserved = true;
+      clearTimeout(handoffTimer);
       await emitMarker('CONNECT_CALLBACK_ENTER');
       let authResult: any;
       const walletWithReauthorize = wallet as typeof wallet & {
@@ -238,10 +249,12 @@ export async function connectAndAuthenticate(
     });
     settled = true;
     clearTimeout(waitingTimer);
+    clearTimeout(handoffTimer);
     return { state, status: 'CONNECTED' };
   } catch (err: any) {
     settled = true;
     clearTimeout(waitingTimer);
+    clearTimeout(handoffTimer);
     // No mock fallback in any build: a failed/cancelled wallet authorization
     // must surface as an explicit failure state so the product never
     // fabricates identity, session tokens, or arena eligibility. Wallet

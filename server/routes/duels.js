@@ -36,6 +36,43 @@ function ensureCanonicalDuelId(duel) {
   }
 }
 
+// Insert the actionable settlement boundary before a future result event can
+// be written. This is additive only: historical Activity is never rewritten,
+// and resolver/claim/refund calculations are untouched.
+function ensureReadyToSettleActivity(duel) {
+  if (!duel
+    || String(duel.status || '').startsWith('RESOLVED')
+    || duel.status === 'CANCELLED'
+    || Number(duel.side_a_total) <= 0
+    || Number(duel.side_b_total) <= 0
+    || Math.floor(Date.now() / 1000) < Number(duel.resolution_ts || 0)) {
+    return;
+  }
+  const readyActivity = queryOne(
+    `SELECT id FROM activity WHERE target_id = ? AND type = 'READY_TO_SETTLE' LIMIT 1`,
+    [duel.id]
+  );
+  const resultConfirmed = queryOne(
+    `SELECT id FROM activity WHERE target_id = ? AND type = 'RESULT_CONFIRMED' LIMIT 1`,
+    [duel.id]
+  );
+  const voteCount = queryOne(
+    `SELECT COUNT(*) AS count FROM mutual_votes WHERE duel_id = ?`,
+    [duel.id]
+  );
+  // A matched pair is already past the actionable boundary. Do not append a
+  // late READY_TO_SETTLE row after RESULT_CONFIRMED has been recorded.
+  if (readyActivity || resultConfirmed || Number(voteCount?.count || 0) >= 2) return;
+  for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
+    execute(
+      `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
+       VALUES (?, ?, 'READY_TO_SETTLE', 'system', ?, 'DUEL', 'Ready to settle', ?, 0, ?)`,
+      [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duel.id,
+        'The decision time has arrived. Confirm the result privately.', new Date().toISOString()]
+    );
+  }
+}
+
 // GET /api/duels (Feed / Arena list)
 router.get('/', (req, res, next) => {
   delete req.headers['if-none-match'];
@@ -484,24 +521,7 @@ router.post('/:id/claim', requireAuth, async (req, res) => {
 router.post('/:id/resolve', requireAuth, async (req, res) => {
   const duelId = req.params.id;
   const duel = queryOne(`SELECT * FROM duels WHERE id = ?`, [duelId]);
-  if (duel && !String(duel.status || '').startsWith('RESOLVED') && duel.status !== 'CANCELLED'
-    && Number(duel.side_a_total) > 0 && Number(duel.side_b_total) > 0
-    && Math.floor(Date.now() / 1000) >= Number(duel.resolution_ts || 0)) {
-    const readyActivity = queryOne(
-      `SELECT id FROM activity WHERE target_id = ? AND type = 'READY_TO_SETTLE' LIMIT 1`,
-      [duelId]
-    );
-    if (!readyActivity) {
-      for (const wallet of [duel.captain_a_wallet, duel.captain_b_wallet]) {
-        execute(
-          `INSERT INTO activity (id, user_wallet, type, source_wallet, target_id, target_type, title, message, is_read, created_at)
-           VALUES (?, ?, 'READY_TO_SETTLE', 'system', ?, 'DUEL', 'Ready to settle', ?, 0, ?)`,
-          [`act_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, wallet, duelId,
-            'The decision time has arrived. Confirm the result privately.', new Date().toISOString()]
-        );
-      }
-    }
-  }
+  ensureReadyToSettleActivity(duel);
   const result = await resolveDuel(duelId);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
@@ -528,6 +548,10 @@ router.post('/:id/mutual-vote', requireAuth, async (req, res) => {
   if (!signature) {
     return res.status(400).json({ error: 'A wallet-signed settlement attestation is required' });
   }
+  // The first vote follows the same causal Activity boundary as the explicit
+  // resolve endpoint. The helper is idempotent and suppresses a late ready
+  // event after a matched result already exists.
+  ensureReadyToSettleActivity(duel);
   const mutual = require('../mutual');
   const result = mutual.recordVote(duel, userWallet, Number(winnerSide), signature);
   if (!result.ok) {

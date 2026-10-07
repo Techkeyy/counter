@@ -74,6 +74,10 @@ function derivedDuelActivity(userWallet) {
       }
       continue;
     }
+    // A matched pair has already crossed the actionable boundary. The
+    // persisted RESULT_CONFIRMED event is authoritative; do not derive a
+    // late READY_TO_SETTLE item on refresh.
+    if (match.matched) continue;
     if (String(duel.status || '').startsWith('RESOLVED')) continue;
     if ((duel.chain_status || 'UNINITIALIZED') !== 'INITIALIZED') continue;
     if (!(Number(duel.side_a_total) > 0 && Number(duel.side_b_total) > 0)) continue;

@@ -31,6 +31,7 @@ interface OnboardingModalProps {
 const BUSY_LABEL: Record<string, string> = {
   CONNECTING: 'Opening Phantom…',
   WAITING_FOR_WALLET: 'Waiting for wallet approval…',
+  STILL_CONNECTING: 'Still connecting to Phantom…',
   VERIFYING: 'Verifying your wallet…',
   RESTORING: 'Restoring your Counter account…',
 };
@@ -38,6 +39,7 @@ const BUSY_LABEL: Record<string, string> = {
 const BUSY_BODY: Record<string, string> = {
   CONNECTING: 'Dispatching a secure request to Phantom.',
   WAITING_FOR_WALLET: 'Approve the Counter request in your wallet app.',
+  STILL_CONNECTING: 'Counter is keeping this request safe. We will not repeat a transaction.',
   VERIFYING: 'Confirming the signature with Counter. Almost done.',
   RESTORING: 'Finishing the secure connection and restoring your profile.',
 };
@@ -50,6 +52,7 @@ function isFailure(s: WalletConnectionStatus): boolean {
     s === 'NETWORK_ERROR' ||
     s === 'AUTH_FAILED' ||
     s === 'INTERRUPTED' ||
+    s === 'OPEN_PHANTOM' ||
     s === 'WALLET_CHANGED'
   );
 }

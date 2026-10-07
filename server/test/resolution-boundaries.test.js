@@ -178,6 +178,10 @@ async function run() {
       `UPDATE duels SET resolution_ts = ?, mutual_deadline_ts = ? WHERE id = ?`,
       [resTs, resTs + 3600, duel.id]
     );
+    execute(
+      `UPDATE duels SET side_a_total = 10, side_b_total = 10, chain_status = 'INITIALIZED' WHERE id = ?`,
+      [duel.id]
+    );
     const outsiderSig = signSettlement(C.kp, duel.id, 1, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, C.token, { winnerSide: 1, signature: outsiderSig.signature });
     assert(r.status === 400, 'non-captain vote rejected');
@@ -195,6 +199,11 @@ async function run() {
     const sigA1 = signSettlement(A.kp, duel.id, 1, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, A.token, { winnerSide: 1, signature: sigA1.signature });
     assert(r.status === 200 && r.data.match && r.data.match.matched === false, 'single vote unmatched');
+    const readyBeforeResult = queryAll(
+      `SELECT type, created_at FROM activity WHERE target_id = ? AND type = 'READY_TO_SETTLE'`,
+      [duel.id]
+    );
+    assert(readyBeforeResult.length === 2, 'ready-to-settle is written before result confirmation');
     r = await api('POST', `/api/duels/${duel.id}/resolve`, A.token, {});
     assert(r.status === 400, 'one captain alone cannot settle');
     const d1 = await api('GET', `/api/duels/${duel.id}`);
@@ -207,6 +216,7 @@ async function run() {
     const sigB2 = signSettlement(B.kp, duel.id, 2, resTs);
     r = await api('POST', `/api/duels/${duel.id}/mutual-vote`, B.token, { winnerSide: 2, signature: sigB2.signature });
     assert(r.status === 200 && r.data.match.state === 'DISPUTED', 'opposing votes dispute');
+    assert(queryAll(`SELECT type FROM activity WHERE target_id = ? AND type = 'RESULT_CONFIRMED'`, [duel.id]).length === 0, 'mismatch never emits result confirmed');
     const privateRead = await api('GET', `/api/duels/${duel.id}`, A.token);
     assert(privateRead.status === 200 && privateRead.data.mutualState === 'DISPUTED', 'private read exposes coarse mismatch state');
     assert(privateRead.data.otherVoteSubmitted === true, 'private read exposes opponent submission presence');

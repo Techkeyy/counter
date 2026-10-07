@@ -36,6 +36,10 @@ const HEADLINES: Record<string, { title: string; body: string }> = {
     title: 'Connection interrupted',
     body: 'Counter can safely reconnect to your wallet. Try again when you are ready.',
   },
+  OPEN_PHANTOM: {
+    title: 'Open Phantom again',
+    body: 'The first handoff did not complete. Your pending connection is still safe. Open Phantom again to continue.',
+  },
   WALLET_CHANGED: {
     title: 'Wallet changed',
     body: 'Return to the wallet you started with before continuing.',
@@ -63,13 +67,13 @@ export const ConnectionHelp: React.FC<ConnectionHelpProps> = ({ status, detail, 
         onPress={onRetry}
         disabled={busy}
         activeOpacity={0.8}
-        accessibilityLabel="Retry wallet connection"
+        accessibilityLabel={status === 'OPEN_PHANTOM' ? 'Open Phantom again' : 'Retry wallet connection'}
         accessibilityRole="button"
       >
         {busy ? (
           <ActivityIndicator size="small" color="#000000" />
         ) : (
-          <Text style={styles.retryText}>Retry connection</Text>
+          <Text style={styles.retryText}>{status === 'OPEN_PHANTOM' ? 'Open Phantom again' : 'Retry connection'}</Text>
         )}
       </TouchableOpacity>
 

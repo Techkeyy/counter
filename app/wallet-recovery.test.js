@@ -26,7 +26,8 @@ const connectStages = [
   'CONNECT_RESUME_FOUND_PENDING', 'CONNECT_REASSOCIATE_START',
   'CONNECT_REAUTHORIZE_START', 'CONNECT_REAUTHORIZE_OK', 'CONNECT_RECOVERY_COMPLETE',
   'CONNECT_CANCELLED', 'CONNECT_INTERRUPTED', 'CONNECT_TIMEOUT',
-  'CONNECT_AUTH_FAILED', 'CONNECT_ERROR',
+  'CONNECT_AUTH_FAILED', 'CONNECT_ERROR', 'CONNECT_STILL_CONNECTING',
+  'CONNECT_OPEN_PHANTOM',
 ];
 
 for (const stage of connectStages) assert(diagnostics.includes(`'${stage}'`), `missing diagnostic stage ${stage}`);
@@ -45,9 +46,13 @@ for (const field of ['auth_token', 'wallet_uri_base', 'chain', 'authorizedAt', '
 }
 assert(onboarding.includes('Opening Phantom…'), 'connect UX must name the wallet handoff');
 assert(onboarding.includes('Waiting for wallet approval…'), 'connect UX must expose approval wait');
+assert(onboarding.includes('Still connecting to Phantom…'), 'delayed handoff must be explicit');
 assert(onboarding.includes('Restoring your Counter account…'), 'connect UX must expose account restoration');
 assert(help.includes('Connection interrupted'), 'interrupted state must be visible');
 assert(help.includes('Counter can safely reconnect to your wallet.'), 'interrupted state must provide safe recovery copy');
+assert(help.includes('Open Phantom again'), 'stalled handoff must provide a controlled wallet action');
+assert(app.includes("outcome.status === 'MWA_TIMEOUT'"), 'timeout must enter the controlled handoff recovery state');
+assert(app.includes('manualRecoveryAttemptedRef'), 'manual wallet recovery is bounded per pending operation');
 assert(!help.includes('disable power'), 'UI must not tell users to disable power saving');
 assert(!help.includes('battery-saving modes can interrupt'), 'UI must not make power-saving a user prerequisite');
 

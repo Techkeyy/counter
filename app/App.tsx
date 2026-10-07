@@ -61,6 +61,7 @@ export default function App() {
   const [pendingWalletOperation, setPendingWalletOperation] = useState<PendingWalletOperation | null>(null);
   const connectInFlightRef = useRef(false);
   const autoRecoveryAttemptedRef = useRef<string | null>(null);
+  const manualRecoveryAttemptedRef = useRef<string | null>(null);
   const activeWalletRef = useRef<string | null>(null);
   const [surfaceEpoch, setSurfaceEpoch] = useState(0);
 
@@ -152,8 +153,8 @@ export default function App() {
               if (autoRecoveryAttemptedRef.current !== pending.operationId) {
                 setConnectionStatus('RESTORING');
               } else {
-                setConnectionStatus('INTERRUPTED');
-                setConnectionError('Counter can safely reconnect to your wallet.');
+                setConnectionStatus('OPEN_PHANTOM');
+                setConnectionError('Open Phantom again to continue. Your pending connection is still safe.');
               }
             } else {
               setLinkNotice('Checking your transaction…');
@@ -264,7 +265,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const handleConnectWallet = useCallback(async (recovery = false) => {
+  const handleConnectWallet = useCallback(async (recovery = false, automaticRecovery = false) => {
     if (connectInFlightRef.current) return;
     connectInFlightRef.current = true;
     // Failures never silently return to idle: the outcome status stays
@@ -278,6 +279,13 @@ export default function App() {
         : `connect_${Date.now().toString(36)}`;
       const expectedWallet = recovery ? previous?.expectedWallet : undefined;
       autoRecoveryAttemptedRef.current = operationId;
+      if (recovery && !automaticRecovery && manualRecoveryAttemptedRef.current === operationId) {
+        setConnectionStatus('OPEN_PHANTOM');
+        setConnectionError('Open Phantom again to continue. Your pending connection is still safe.');
+        setShowOnboarding(true);
+        return;
+      }
+      if (recovery && !automaticRecovery) manualRecoveryAttemptedRef.current = operationId;
       const now = Date.now();
       let pending: PendingWalletOperation = {
         v: 1,
@@ -360,15 +368,19 @@ export default function App() {
                 ? 'CONNECT_TIMEOUT'
                 : 'CONNECT_INTERRUPTED';
         await persistStage(failureStage, {}, true);
+        const handoffNeedsUserAction = outcome.status === 'MWA_TIMEOUT';
+        if (handoffNeedsUserAction) {
+          await persistStage('CONNECT_OPEN_PHANTOM', {}, true);
+        }
         if (outcome.tokenRejected) await clearWalletAuthorization();
         setWalletState(DISCONNECTED);
-        setConnectionStatus(outcome.walletChanged ? 'WALLET_CHANGED' : outcome.status === 'MWA_TIMEOUT' && recovery ? 'INTERRUPTED' : outcome.status);
-        setConnectionError(outcome.walletChanged ? 'Wallet changed. Return to the wallet you started with.' : outcome.detail || 'Connection interrupted. Counter can safely reconnect to your wallet.');
+        setConnectionStatus(outcome.walletChanged ? 'WALLET_CHANGED' : handoffNeedsUserAction ? 'OPEN_PHANTOM' : outcome.status);
+        setConnectionError(outcome.walletChanged ? 'Wallet changed. Return to the wallet you started with.' : handoffNeedsUserAction ? 'Open Phantom again to continue. Your pending connection is still safe.' : outcome.detail || 'Connection interrupted. Counter can safely reconnect to your wallet.');
         setShowOnboarding(true);
       }
     } catch {
-      setConnectionStatus('INTERRUPTED');
-      setConnectionError('Connection interrupted. Counter can safely reconnect to your wallet.');
+      setConnectionStatus('OPEN_PHANTOM');
+      setConnectionError('Open Phantom again to continue. Your pending connection is still safe.');
       setShowOnboarding(true);
     } finally {
       connectInFlightRef.current = false;
@@ -386,7 +398,7 @@ export default function App() {
       const authorization = await loadWalletAuthorization();
       if (cancelled) return;
       if (authorization) {
-        await handleConnectWallet(true);
+        await handleConnectWallet(true, true);
       } else {
         setConnectionStatus('INTERRUPTED');
         setConnectionError('Connection interrupted. Counter can safely reconnect to your wallet.');
@@ -680,7 +692,7 @@ export default function App() {
         wallet={walletState.publicKey}
         connectionStatus={connectionStatus}
         connectionError={connectionError}
-        onConnectWallet={handleConnectWallet}
+        onConnectWallet={() => handleConnectWallet(connectionStatus === 'OPEN_PHANTOM' || connectionStatus === 'INTERRUPTED')}
         onProfileUpdated={() => setFeedRefresh((n) => n + 1)}
       />
 

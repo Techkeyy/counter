@@ -346,7 +346,9 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const votesMatch = mutualVotes.length >= 2 && mutualVotes.every((vote) => Number(vote.winner_side) === Number(mutualVotes[0].winner_side));
   const canClaim = !!myPosition && duel.status.startsWith('RESOLVED') && myPosition.side === duel.winning_side && !myPosition.claimed;
   const canRefund = !!myPosition && duel.status === 'CANCELLED' && !myPosition.claimed;
-  const payout = Number(myPosition?.stake_amount || agreedStake) * 2;
+  const totalPool = Number(duel.side_a_total || 0) + Number(duel.side_b_total || 0);
+  const claimAmount = totalPool || Number(myPosition?.stake_amount || agreedStake) * 2;
+  const refundAmount = Number(myPosition?.stake_amount || agreedStake);
 
   const showError = (error: any, fallback: string) => {
     setMessage(isWalletCancellation(error) ? 'Approval cancelled. Nothing was changed.' : error?.message || fallback);
@@ -758,7 +760,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
           {isTerminal && !canClaim && <Text style={styles.successCopy}>{duel.winning_side === 1 ? nameA : nameB} won.</Text>}
           {!isTerminal && <TouchableOpacity style={styles.primaryButton} onPress={handleResolve} disabled={resolving} accessibilityRole="button"><Text style={styles.primaryButtonText}>{resolving ? 'Settling…' : 'Settle result'}</Text></TouchableOpacity>}
           {(canClaim || canRefund) && renderPreflight()}
-          {(canClaim || canRefund) && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Claim ${payout.toFixed(2)} Counter Test USD` : 'Get SOL to claim'}</Text></TouchableOpacity>}
+          {(canClaim || canRefund) && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : canRefund ? (hasFeeBalance(preflight) ? `Get ${refundAmount.toFixed(2)} Counter Test USD back` : 'Get SOL to claim') : hasFeeBalance(preflight) ? `Claim ${claimAmount.toFixed(2)} Counter Test USD` : 'Get SOL to claim'}</Text></TouchableOpacity>}
           {isTerminal && !canClaim && <TouchableOpacity style={styles.secondaryButton} onPress={() => onViewReceipt(`receipt_${duel.id}`)} accessibilityRole="button"><Text style={styles.secondaryButtonText}>View receipt</Text></TouchableOpacity>}
         </View>
       );
@@ -777,7 +779,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
           <Text style={styles.subtleCopy}>No winner can be chosen.</Text>
           {hasPrincipal && !refundAvailable && resolutionReached && <TouchableOpacity style={styles.primaryButton} onPress={handleResolve} disabled={resolving} accessibilityRole="button"><Text style={styles.primaryButtonText}>{resolving ? 'Opening refund…' : 'Make refund available'}</Text></TouchableOpacity>}
           {hasPrincipal && canRefund && renderPreflight()}
-          {hasPrincipal && canRefund && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Get ${payout.toFixed(2)} Counter Test USD back` : 'Get SOL to claim'}</Text></TouchableOpacity>}
+          {hasPrincipal && canRefund && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Get ${refundAmount.toFixed(2)} Counter Test USD back` : 'Get SOL to claim'}</Text></TouchableOpacity>}
           {hasPrincipal && refundAvailable && !canRefund && <TouchableOpacity style={styles.secondaryButton} onPress={() => onViewReceipt(`receipt_${duel.id}`)} accessibilityRole="button"><Text style={styles.secondaryButtonText}>View receipt</Text></TouchableOpacity>}
         </View>
       );
@@ -792,7 +794,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
           {!refundAvailable && !resolutionReached && <Text style={styles.subtleCopy}>Refund opens at the agreed decision time.</Text>}
           {!refundAvailable && resolutionReached && <TouchableOpacity style={styles.primaryButton} onPress={handleResolve} disabled={resolving} accessibilityRole="button"><Text style={styles.primaryButtonText}>{resolving ? 'Opening refund…' : 'Make refund available'}</Text></TouchableOpacity>}
           {canRefund && renderPreflight()}
-          {canRefund && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Get ${payout.toFixed(2)} Counter Test USD back` : 'Get SOL to claim'}</Text></TouchableOpacity>}
+          {canRefund && <TouchableOpacity style={[styles.primaryButton, !pendingClaimSignature && !hasFeeBalance(preflight) && styles.disabledButton]} onPress={pendingClaimSignature ? handleCheckClaimStatus : handleClaim} disabled={claiming || (!pendingClaimSignature && !hasFeeBalance(preflight))} accessibilityRole="button"><Text style={styles.primaryButtonText}>{claiming ? 'Checking…' : pendingClaimSignature ? 'Check status' : hasFeeBalance(preflight) ? `Get ${refundAmount.toFixed(2)} Counter Test USD back` : 'Get SOL to claim'}</Text></TouchableOpacity>}
           {refundAvailable && !canRefund && <TouchableOpacity style={styles.secondaryButton} onPress={() => onViewReceipt(`receipt_${duel.id}`)} accessibilityRole="button"><Text style={styles.secondaryButtonText}>View receipt</Text></TouchableOpacity>}
         </View>
       );
