@@ -1,11 +1,24 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 
 const MAINNET_RPC = process.env.MAINNET_RPC || 'https://api.mainnet-beta.solana.com';
+const SKR_NETWORK = 'mainnet-beta';
 const SKR_PROGRAM_ID = new PublicKey('SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ');
+const SKR_MINT = new PublicKey('SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3');
 
 // Official Mainnet StakeConfig and GuardianPool PDAs
 const STAKE_CONFIG_PDA = new PublicKey('4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw');
+const STAKE_VAULT_PDA = new PublicKey('8isViKbwhuhFhsv2t8vaFL74pKCqaFPQXo1KkeQwZbB8');
 const GUARDIAN_POOL_PDA = new PublicKey('DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr');
+
+const SKR_CONFIG = Object.freeze({
+  network: SKR_NETWORK,
+  rpcEnv: 'MAINNET_RPC',
+  programId: SKR_PROGRAM_ID.toBase58(),
+  mint: SKR_MINT.toBase58(),
+  stakeConfig: STAKE_CONFIG_PDA.toBase58(),
+  stakeVault: STAKE_VAULT_PDA.toBase58(),
+  guardianPool: GUARDIAN_POOL_PDA.toBase58(),
+});
 
 // Seeker Arena access rule (single definition): ANY active Mainnet stake
 // (> 0 SKR) verified against the official staking program. SKR grants access
@@ -78,6 +91,13 @@ async function querySkrStakedAmount(walletAddressString) {
 }
 
 module.exports = {
+  SKR_CONFIG,
+  SKR_NETWORK,
+  SKR_PROGRAM_ID,
+  SKR_MINT,
+  STAKE_CONFIG_PDA,
+  STAKE_VAULT_PDA,
+  GUARDIAN_POOL_PDA,
   deriveUserStakePda,
   querySkrStakedAmount,
   isStakeEligible,

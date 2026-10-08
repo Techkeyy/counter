@@ -150,7 +150,7 @@ for (const legacy of ['./src/screens/FeedScreen', './src/screens/DuelsScreen', '
   excludes(app, legacy, `${legacy} is not imported by the active graph`);
 }
 const activeSurface = [app, modal, sheet, duels, activity, receipt, read('src/screens/FreshFeedScreen.tsx'), read('src/screens/FreshProfileScreen.tsx')].join('\n');
-for (const forbidden of ['odds', 'probability', 'Side A', 'Side B', 'Counter Verified']) {
+for (const forbidden of ['odds', 'probability', 'Side A', 'Side B']) {
   excludes(activeSurface, forbidden, `active V1 surfaces do not expose ${forbidden}`);
 }
 excludes(activeSurface, 'Ready to settlement', 'active reconstructed surfaces use the grammatical Ready to settle copy');

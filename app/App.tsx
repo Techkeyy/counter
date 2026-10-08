@@ -45,11 +45,12 @@ import type { DuelSelectionReason } from './src/diagnostics';
 import type { PendingWalletOperation } from './src/session';
 import { syncCoordinator } from './src/syncCoordinator';
 
-type Tab = 'HOME' | 'DUELS' | 'ACTIVITY' | 'PROFILE';
+type Tab = 'HOME' | 'DUELS' | 'ARENA' | 'ACTIVITY' | 'PROFILE';
 
 const TABS: { key: Tab; label: string; icon: IconName }[] = [
   { key: 'HOME', label: 'Home', icon: 'home' },
   { key: 'DUELS', label: 'Duels', icon: 'swords' },
+  { key: 'ARENA', label: 'Arena', icon: 'sparkles' },
   { key: 'ACTIVITY', label: 'Activity', icon: 'bell' },
   { key: 'PROFILE', label: 'Profile', icon: 'user' },
 ];
@@ -142,6 +143,10 @@ export default function App() {
   }, []);
 
   const invalidateUserScopedState = useCallback((nextWallet: string | null) => {
+    // Clear the previous wallet's qualification before any new wallet data is
+    // painted. Arena access is identity-scoped and must never bleed across an
+    // account switch, even for one intermediate render.
+    setWalletState(DISCONNECTED);
     setSurfaceEpoch((value) => value + 1);
     setFeedRefresh((value) => value + 1);
     setTabFocus((value) => value + 1);
@@ -536,10 +541,6 @@ export default function App() {
           />
         </View>
         <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
-          <SkrArenaEntry
-            eligible={walletState.isArenaEligible}
-            onSelectDuel={(duel: Duel) => openDuel(duel.id, 'DUEL_ROW')}
-          />
           <View style={styles.fill}>
             <FreshDuelsScreen
               key={`duels-${surfaceEpoch}`}
@@ -551,6 +552,15 @@ export default function App() {
               onActionableCountChange={onDuelsActionableCountChange}
             />
           </View>
+        </View>
+        <View style={[styles.fill, currentTab === 'ARENA' ? null : styles.hidden]}>
+          <SkrArenaEntry
+            key={`arena-${surfaceEpoch}`}
+            connected={walletState.connected}
+            eligible={walletState.isArenaEligible}
+            onConnectWallet={() => void handleConnectWallet(false)}
+            onSelectDuel={(duel: Duel) => openDuel(duel.id, 'DUEL_ROW')}
+          />
         </View>
         <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
           <FreshActivityScreen
