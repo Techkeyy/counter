@@ -6,18 +6,18 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
 > **Put your money where your mouth is.**  
-> Counter turns hot takes, crypto debates, and sports banter into **high-stakes 1v1 on-chain duels**, parimutuel backer pools, authoritative oracle resolutions, and viral NFT-styled settlement receipts on Solana Mobile.
+> Counter turns hot takes, crypto debates, and sports banter into **private 1v1 social Duels**, program-controlled Devnet cUSD outcomes, authoritative resolution evidence, and permanent settlement receipts on Solana Mobile.
 
 ---
 
 ## 🌟 Key Product Features
 
-- 🗡️ **1v1 Captain Duels & Mutual Agreement**: Propose challenges against any take, negotiate stakes in cUSD, and agree on immutable resolution terms on-chain.
-- 🌊 **Parimutuel Outside Backer Pools**: Dynamic real-time odds bars that auto-adjust payout multipliers as spectators back Side A or Side B before the cutoff lock.
+- 🗡️ **1v1 Captain Duels & Mutual Agreement**: Propose challenges against any Take, agree on cUSD terms, and privately confirm the result together.
+- 🧭 **Clear social lifecycle**: Incoming, Sent, Active, Claimable, and Completed states keep the next action obvious without odds or trading-terminal UI.
 - 🔒 **Trustless Program-Controlled Escrow**: Built from scratch in Rust as a native Solana SBF program with programmatic PDA vaults (`[b"vault", duel_pda]`) and Position PDAs (`[b"position", duel_pda, user]`).
-- ⭐ **High-Stakes SKR Arena Gating**: Derives official Solana Mobile `UserStake` PDAs on Mainnet-Beta across Guardian Pools, unlocking exclusive high-stakes arenas for verified SKR stakers.
+- ⭐ **SKR Arena curation**: Derives the official Solana Mobile `UserStake` account on Mainnet-Beta and unlocks a read-only curated Arena feed only when active staked SKR is proven. SKR does not affect stake, payout, winner, refund, custody, settlement, or claim authorization.
 - ⚡ **Deterministic Multi-Category Resolvers**: Automated settlement engine querying CoinGecko (Crypto thresholds), TheSportsDB (Official sports match results), and Open-Meteo (Verifiable weather conditions).
-- 📜 **Permanent Receipts & Deep Links**: Every resolved duel generates a cryptographic resolution receipt with proof hash, on-chain signature, and `counter://duel/:id` or `counter://receipt/:id` deep-links for viral sharing.
+- 📜 **Permanent Receipts & Deep Links**: Every resolved Duel generates a durable receipt with proof data, on-chain signature, and `counter://duel/:id`, `counter://receipt/:id`, plus production HTTPS `/d/...` and `/r/...` links. Every supported surface uses one canonical receipt-opening route.
 - 🛡️ **Built-in Moderation & SIWS**: Sign-in with Solana (Ed25519 detached signature verification) + Content Reporting and User Blocking.
 
 ---
@@ -28,7 +28,7 @@
                      ┌─────────────────────────────────────────────────┐
                      │          Counter Mobile App (React Native)      │
                      │   - MWA 2.0 Native Wallet Authorization         │
-                     │   - Social Feed, Arena HUD, Odds Visualizer     │
+                    │   - Social Feed, SKR Arena curation, receipts   │
                      │   - Deep Link Router (counter://duel/:id)       │
                      └───────────────┬─────────────────────────────────┘
                                      │
@@ -74,7 +74,9 @@ Counter qualifies contenders for the High-Stakes Arena by deriving official Sola
 - **StakeConfig PDA:** `4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw`
 - **GuardianPool PDA:** `DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr`
 - **UserStake Formula:** `PublicKey.findProgramAddressSync([b"user_stake", StakeConfig, userWallet, GuardianPool], ProgramID)`
-- **Arena Threshold:** `>= 100 SKR` active stake unlocks Arena Contender status and high-stakes pool creation.
+- **Arena qualification:** active staked SKR `> 0` in the verified `UserStake` account unlocks the read-only SKR Arena discovery surface. The app does not claim that SKR stake alone proves Seeker hardware ownership; official Seeker Genesis Token verification is a separate contract.
+
+The current official references are [Seeker ID / Genesis Token](https://github.com/solana-mobile/solana-mobile-docs/blob/main/solana-mobile-stack/seeker-id.mdx), the [official SKR staking sample](https://github.com/solana-mobile/react-native-samples/tree/main/skr-staking), and [SKR token information](https://solanamobile.com/skr).
 
 ---
 
@@ -121,11 +123,18 @@ The automated test suite (`server/test/backend-adversarial-tests.js`) validates:
 1. **SIWS Authentication:** Replay protection, detached signature verification, tampered token rejection.
 2. **Takes & Social Feed:** Category taxonomy, author handle binding, comments threading.
 3. **Challenge Negotiation:** Counteroffer state machine, stake updates, mutual acceptance.
-4. **Parimutuel Math:** Dynamic odds updates (`1.5x` vs `3.0x`), conservation of total pool invariants.
+4. **Outcome and refund math:** Winner total-pool payout and mismatch principal-refund invariants are tested separately; no odds UI is part of the active V1 product.
 5. **Deterministic Resolvers:** Multi-category probes (CoinGecko, Sports, Weather) + settlement receipt generation.
 6. **Rivalry Graph:** Head-to-head records and disputed volume aggregation.
 7. **Moderation:** Abusive user blocking and content report queues.
-8. **SKR Gating:** Mainnet-Beta UserStake account derivation.
+8. **SKR Gating:** Mainnet-Beta UserStake account derivation, qualified/unqualified Arena states, and economic isolation.
+
+## Finalization scope
+
+- Receipts opened from Duel detail, Activity, Profile, terminal Duel paths, and both custom/HTTPS links all resolve through `openReceipt`.
+- Receipt identity precedence is display name → `@handle` → shortened public wallet. Refund receipts distinguish pending return copy from the completed `Refunded / recorded` state.
+- The Android launcher uses Counter’s existing target mark in adaptive, round, and legacy resources.
+- No new economic transaction or SKR staking flow is introduced by the Arena slice.
 
 ---
 

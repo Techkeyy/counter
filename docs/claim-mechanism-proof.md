@@ -30,7 +30,7 @@
 
 ## 2. Official SKR Staking Verification (Mainnet-Beta)
 - **Claim:** Counter gates high-stakes Arenas and features based on active SKR staking on Solana Mobile.
-- **Mechanism:** On-chain query to the official SKR Staking Program (`SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ`). Derives the official `UserStake` PDA using `[b"user_stake", StakeConfig, user_wallet, GuardianPool]`, reads raw staked shares, and aggregates across all registered GuardianPools. Technical qualification condition: `active staked SKR > 0`.
+- **Mechanism:** On-chain query to the official SKR Staking Program (`SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ`). Derives the verified live `UserStake` PDA using `[b"user_stake", StakeConfig, user_wallet, GuardianPool]` for the discovered GuardianPool, reads raw staked shares, and qualifies only when active staked SKR is `> 0`. This is SKR-stake qualification, not a claim of Seeker Genesis Token ownership.
 - **Proof:** Evaluated via [`probes/skr-official-stake-query.js`](file:///C:/Users/HomePC/Desktop/Counter/probes/skr-official-stake-query.js) against Solana Mainnet-Beta:
   - **StakeConfig PDA:** `4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw`
   - **Discovered GuardianPool:** `DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr`

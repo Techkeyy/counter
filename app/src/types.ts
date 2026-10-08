@@ -201,6 +201,30 @@ export interface Receipt {
   onchain_signature: string;
   created_at: string;
   share_slug?: string;
+  proposition_a?: string;
+  proposition_b?: string;
+  category?: Category;
+  side_a_total?: number;
+  side_b_total?: number;
+  winning_side?: number;
+  captain_a_name?: string;
+  captain_a_handle?: string;
+  captain_a_avatar?: string;
+  captain_b_name?: string;
+  captain_b_handle?: string;
+  captain_b_avatar?: string;
+  topic?: string;
+  take_content?: string;
+  positions?: Array<{
+    user_wallet: string;
+    side: 1 | 2;
+    stake_amount: number;
+    claimed: number;
+    claim_tx?: string;
+    payout_amount?: number | null;
+    display_name?: string;
+    handle?: string;
+  }>;
 }
 
 export interface Rivalry {

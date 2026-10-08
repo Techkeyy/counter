@@ -20,6 +20,7 @@ import { FreshActivityScreen } from './src/screens/FreshActivityScreen';
 import { FreshChallengeModal } from './src/components/FreshChallengeModal';
 import { FreshChallengeSheet } from './src/components/FreshChallengeSheet';
 import { OnboardingModal } from './src/components/OnboardingModal';
+import { SkrArenaEntry } from './src/components/SkrArenaEntry';
 import { Icon, IconName } from './src/components/Icon';
 import { colors, spacing, borderRadius, touchMin } from './src/theme';
 import { connectAndAuthenticate, WalletState, WalletConnectionStatus } from './src/wallet';
@@ -111,6 +112,34 @@ export default function App() {
     duelSelectionStage('DUEL_SELECTION_SET', { duelId, reason });
     setSelectedDuelId(duelId);
   };
+
+  // Every receipt-bearing surface enters the same canonical route. The
+  // caller may provide a list item or an id; we always re-read the detailed
+  // receipt so profile/activity rows receive authoritative captain identity,
+  // positions, and terminal refund state before rendering.
+  const openReceipt = useCallback(async (source: Receipt | string) => {
+    const receiptId = typeof source === 'string' ? source : source?.id;
+    if (!receiptId) {
+      setLinkNotice('That receipt could not be opened.');
+      return;
+    }
+    clearDuelSelection('RECEIPT_VIEW');
+    setAcceptTransition(null);
+    setDetailTransition(null);
+    setSelectedTake(null);
+    setSelectedReceipt(null);
+    setShowComposer(false);
+    setReviewChallenge(null);
+    setChallengeTargetTake(null);
+    setViewProfileWallet(null);
+    setLinkNotice(null);
+    try {
+      const receipt = await api.getReceipt(receiptId);
+      setSelectedReceipt(receipt);
+    } catch {
+      setLinkNotice('That receipt link could not be opened. It may be invalid or removed.');
+    }
+  }, []);
 
   const invalidateUserScopedState = useCallback((nextWallet: string | null) => {
     setSurfaceEpoch((value) => value + 1);
@@ -234,13 +263,7 @@ export default function App() {
         openDuel(duelId, 'DEEP_LINK');
       } else if (parsed.path?.startsWith('receipt/')) {
         const receiptId = parsed.path.replace('receipt/', '');
-        clearDetailViews();
-        setSelectedTake(null);
-        setLinkNotice(null);
-        api
-          .getReceipt(receiptId)
-          .then((receipt) => setSelectedReceipt(receipt))
-          .catch(() => setLinkNotice('That receipt link could not be opened. It may be invalid or removed.'));
+        void openReceipt(receiptId);
       } else if (parsed.path?.startsWith('d/') || parsed.path?.startsWith('r/')) {
         // HTTPS app-link paths (/d/slug, /r/id) resolve through the same router.
         const parts = (parsed.path || '').split('/');
@@ -248,11 +271,7 @@ export default function App() {
           clearDetailViews();
           openDuel(parts[1], 'DEEP_LINK');
         } else if (parts[0] === 'r' && parts[1]) {
-          clearDetailViews();
-          api
-            .getReceipt(parts[1])
-            .then((receipt) => setSelectedReceipt(receipt))
-            .catch(() => setLinkNotice('That receipt link could not be opened. It may be invalid or removed.'));
+          void openReceipt(parts[1]);
         }
       }
     };
@@ -263,7 +282,7 @@ export default function App() {
     });
 
     return () => sub.remove();
-  }, []);
+  }, [openReceipt]);
 
   const handleConnectWallet = useCallback(async (recovery = false, automaticRecovery = false) => {
     if (connectInFlightRef.current) return;
@@ -517,21 +536,29 @@ export default function App() {
           />
         </View>
         <View style={[styles.fill, currentTab === 'DUELS' ? null : styles.hidden]}>
-          <FreshDuelsScreen
-            key={`duels-${surfaceEpoch}`}
-            userWallet={walletState.publicKey}
+          <SkrArenaEntry
+            eligible={walletState.isArenaEligible}
             onSelectDuel={(duel: Duel) => openDuel(duel.id, 'DUEL_ROW')}
-            onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
-            createdChallenge={createdChallenge}
-            focusSignal={tabFocus}
-            onActionableCountChange={onDuelsActionableCountChange}
           />
+          <View style={styles.fill}>
+            <FreshDuelsScreen
+              key={`duels-${surfaceEpoch}`}
+              userWallet={walletState.publicKey}
+              onSelectDuel={(duel: Duel) => openDuel(duel.id, 'DUEL_ROW')}
+              onOpenChallenge={(challenge) => setReviewChallenge(challenge)}
+              createdChallenge={createdChallenge}
+              focusSignal={tabFocus}
+              onActionableCountChange={onDuelsActionableCountChange}
+            />
+          </View>
         </View>
         <View style={[styles.fill, currentTab === 'ACTIVITY' ? null : styles.hidden]}>
           <FreshActivityScreen
             key={`activity-${surfaceEpoch}`}
             onSelectNotification={(notif) => {
-              if (notif.target_type === 'DUEL' || notif.target_type === 'RECEIPT') {
+              if (notif.target_type === 'RECEIPT' || String(notif.target_id || '').startsWith('receipt_')) {
+                void openReceipt(notif.target_id);
+              } else if (notif.target_type === 'DUEL') {
                 openDuel(notif.target_id.replace('receipt_', ''), 'ACTIVITY_NOTIFICATION');
               }
             }}
@@ -548,7 +575,7 @@ export default function App() {
             onDisconnect={handleDisconnectWallet}
             onSelectTake={(take: Take) => setSelectedTake(take)}
             onSelectDuel={(duel: Duel) => openDuel(duel.id, 'DUEL_ROW')}
-            onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
+            onSelectReceipt={(receipt: Receipt) => void openReceipt(receipt)}
             onProfileSaved={() => setFeedRefresh((n) => n + 1)}
             focusSignal={tabFocus}
           />
@@ -607,7 +634,7 @@ export default function App() {
                 setDuelDetailRetry(0);
               }}
               onRetry={() => setDuelDetailRetry((value) => value + 1)}
-              onViewReceipt={(receiptId) => selectDuel(receiptId.replace('receipt_', ''), 'RECEIPT_VIEW')}
+              onViewReceipt={(receiptId) => void openReceipt(receiptId)}
             />
           </View>
         )}
@@ -638,7 +665,7 @@ export default function App() {
                 clearDetailViews();
                 openDuel(duel.id, 'DUEL_ROW');
               }}
-              onSelectReceipt={(receipt: Receipt) => setSelectedReceipt(receipt)}
+              onSelectReceipt={(receipt: Receipt) => void openReceipt(receipt)}
             />
           </View>
         )}

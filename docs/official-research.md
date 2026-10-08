@@ -15,8 +15,8 @@
   3. `wallet.signAndSendTransactions()` signs and dispatches the transaction payload.
   4. Client polls/confirms signature on Solana RPC.
 - **Deep Linking Protocol:**
-  - Custom URI Scheme: `counter://duel/:id`
-  - Android App Links: `https://counter.app/d/:id` with `/.well-known/assetlinks.json` verification.
+  - Custom URI Scheme: `counter://duel/:id` and `counter://receipt/:id`
+  - Android App Links: `https://counter.103-195-188-198.sslip.io/d/:id` and `/r/:id` with `/.well-known/assetlinks.json` verification.
 
 ---
 
@@ -38,7 +38,15 @@
     SKR_PROGRAM_ID
   );
   ```
-- **Aggregation & Qualification:** Active stake is aggregated across all registered GuardianPools. Technical qualification rule for Gate A: `active staked SKR > 0`.
+- **Qualification:** The current Counter implementation verifies the discovered live GuardianPool `DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr` and qualifies only when decoded active staked SKR is `> 0`. It does not claim Seeker hardware ownership: official Seeker ID/Genesis Token verification is a separate Token-2022 NFT contract.
+
+### Current official references checked 2026-10-08
+
+- [Solana Mobile Seeker ID documentation](https://github.com/solana-mobile/solana-mobile-docs/blob/main/solana-mobile-stack/seeker-id.mdx): a Seeker Genesis Token is a Token-2022 NFT minted once per device and held in the Seed Vault wallet.
+- [Official Solana Mobile SKR staking sample](https://github.com/solana-mobile/react-native-samples/tree/main/skr-staking): confirms the official staking program, mint, StakeConfig, GuardianPool, UserStake PDA seeds, six-decimal SKR, and share-based staking account.
+- [Official SKR token page](https://solanamobile.com/skr): confirms the mainnet SKR mint and describes SKR as the Solana Mobile ecosystem asset.
+
+Counter’s judge-visible vertical slice therefore uses the narrower, directly verified claim: active staked SKR unlocks a curated read-only SKR Arena feed. It does not fabricate an SKR balance, hardcode a wallet, or conflate SKR staking with a Seeker Genesis Token.
 
 ---
 

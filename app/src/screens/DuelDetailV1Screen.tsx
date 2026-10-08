@@ -349,6 +349,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   const totalPool = Number(duel.side_a_total || 0) + Number(duel.side_b_total || 0);
   const claimAmount = totalPool || Number(myPosition?.stake_amount || agreedStake) * 2;
   const refundAmount = Number(myPosition?.stake_amount || agreedStake);
+  const staleVoteMessage = isTerminal && /your result was submitted|other captain has been notified/i.test(String(message || ''));
 
   const showError = (error: any, fallback: string) => {
     setMessage(isWalletCancellation(error) ? 'Approval cancelled. Nothing was changed.' : error?.message || fallback);
@@ -830,7 +831,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
         </View>
 
         {myPosition && <View style={styles.ownershipBox}><Text style={styles.ownershipText}>Your captain stake: {Number(myPosition.stake_amount).toFixed(2)} Counter Test USD{myPosition.claimed ? ' · complete' : ''}</Text></View>}
-        {message && <View style={styles.messageBox}><Text style={styles.messageText}>{message}</Text><TouchableOpacity onPress={refreshPreflight} accessibilityRole="button"><Text style={styles.inlineActionText}>Refresh balances</Text></TouchableOpacity></View>}
+        {message && !staleVoteMessage && <View style={styles.messageBox}><Text style={styles.messageText}>{message}</Text><TouchableOpacity onPress={refreshPreflight} accessibilityRole="button"><Text style={styles.inlineActionText}>Refresh balances</Text></TouchableOpacity></View>}
 
         {renderStateContent()}
 
