@@ -33,6 +33,14 @@ export interface User {
   created_at: string;
 }
 
+export interface UserSearchResult {
+  wallet_address: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string;
+  bio?: string;
+}
+
 export interface Take {
   id: string;
   author_wallet: string;

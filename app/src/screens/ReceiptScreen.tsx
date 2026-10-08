@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Share,
   Linking,
 } from 'react-native';
 import { Receipt } from '../types';
@@ -13,6 +12,7 @@ import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
 import { Icon } from '../components/Icon';
 import { api } from '../api';
 import { formatUserDisplayName, isRealSignature } from '../utils/identity';
+import { shareCounterEntity } from '../share';
 
 interface ReceiptScreenProps {
   receipt: Receipt;
@@ -72,12 +72,10 @@ export const ReceiptScreen: React.FC<ReceiptScreenProps> = ({
 
   const handleShare = async () => {
     try {
-      const amount = `$${(Number(receipt.total_pool) || 0).toFixed(2)} cUSD`;
-      const who = winnerName || winnerSideName;
-      await Share.share({
-        message: verified
-          ? `Counter duel receipt: ${who} won ${amount}. Verified on Solana: ${receipt.onchain_signature}`
-          : `Counter duel result: ${who} won ${amount}.`,
+      await shareCounterEntity({
+        type: 'RECEIPT',
+        id: receipt.id,
+        receipt: { ...receipt, captain_a_name: captainAName || receipt.captain_a_name, captain_b_name: captainBName || receipt.captain_b_name },
       });
     } catch {
       // user cancelled

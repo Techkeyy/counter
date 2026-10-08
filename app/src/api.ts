@@ -1,4 +1,4 @@
-import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, Rivalry, ActivityNotification, Portfolio } from './types';
+import { Take, Comment, Challenge, Counteroffer, Duel, Receipt, User, UserSearchResult, Rivalry, ActivityNotification, Portfolio } from './types';
 import { syncCoordinator } from './syncCoordinator';
 
 export interface ProfileUpdateInput {
@@ -338,6 +338,12 @@ export const api = {
   },
   getRivalry: async (wallet: string, opponentWallet: string) => {
     return request<Rivalry>(`/users/${wallet}/rivalry/${opponentWallet}`);
+  },
+  searchUsers: async (query: string): Promise<UserSearchResult[]> => {
+    const q = String(query || '').trim();
+    if (q.length < 2) return [];
+    const res = await request<any>(`/users/search?q=${encodeURIComponent(q)}`);
+    return Array.isArray(res) ? res : Array.isArray(res?.users) ? res.users : [];
   },
   getPortfolio: async (): Promise<Portfolio> => {
     return request<Portfolio>('/users/portfolio');

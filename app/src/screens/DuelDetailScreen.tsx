@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Share,
 } from 'react-native';
 import { PublicKey } from '@solana/web3.js';
 import { Duel, Position, MutualVote } from '../types';
 import { BackModal } from '../components/BackModal';
 import { colors, typography, spacing, borderRadius, touchMin } from '../theme';
-import { api, PRODUCTION_WEB_URL } from '../api';
+import { api } from '../api';
+import { shareCounterEntity } from '../share';
 import { Icon } from '../components/Icon';
 import { getConnection } from '../wallet';
 import {
@@ -296,13 +296,10 @@ export const DuelDetailScreen: React.FC<DuelDetailScreenProps> = ({
   };
 
   const handleShare = async () => {
-    const link = `${PRODUCTION_WEB_URL}/d/${duel?.share_slug || duelId}`;
+    if (!duel) return;
     try {
-      await Share.share({
-        message: `1v1 Duel on Counter: "${duel?.proposition_a}" vs "${duel?.proposition_b}". Back your side: ${link}`,
-        url: link,
-      });
-    } catch (e) {}
+      await shareCounterEntity({ type: 'DUEL', id: duel.id, duel });
+    } catch {}
   };
 
   if (loading) {

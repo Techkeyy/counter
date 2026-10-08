@@ -4,7 +4,6 @@ import {
   AppState,
   Linking,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,7 +14,8 @@ import { PublicKey } from '@solana/web3.js';
 import { Duel, MutualVote, Position } from '../types';
 import { BackModal } from '../components/BackModal';
 import { Icon } from '../components/Icon';
-import { api, PRODUCTION_WEB_URL } from '../api';
+import { api } from '../api';
+import { shareCounterEntity } from '../share';
 import { colors, borderRadius, spacing, touchMin, typography } from '../theme';
 import { getConnection } from '../wallet';
 import {
@@ -657,10 +657,7 @@ export const DuelDetailV1Screen: React.FC<DuelDetailScreenProps> = ({
   checkClaimStatusRef.current = handleCheckClaimStatus;
 
   const handleShare = async () => {
-    const link = `${PRODUCTION_WEB_URL}/d/${duel.share_slug || duel.id}`;
-    try {
-      await Share.share({ message: `Join this Counter Duel: ${duel.proposition_a} vs ${duel.proposition_b}. ${link}`, url: link });
-    } catch {}
+    try { await shareCounterEntity({ type: 'DUEL', id: duel.id, duel }); } catch {}
   };
 
   const renderPreflight = (showStake = false) => (

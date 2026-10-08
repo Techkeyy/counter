@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Take, Duel, Receipt } from '../types';
 import { colors, typography, spacing, touchMin } from '../theme';
 import { Icon } from './Icon';
 import { IdentityHeader } from './IdentityHeader';
-import { DuelAttachment, DUEL_SHARE_LINK } from './DuelAttachment';
+import { DuelAttachment } from './DuelAttachment';
+import { shareCounterEntity } from '../share';
 import {
   formatUserDisplayName,
   formatUserHandle,
@@ -48,29 +49,8 @@ export const SocialPostCard: React.FC<SocialPostCardProps> = ({
     wallet: take.author_wallet,
   });
 
-  const shareTake = async () => {
-    try {
-      const by = authorHandle || authorDisplayName;
-      await Share.share({
-        message: `"${take.content}" by ${by} on Counter. Think they are wrong? Challenge them.`,
-      });
-    } catch {
-      // user cancelled
-    }
-  };
-
-  const shareDuel = async () => {
-    if (!duel) return;
-    try {
-      const link = DUEL_SHARE_LINK(duel);
-      await Share.share({
-        message: `Join this Counter Duel: ${duel.proposition_a} vs ${duel.proposition_b}. ${link}`,
-        url: link,
-      });
-    } catch {
-      // user cancelled
-    }
-  };
+  const shareTake = () => void shareCounterEntity({ type: 'TAKE', id: take.id, take });
+  const shareDuel = () => duel ? void shareCounterEntity({ type: 'DUEL', id: duel.id, duel }) : undefined;
 
   return (
     <View style={styles.row}>

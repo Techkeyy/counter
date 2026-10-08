@@ -41,6 +41,46 @@ router.get('/portfolio', noConditionalPortfolioCache, requireAuth, async (req, r
   }
 });
 
+function escapeLike(value) {
+  return String(value).replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+// GET /api/users/search?q=... (public profile search only)
+// Search is deliberately bounded and returns only fields that are already
+// public on a Counter profile. It never accepts a wallet/session selector and
+// never exposes auth, balance, arena, or Duel history data.
+router.get('/search', (req, res) => {
+  const raw = String(req.query?.q || '').trim();
+  if (raw.length > 64) return res.status(400).json({ error: 'Search query is too long.' });
+  const normalized = raw.replace(/^@+/, '').trim();
+  if (normalized.length < 2) return res.json({ users: [] });
+
+  const escaped = escapeLike(normalized);
+  const prefix = `${escaped}%`;
+  const contains = `%${escaped}%`;
+  const users = queryAll(
+    `SELECT wallet_address, handle, display_name, avatar_url, bio
+       FROM users
+      WHERE LOWER(REPLACE(COALESCE(handle, ''), '@', '')) LIKE LOWER(?) ESCAPE '\\'
+         OR LOWER(COALESCE(display_name, '')) LIKE LOWER(?) ESCAPE '\\'
+         OR wallet_address LIKE ? ESCAPE '\\'
+      ORDER BY
+        CASE
+          WHEN LOWER(REPLACE(COALESCE(handle, ''), '@', '')) = LOWER(?) THEN 0
+          WHEN LOWER(REPLACE(COALESCE(handle, ''), '@', '')) LIKE LOWER(?) ESCAPE '\\' THEN 1
+          WHEN LOWER(COALESCE(display_name, '')) LIKE LOWER(?) ESCAPE '\\' THEN 2
+          WHEN wallet_address LIKE ? ESCAPE '\\' THEN 3
+          ELSE 4
+        END,
+        LOWER(COALESCE(display_name, '')) ASC,
+        LOWER(COALESCE(handle, '')) ASC
+      LIMIT 20`,
+    [prefix, contains, prefix, normalized, prefix, prefix, prefix],
+  );
+  res.set({ 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache' });
+  res.json({ users });
+});
+
 // GET /api/users/:wallet
 router.get('/:wallet', async (req, res) => {
   const wallet = req.params.wallet;

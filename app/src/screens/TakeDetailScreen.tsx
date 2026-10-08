@@ -8,7 +8,6 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
-  Share,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +23,7 @@ import {
   formatUserHandle,
   getAvatarUri,
 } from '../utils/identity';
+import { shareCounterEntity } from '../share';
 
 interface TakeDetailScreenProps {
   take: Take;
@@ -96,10 +96,7 @@ export const TakeDetailScreen: React.FC<TakeDetailScreenProps> = ({
 
   const handleShare = async () => {
     try {
-      const effectiveAuthor = authorHandle || authorDisplayName;
-      await Share.share({
-        message: `"${liveTake.content}" by ${effectiveAuthor} on Counter. Check it out or challenge them!`,
-      });
+      await shareCounterEntity({ type: 'TAKE', id: liveTake.id, take: liveTake });
     } catch {
       // user cancelled
     }

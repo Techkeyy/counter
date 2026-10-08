@@ -21,6 +21,7 @@ import { FreshChallengeModal } from './src/components/FreshChallengeModal';
 import { FreshChallengeSheet } from './src/components/FreshChallengeSheet';
 import { OnboardingModal } from './src/components/OnboardingModal';
 import { SkrArenaEntry } from './src/components/SkrArenaEntry';
+import { SearchScreen } from './src/screens/SearchScreen';
 import { Icon, IconName } from './src/components/Icon';
 import { colors, spacing, borderRadius, touchMin } from './src/theme';
 import { connectAndAuthenticate, WalletState, WalletConnectionStatus } from './src/wallet';
@@ -91,6 +92,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   // Other-user profile viewing (overlay; own profile lives on the tab).
   const [viewProfileWallet, setViewProfileWallet] = useState<string | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
   const selectedDuelRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -129,6 +131,7 @@ export default function App() {
     setDetailTransition(null);
     setSelectedTake(null);
     setSelectedReceipt(null);
+    setShowSearch(false);
     setShowComposer(false);
     setReviewChallenge(null);
     setChallengeTargetTake(null);
@@ -260,24 +263,27 @@ export default function App() {
 
   // Handle Deep Linking
   useEffect(() => {
+    // Supported contracts: counter://receipt/:id and HTTPS /r/:id. The
+    // normalized `parts[0] === 'r'` route below keeps both forms canonical.
     const handleDeepLink = (event: { url: string }) => {
       const parsed = Linking.parse(event.url);
-      if (parsed.path?.startsWith('duel/')) {
-        const duelId = parsed.path.replace('duel/', '');
+      const host = String((parsed as any).hostname || '').toLowerCase();
+      const cleanPath = String(parsed.path || '').replace(/^\/+/, '');
+      const parts = cleanPath.split('/').filter(Boolean);
+      const hostRoute = ['take', 'duel', 'receipt'].includes(host) ? host : '';
+      const legacyReceiptPath = parsed.path?.startsWith('receipt/');
+      const legacyDuelPath = parsed.path?.startsWith('duel/');
+      const legacyTakePath = parsed.path?.startsWith('take/');
+      const routeToken = hostRoute || (legacyReceiptPath ? 'receipt' : legacyDuelPath ? 'duel' : legacyTakePath ? 'take' : parts[0]);
+      const route = routeToken === 'd' ? 'duel' : routeToken === 'r' ? 'receipt' : routeToken === 't' ? 'take' : routeToken;
+      const id = hostRoute ? parts[0] : parts[1];
+      if (route === 'take' && id) {
+        void openTake(id);
+      } else if (route === 'duel' && id) {
         clearDetailViews();
-        openDuel(duelId, 'DEEP_LINK');
-      } else if (parsed.path?.startsWith('receipt/')) {
-        const receiptId = parsed.path.replace('receipt/', '');
-        void openReceipt(receiptId);
-      } else if (parsed.path?.startsWith('d/') || parsed.path?.startsWith('r/')) {
-        // HTTPS app-link paths (/d/slug, /r/id) resolve through the same router.
-        const parts = (parsed.path || '').split('/');
-        if (parts[0] === 'd' && parts[1]) {
-          clearDetailViews();
-          openDuel(parts[1], 'DEEP_LINK');
-        } else if (parts[0] === 'r' && parts[1]) {
-          void openReceipt(parts[1]);
-        }
+        openDuel(id, 'DEEP_LINK');
+      } else if (route === 'receipt' && id) {
+        void openReceipt(id);
       }
     };
 
@@ -454,11 +460,17 @@ export default function App() {
     setShowComposer(false);
     setReviewChallenge(null);
     setViewProfileWallet(null);
+    setShowSearch(false);
     setLinkNotice(null);
   };
 
   const openAuthorProfile = (w: string | null) => {
     if (w) setViewProfileWallet(w);
+  };
+
+  const openSearch = () => {
+    clearDetailViews();
+    setShowSearch(true);
   };
 
   const openTab = (tab: Tab) => {
@@ -474,6 +486,17 @@ export default function App() {
   const openDuel = (duelId: string, selectionReason: DuelSelectionReason = 'REPLACED_SELECTION') => {
     setCurrentTab('DUELS');
     selectDuel(duelId, selectionReason);
+  };
+
+  const openTake = async (takeId: string) => {
+    clearDetailViews();
+    setCurrentTab('HOME');
+    try {
+      const take = await api.getTake(takeId);
+      setSelectedTake(take);
+    } catch {
+      setLinkNotice('That Take link could not be opened. It may be invalid or removed.');
+    }
   };
 
   // Accept owns a deterministic route transition. The returned Duel ID is
@@ -533,6 +556,7 @@ export default function App() {
               setShowComposer(true);
             }}
             onOpenProfile={() => openTab('PROFILE')}
+            onOpenSearch={openSearch}
             onOpenAuthorProfile={openAuthorProfile}
             userWallet={walletState.publicKey}
             createdTake={createdTake}
@@ -660,6 +684,17 @@ export default function App() {
             />
           </View>
         )}
+        {showSearch && (
+          <View style={styles.overlay}>
+            <SearchScreen
+              onBack={() => setShowSearch(false)}
+              onSelectProfile={(wallet) => {
+                setShowSearch(false);
+                openAuthorProfile(wallet);
+              }}
+            />
+          </View>
+        )}
         {viewProfileWallet && (
           <View style={styles.overlay}>
             <FreshProfileScreen
@@ -681,7 +716,7 @@ export default function App() {
         )}
       </View>
 
-      {hasVisibleTakes && currentTab === 'HOME' && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && !viewProfileWallet && (
+      {hasVisibleTakes && currentTab === 'HOME' && !showSearch && !showComposer && !selectedDuelId && !selectedTake && !selectedReceipt && !viewProfileWallet && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => {
@@ -733,7 +768,7 @@ export default function App() {
         onProfileUpdated={() => setFeedRefresh((n) => n + 1)}
       />
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, showSearch && styles.hidden]}>
         {TABS.map((tab) => {
           const active = currentTab === tab.key;
           return (

@@ -34,6 +34,16 @@
         },
         {
           "action": "VIEW",
+          "data": [
+            {
+              "scheme": "counter",
+              "host": "take"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
@@ -52,6 +62,18 @@
               "scheme": "https",
               "host": "counter.103-195-188-198.sslip.io",
               "pathPrefix": "/r"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "counter.103-195-188-198.sslip.io",
+              "pathPrefix": "/t"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
