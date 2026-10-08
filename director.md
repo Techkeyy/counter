@@ -4516,3 +4516,155 @@ Proof     Fresh signed APK identity                   PROVEN (hash, bytes, packa
 Proof     Fresh artifact contains this remediation     PROVEN (Hermes disassembly)
 Submission current release candidate                  SUPPORTED; owner/device smoke remains
 ```
+
+## 69 - FIVE-HOUR FINALIZATION PASS - 2026-10-08
+
+### 69.A - Scope and source commit
+
+The finalization pass was implemented without changing Solana economic logic,
+settlement/refund math, the Solana program, the VPS, or MWA architecture.
+The accepted runtime/docs commit packaged for the APK was:
+
+`a8430ba3adebb2ce6e92e0776d9ffc0c953dbf65`
+
+The source tree was clean and `HEAD == origin/master` before the release build.
+
+### 69.B - Universal receipt route and content
+
+Receipt entry points now use one canonical `openReceipt(receiptId)` route in
+`app/App.tsx`. It re-reads the authoritative receipt, selects the canonical
+receipt state, clears Duel overlays, and navigates to the Receipt screen. The
+route is used by Duel detail, Activity/notifications, Profile own/other
+receipt rows, and both `counter://receipt/:id` and HTTPS `/r/:id` deep links.
+
+Receipt identity precedence is display name, then `@handle`, then shortened
+wallet. The terminal copy is separated from winner copy:
+
+- winner: total pool / claimed semantics;
+- pending refund: `No agreement. Both stakes are being returned.`;
+- completed refund: `No agreement. Both stakes were returned.`;
+- completed refund badge: `Refunded / recorded`.
+
+The stale private-result banner is suppressed for terminal states. The
+finalization guard, refund/winner amount regression, receipt identity fallback,
+and terminal copy checks pass. The built Hermes bundle contains the new refund
+strings, `View receipt`, `getReceipt`, receipt identity fields, and receipt
+terminal labels. Hermes minification does not preserve the source callback name
+`openReceipt`; this is recorded as an artifact-inspection limitation, not a
+runtime-source claim.
+
+### 69.C - Android launcher identity
+
+The release resources contain adaptive and round launcher bindings:
+
+- `mipmap/ic_launcher` and `mipmap/ic_launcher_round`;
+- adaptive background `drawable/ic_launcher_background`;
+- adaptive foreground `drawable/ic_launcher_foreground`;
+- API 21+ vector fallback resources.
+
+The foreground uses Counter's existing coral/ivory concentric target mark on
+the dark Counter background. The packaged manifest binds both `icon` and
+`roundIcon` to the new resources. Compiled resource inspection proves the
+adaptive icon foreground/background references are present in the APK.
+
+### 69.D - SKR vertical slice
+
+The genuine capability is a read-only `SKR Arena` discovery/curation surface.
+The client consumes the existing authoritative `isArenaEligible` session
+state; qualified users can open an Arena feed through the existing Duels API
+with `isArena=true`, while unqualified users see a locked entry. No fake
+balance, hardcoded wallet, developer toggle, stake, odds, payout, settlement,
+refund, custody, or claim behavior is added.
+
+The qualification is active SKR staking on Solana mainnet using the official
+SKR staking program and mint already documented in `docs/official-research.md`.
+This pass does not claim Seeker hardware/SGT ownership; official Seeker ID/SGT
+verification is a separate Token-2022/SIWS contract and was not substituted or
+faked. Official references:
+
+- https://github.com/solana-mobile/react-native-samples/tree/main/skr-staking
+- https://github.com/solana-mobile/solana-mobile-docs/blob/main/solana-mobile-stack/seeker-id.mdx
+- https://github.com/solana-mobile/solana-mobile-skills/blob/main/skills/seeker-genesis-token/SKILL.md
+
+Qualified/unqualified Arena guards and the no-economic-effect boundary pass in
+the source/regression suite. Fresh physical qualified/unqualified smoke is
+still owner/device work.
+
+### 69.E - Regression evidence
+
+Passed after the final source commit and again around the release build:
+
+- TypeScript (`npx --prefix app tsc --noEmit -p app/tsconfig.json`);
+- finalization, experience-rebase, Accept-transition, and Duel-detail lifecycle guards;
+- app Duel state, Duels-load/portfolio-failure isolation, MWA handoff,
+  reliability contract, session persistence, and wallet recovery;
+- server auth boundary, chain vectors 11/11, Duel-detail contract, fresh
+  visibility, mutual closure, MVP lifecycle, portfolio, profile boundaries,
+  reliability pass, resolution boundaries, Take deletion, and timing vectors;
+- launcher resource/build integrity and `git diff --check`.
+
+The auth boundary test passed with a process-local ephemeral configured secret
+and independently proved missing-secret refusal and rejection of the former
+fallback token. No secret value was printed or persisted. The first manual
+mutual-closure invocation without `JWT_SECRET` was correctly rejected by the
+fail-closed test harness and was not counted; the configured rerun passed.
+
+### 69.F - Fresh signed APK
+
+Exactly one fresh release APK was produced from the runtime commit above using
+the existing DPAPI signing vault and existing `counter` signing identity. No
+key was regenerated and no signing password was logged.
+
+- path: `app/android/app/build/outputs/apk/release/app-release.apk`
+- SHA-256: `cbd317e9f5103b37f55a66a4b09f26a1a37a2547b40ea1200d99900260ad58cc`
+- bytes: `62527903`
+- package: `app.counter.mobile`
+- version: `1.0.0` / versionCode `1`
+- certificate SHA-256: `a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827`
+- signature: APK v2 verified; one signer
+- build result: `BUILD SUCCESSFUL in 4m 59s`, exit 0
+- build log: `.uat/build-finalization-20261008-075753.log`
+- compiled bundle evidence: `.uat/finalization-artifact-cbd317e9f5103b37f55a66a4b09f26a1a37a2547b40ea1200d99900260ad58cc/assets/index.android.bundle`
+
+The packaged app config and compiled bundle contain the production backend,
+program, and Devnet mint:
+
+```text
+backend: https://counter.103-195-188-198.sslip.io
+program: 52QgqEmxZzh2EH1gAwheMmp2ZXd9eT3WuXefSLYu6NmT
+mint: AXMB7tf5yHqPuFRTzaMgNSGPZ8iKJtFkeYdpeN7jcHWC
+```
+
+The APK contains no `counter.app` or former JWT fallback literal. Generic
+`localhost`/`127.0.0.1` strings remain in bundled dependency/network-enum
+tables; no unintended localhost runtime backend is configured or selected.
+
+### 69.G - Source binding, push, and physical-smoke gate
+
+The APK is bound to `a8430ba3adebb2ce6e92e0776d9ffc0c953dbf65`. After this
+ledger entry is committed, the only expected post-build change is documentation:
+
+`git diff a8430ba3adebb2ce6e92e0776d9ffc0c953dbf65 HEAD -- app/ server/ program/`
+
+must remain empty. The docs commit will be pushed normally with no squash,
+rebase, or force push, and final `HEAD == origin/master` plus clean status will
+be verified.
+
+Owner-controlled physical smoke has not been run on this new APK in this pass.
+No device install, wallet interaction, account switch, or economic mutation was
+performed by the builder. Required smoke remains: launcher icon, winner and
+refund receipt entry points/content, Power-Saving-on Connect, SKR qualified and
+unqualified behavior where physically possible, and account-switch convergence.
+
+### 69.H - Claim classification
+
+```text
+Receipt route mechanism                 PROVEN in source/tests; fresh physical smoke pending
+Receipt terminal identity/copy          PROVEN in source/tests/compiled artifact; physical smoke pending
+Android adaptive branding                PROVEN in compiled resources; launcher visual smoke pending
+SKR Arena mechanism                      PROVEN as active-stake curation slice; physical qualification pending
+Economic behavior unchanged by SKR      PROVEN by source boundary/regression; no new economic UAT run
+Power-Saving-on wallet recovery          SUPPORTED by prior physical RC pass; fresh APK smoke pending
+Fresh signed release artifact            PROVEN by hash/bytes/package/version/certificate
+Submission readiness                     LIMITATION until owner completes physical smoke
+```
