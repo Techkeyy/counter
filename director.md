@@ -4668,3 +4668,125 @@ Power-Saving-on wallet recovery          SUPPORTED by prior physical RC pass; fr
 Fresh signed release artifact            PROVEN by hash/bytes/package/version/certificate
 Submission readiness                     LIMITATION until owner completes physical smoke
 ```
+
+## 70 — SKR ARENA TAB + COUNTER VERIFIED ROADMAP BUILD
+
+### 70.A — Scope and frozen boundaries
+
+Runtime commit:
+
+`399a0eae8c0febc1951bfdd1d8172952bed30489`
+
+This pass adds a first-class fifth bottom tab:
+
+```text
+Home · Duels · Arena · Activity · Profile
+```
+
+The Arena page is named `SKR Arena` and has three honest states:
+
+- disconnected: `Connect your wallet to check SKR access.`;
+- connected and unqualified: `Active SKR staking on Solana Mainnet unlocks the Arena.`
+  with a useful preview and no fabricated balance;
+- connected and qualified: `SKR verified` plus a curated Arena Duel feed.
+
+`ACTIVE_WALLET_CHANGED` invalidates the previous wallet-scoped state before the
+new wallet is painted. Arena remains access/curation only and cannot invoke
+stake, payout, settlement, claim, refund, or custody behavior.
+
+The live Challenge composer presents:
+
+- `Settle Together` — `LIVE`, selected and functional;
+- `Counter Verified` — `COMING SOON`, cobalt-accented, visibly disabled and
+  non-interactive.
+
+The submitted Challenge payload remains exactly `resolutionMode: 'MUTUAL'` and
+`fallbackMode: 'REFUND'`. No settlement, refund, claim, Solana program, or
+economic calculation was changed.
+
+### 70.B — Official SKR mainnet boundary
+
+SKR eligibility remains a read-only Mainnet query, separate from Counter Duel
+economics on Solana Devnet. The source-of-truth configuration records:
+
+```text
+network: mainnet-beta
+rpc environment: MAINNET_RPC
+staking program: SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ
+SKR mint: SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3
+StakeConfig: 4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw
+StakeVault: 8isViKbwhuhFhsv2t8vaFL74pKCqaFPQXo1KkeQwZbB8
+GuardianPool: DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr
+```
+
+These addresses and the read-only staking lifecycle are based on the official
+Solana Mobile references:
+
+- https://github.com/solana-mobile/react-native-samples/tree/main/skr-staking
+- https://github.com/solana-mobile/solana-mobile-docs/blob/main/solana-mobile-stack/seeker-id.mdx
+- https://github.com/solana-mobile/solana-mobile-skills/blob/main/skills/seeker-genesis-token/SKILL.md
+
+### 70.C — Regression evidence
+
+Passed:
+
+- Arena navigation, disconnected/unqualified/qualified source contracts,
+  wallet-change invalidation, Mainnet SKR boundary, and economic isolation;
+- disabled `Counter Verified` roadmap card and MUTUAL/REFUND payload guard;
+- finalization, experience-rebase, MWA handoff, session persistence, wallet
+  recovery, Duel-detail lifecycle, and TypeScript;
+- backend auth boundary, chain vectors `11/11`, Duel-detail contract, fresh
+  visibility, mutual closure, MVP lifecycle, portfolio, profile boundaries,
+  reliability, resolution boundaries, Take deletion, and timing vectors;
+- `git diff --check`.
+
+The first unauthenticated integration-test sweep was correctly rejected by the
+fail-closed JWT boundary because no test secret was present. The four affected
+auth-dependent tests were rerun with an ephemeral process-local test secret;
+the secret was never printed, persisted, committed, or deployed, and all four
+passed.
+
+### 70.D — Exactly one fresh signed APK
+
+One successful release build was run from the runtime commit above using the
+existing rotated `counter` signing identity and current-user DPAPI vault. No
+key was regenerated and no signing password was logged.
+
+```text
+command: .\\gradlew.bat assembleRelease --no-daemon --console=plain
+result: BUILD SUCCESSFUL in 16m 46s
+exit: 0
+APK: C:\\Users\\HomePC\\Desktop\\Counter\\app\\android\\app\\build\\outputs\\apk\\release\\app-release.apk
+bytes: 62529271
+SHA-256: 0b0066dbbc8536a6cf5332d3b183331d29c2f37f9412c4d34b43d880a01658d3
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+signature: APK v2 verified; one signer
+build log: .uat/build-arena-20261008.log
+```
+
+The packaged bundle was independently extracted from the APK and preserved at:
+
+`.uat/apk-inspect-arena-20261008/assets/index.android.bundle`
+
+It contains the Arena tab/state copy, `SKR verified`, the Mainnet lock copy,
+`Settle Together`, `Counter Verified`, `COMING SOON`, the mutual-refund
+explanation, and the Arena feed filter marker `isArena`.
+
+### 70.E — Physical and submission classification
+
+```text
+SKR Arena source/config boundary       PROVEN
+Counter Verified disabled roadmap      PROVEN in source/tests/compiled artifact
+V1 economic behavior unchanged         PROVEN by source boundary/regressions
+Fresh signed APK identity              PROVEN by independent hash/signature readback
+Qualified SKR physical path            LIMITATION — owner/device smoke pending
+Unqualified SKR physical path          LIMITATION — owner/device smoke pending
+Launcher/receipt/account-switch smoke  LIMITATION — owner/device smoke pending
+Submission readiness                    LIMITATION until owner completes physical smoke
+```
+
+No physical device install, wallet interaction, account switch, or economic
+mutation was performed for this build pass.
