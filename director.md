@@ -4790,3 +4790,163 @@ Submission readiness                    LIMITATION until owner completes physica
 
 No physical device install, wallet interaction, account switch, or economic
 mutation was performed for this build pass.
+
+---
+
+## 71. CANONICAL SHARE + USER SEARCH RELEASE — 2026-10-08
+
+### 71.A — Scope and source binding
+
+The final Share + User Search runtime is bound to the pushed runtime commits:
+
+```text
+feature commit: be549d26f146d15219264313c70ea62e86db64f1
+manifest/App-Link correction: 3d5c95b
+packaged source commit: 3d5c95b
+```
+
+The manifest correction is intentionally narrow. Expo configuration already
+declared the Take routes, but the native Android manifest used by the Gradle
+build lacked them. The correction adds only `counter://take/:id` and the
+production HTTPS `/t` autoVerify filter. Existing `/d` and `/r` routes remain
+unchanged. Duel economics, settlement/refund math, SKR qualification, and the
+disabled Counter Verified roadmap remain outside this pass.
+
+### 71.B — Canonical share contract
+
+`app/src/share.ts` is the single native share entry point:
+
+```text
+shareCounterEntity({ type: 'TAKE' | 'DUEL' | 'RECEIPT', id, ... })
+```
+
+It produces the canonical public URLs and matching app links:
+
+```text
+TAKE:    https://counter.103-195-188-198.sslip.io/t/:takeId
+         counter://take/:takeId
+DUEL:    https://counter.103-195-188-198.sslip.io/d/:duelId-or-slug
+         counter://duel/:duelId
+RECEIPT: https://counter.103-195-188-198.sslip.io/r/:receiptId
+         counter://receipt/:receiptId
+```
+
+The Android artifact contains all six route forms. The production HTTPS
+landing pages return HTTP 200 with canonical/OG metadata, participant-aware
+copy, and the corresponding deep link. The Take page includes the author,
+Take text, branding, and `Think they're wrong? Challenge this Take.`
+
+### 71.C — User search contract
+
+Home exposes a magnifying-glass entry to the dedicated Search screen; no sixth
+bottom tab was added. The client debounces input at 280 ms, requires two
+characters, and displays at most 20 public profile results. The production
+endpoint is:
+
+```text
+GET /api/users/search?q=
+```
+
+Search supports case-insensitive handle/display-name matching and exact or
+prefix wallet matching. The endpoint escapes SQL wildcard characters, bounds
+query length, limits results, and returns only:
+
+```text
+wallet_address, handle, display_name, avatar_url, bio
+```
+
+No private profile, balance, SKR, statistics, timestamp, auth, or credential
+fields are returned.
+
+### 71.D — Production deployment readback
+
+Only `server/index.js` and `server/routes/users.js` were deployed. The live
+files matched the local committed file hashes before the service restart. A
+timestamped backup was created at:
+
+```text
+/opt/counter/backups/server-share-search-20261008121746/
+```
+
+The service remained active after restarting only `counter-backend.service`.
+Read-only production checks passed:
+
+```text
+/api/health                         HTTP 200
+/api/users/search?q=zz               HTTP 200
+/api/users/search?q=iszee23          HTTP 200, 1 public result
+/api/users/search?q=Praise           HTTP 200, 1 public result
+/api/users/search?q=eMMEh84r6        HTTP 200, 1 public result
+oversized query (>64 characters)     HTTP 400
+/t/<existing Take ID>                HTTP 200, OG + Take deep link present
+/d/<existing Duel ID>                HTTP 200, OG + Duel deep link present
+/r/<existing Receipt ID>             HTTP 200, OG + Receipt deep link present
+/.well-known/assetlinks.json         HTTP 200, current package/cert present
+```
+
+The current production assetlinks document targets `app.counter.mobile` and
+contains the current release certificate fingerprint in Android format. No
+database, economic record, or Solana state was mutated by this deployment.
+
+### 71.E — Final APK identity and compiled proof
+
+The final signed artifact was built from packaged source `3d5c95b` using the
+existing rotated `counter` signing identity and current-user DPAPI vault. No
+key was regenerated, and no signing password was printed, logged, persisted,
+or added to the public diff.
+
+```text
+command: .\\gradlew.bat assembleRelease --no-daemon --console=plain
+result: BUILD SUCCESSFUL in 4m 6s
+exit: 0
+APK: C:\\Users\\HomePC\\Desktop\\Counter\\app\\android\\app\\build\\outputs\\apk\\release\\app-release.apk
+bytes: 62531507
+SHA-256: f12a432be5ab4291df27dbadb97ff752b69c6bf169fcc216883b1d51785a2983
+package: app.counter.mobile
+versionCode: 1
+versionName: 1.0.0
+certificate SHA-256: a11be64307ae1ef367362d5b32d00bc43218feabfc91d68ceaf27cb46f7d7827
+signature: APK v2 verified; one signer
+compiled bundle: assets/index.android.bundle
+bundle bytes: 2603500
+bundle SHA-256: cbbc4865061e2f0d689785cb48f71050aca6cb47265a1af50cd6d8f29c47660e
+```
+
+The extracted final bundle contains compiled evidence for `shareCounterEntity`,
+the Take challenge copy, Duel and Receipt share copy, the Search screen empty
+states, and `/users/search?q=`. The merged APK manifest contains `duel`,
+`receipt`, and `take` custom hosts plus HTTPS `/d`, `/r`, and `/t` filters with
+`autoVerify`. The immediately preceding APK hash
+`8814209a54b76cad97700f3253fa135b93f509598565518b84b10701d4e44bee` is
+superseded because its packaged manifest lacked the Take filters; the final
+installable artifact is only `f12a432be5ab4291df27dbadb97ff752b69c6bf169fcc216883b1d51785a2983`.
+
+### 71.F — Regression and classification
+
+Passed in this pass:
+
+- TypeScript (`npx tsc --noEmit -p app/tsconfig.json`);
+- mobile Share/Search source guardrails;
+- server Share/Search HTTP contract, including wildcard, oversized-query,
+  handle, display-name, wallet-prefix, and public-field-boundary cases;
+- production health, search, Take/Duel/Receipt page readbacks, and assetlinks;
+- `git diff --check`;
+- final APK package/version/signature/bytes/hash and compiled-bundle inspection.
+
+The previously completed economic, wallet, session, Duel lifecycle, Arena,
+Counter Verified, and backend regression suites remain accepted and unchanged;
+the source suite was already green at `be549d2`, and the final correction is
+native manifest-only.
+
+```text
+canonical share URLs/deep links       PROVEN by source, tests, production, APK
+public Take/Duel/Receipt pages        PROVEN by production HTTP readback
+public user search                    PROVEN by source, tests, production
+Take App Link packaging               PROVEN in final merged manifest
+current signer/package/version        PROVEN by final APK readback
+physical Android Share/Search smoke   LIMITATION — owner/device smoke pending
+```
+
+No physical device install, wallet interaction, account switch, or economic
+mutation was performed for this release pass. APK `0b0066dbbc8536a6cf5332d3b183331d29c2f37f9412c4d34b43d880a01658d3`
+and all earlier APKs are superseded by the final hash above.
